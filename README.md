@@ -60,14 +60,45 @@ window, the status list) are in `app/config.py`.
      ```
 
    Streamlit's free plan allows one private app, and the Fitness app uses it,
-   so this repository and app are public. The **password screen** is what
-   keeps your data private: every page asks for `APP_PASSWORD` first, and the
-   app stays locked if it isn't set. Use a long password that you don't use
-   anywhere else. The first time the app opens it creates its tables in the
+   so this repository and app are public. The **sign-in screen** is what
+   keeps your data private: every page asks you to sign in first, and the
+   app stays locked if no way in is set up. Use a long password that you
+   don't use anywhere else. To sign in with Google instead of typing it, see
+   **Sign in with Google** below. The first time the app opens it creates its tables in the
    new database; there's nothing to run.
 4. **Test the backup.** On GitHub go to **Actions → Backup → Run workflow**. A
    green check means it worked; the CSVs are on that run's page under
    **Artifacts**.
+
+## Sign in with Google (optional)
+
+Instead of typing the password, sign in with your Google account; Streamlit
+keeps you signed in for 30 days on each device. Only the emails in
+`ALLOWED_EMAILS` get in; any other Google account is turned away. The
+password keeps working as a second way in.
+
+1. In the [Google Cloud console](https://console.cloud.google.com), make a
+   project named `career-tracker`. Under **Google Auth Platform**: give it a
+   name and your email (**Branding**), choose **External** and add your Gmail
+   as a test user (**Audience**), then **Clients → Create client → Web
+   application** with this authorized redirect URI:
+   `https://career-t-sm3yxhk6uhay9v9ntftttu.streamlit.app/oauth2callback`.
+   Copy the client ID and client secret.
+2. In the app's Streamlit **Settings → Secrets**, add these. The plain lines
+   must come **above** the `[auth]` line:
+
+   ```toml
+   DATABASE_URL = "…unchanged…"
+   APP_PASSWORD = "…unchanged…"
+   ALLOWED_EMAILS = "you@gmail.com"
+
+   [auth]
+   redirect_uri = "https://career-t-sm3yxhk6uhay9v9ntftttu.streamlit.app/oauth2callback"
+   cookie_secret = "…a long random string you make up…"
+   client_id = "…from Google…"
+   client_secret = "…from Google…"
+   server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+   ```
 
 ## Running it on your computer
 
