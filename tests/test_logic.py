@@ -1,0 +1,213 @@
+"""The pure calculations: needs attention, stats, formatting, CSV import."""
+
+from datetime import date, time
+
+import pandas as pd
+
+import config
+import logic
+
+TODAY = date(2026, 10, 14)            # a Wednesday
+
+
+def apps(*rows) -> pd.DataFrame:
+    base = {"company": "Acme", "role": "Analyst", "status": "applied",
+            "applied_on": date(2026, 10, 1), "next_action": None, "next_action_on": None,
+            "last_update_on": date(2026, 10, 1), "source": None}
+    return pd.DataFrame([{**base, "application_id": n + 1, **row} for n, row in enumerate(rows)])
+
+
+def interviews(*rows) -> pd.DataFrame:
+    columns = ["application_id", "scheduled_on", "start_time", "round", "company", "role",
+               "status"]
+    base = {"start_time": None, "round": None, "company": "Acme", "role": "Analyst",
+            "status": "interviewing"}
+    return pd.DataFrame([{**base, **row} for row in rows], columns=columns)
+
+
+NONE = interviews()
+
+
+# ---- needs attention --------------------------------------------------------
+
+def test_quiet_for_the_follow_up_window_is_flagged():
+    items = logic.needs_attention(
+        apps({"last_update_on": date(2026, 9, 30)}), NONE, TODAY, follow_up_days=14)
+    assert [(i.kind, i.detail) for i in items] == [
+        ("follow_up", "No update in 14 days — follow up?")]
+
+
+def test_a_day_short_of_the_window_is_not():
+    assert logic.needs_attention(
+        apps({"last_update_on": date(2026, 10, 1)}), NONE, TODAY, follow_up_days=14) == []
+
+
+def test_the_default_window_is_the_configured_one():
+    quiet = apps({"last_update_on": date(2026, 10, 14) - pd.Timedelta(
+        days=config.FOLLOW_UP_DAYS).to_pytimedelta()})
+    assert len(logic.needs_attention(quiet, NONE, TODAY)) == 1
+
+
+def test_a_due_or_overdue_next_step_comes_first_and_replaces_the_follow_up():
+    items = logic.needs_attention(apps(
+        {"role": "Old", "last_update_on": date(2026, 8, 1)},
+        {"role": "Due", "next_action": "Email Sam", "next_action_on": TODAY,
+         "last_update_on": date(2026, 8, 1)},
+        {"role": "Late", "next_action": None, "next_action_on": date(2026, 10, 11)},
+    ), NONE, TODAY)
+    assert [(i.kind, i.headline, i.detail) for i in items] == [
+        ("overdue", "Acme — Late", "Next step: 3 days overdue"),
+        ("due", "Acme — Due", "Email Sam: due today"),
+        ("follow_up", "Acme — Old", "No update in 74 days — follow up?"),
+    ]
+
+
+def test_a_future_next_step_means_nothing_to_do_yet():
+    items = logic.needs_attention(apps({"next_action_on": date(2026, 10, 20),
+                                        "last_update_on": date(2026, 1, 1)}), NONE, TODAY)
+    assert items == []
+
+
+def test_closed_applications_never_appear():
+    rows = [{"status": s, "last_update_on": date(2026, 1, 1), "next_action_on": TODAY}
+            for s in config.CLOSED_STATUSES]
+    assert logic.needs_attention(apps(*rows), NONE, TODAY) == []
+
+
+def test_saved_and_offer_get_their_own_wording():
+    items = logic.needs_attention(apps(
+        {"status": "saved", "applied_on": None, "last_update_on": date(2026, 9, 1)},
+        {"status": "offer", "role": "Lead", "last_update_on": date(2026, 9, 20)},
+    ), NONE, TODAY)
+    assert [(i.kind, i.detail) for i in items] == [
+        ("follow_up", "Offer open for 24 days — time to decide?"),
+        ("stale_saved", "Saved 43 days ago — apply or drop it?"),
+    ]
+
+
+def test_upcoming_interviews_show_and_hold_off_the_follow_up():
+    items = logic.needs_attention(
+        apps({"last_update_on": date(2026, 9, 1)}),
+        interviews({"application_id": 1, "scheduled_on": date(2026, 10, 15),
+                    "start_time": time(14, 30), "round": "Onsite"}),
+        TODAY)
+    assert [(i.kind, i.detail) for i in items] == [("interview", "Onsite, tomorrow at 2:30 pm")]
+
+
+def test_interviews_past_the_lookahead_are_not_listed_but_still_count():
+    items = logic.needs_attention(
+        apps({"last_update_on": date(2026, 9, 1)}),
+        interviews({"application_id": 1, "scheduled_on": date(2026, 10, 30)}),
+        TODAY, lookahead_days=7)
+    assert items == []
+
+
+def test_a_recent_past_interview_counts_as_an_update():
+    recent = interviews({"application_id": 1, "scheduled_on": date(2026, 10, 10)})
+    old = interviews({"application_id": 1, "scheduled_on": date(2026, 9, 10)})
+    quiet = apps({"last_update_on": date(2026, 9, 1)})
+    assert logic.needs_attention(quiet, recent, TODAY) == []
+    assert [i.kind for i in logic.needs_attention(quiet, old, TODAY)] == ["follow_up"]
+
+
+# ---- stats ------------------------------------------------------------------
+
+def events(*rows) -> pd.DataFrame:
+    return pd.DataFrame(rows, columns=["application_id", "status"])
+
+
+def test_pipeline_counts_every_status_in_order():
+    pipe = logic.pipeline(apps({"status": "applied"}, {"status": "applied"},
+                               {"status": "offer"}))
+    assert pipe["status"].tolist() == config.STATUSES
+    assert dict(zip(pipe["status"], pipe["applications"]))["applied"] == 2
+
+
+def test_weekly_counts_by_monday_with_zero_weeks():
+    weekly = logic.weekly_applications(apps(
+        {"applied_on": date(2026, 10, 12)}, {"applied_on": date(2026, 10, 14)},
+        {"applied_on": date(2026, 10, 4)}, {"applied_on": None, "status": "saved"},
+        {"applied_on": date(2025, 1, 1)},
+    ), TODAY, weeks=3)
+    assert weekly["week"].tolist() == [date(2026, 9, 28), date(2026, 10, 5), date(2026, 10, 12)]
+    assert weekly["applications"].tolist() == [1, 0, 2]
+
+
+def test_response_rate_counts_anything_that_reached_a_screen():
+    frame = apps({"status": "rejected"}, {"status": "applied"}, {"status": "interviewing"},
+                 {"status": "saved"})
+    # 1 was screened before being rejected; 4 is only saved and isn't counted.
+    assert logic.response_rate(frame, events((1, "applied"), (1, "screening"),
+                                             (1, "rejected"))) == (2, 3)
+    assert logic.response_rate(apps(), events()) == (0, 0)
+
+
+def test_by_source():
+    frame = apps({"source": "LinkedIn", "status": "applied"},
+                 {"source": "LinkedIn", "status": "screening"},
+                 {"source": "Referral", "status": "offer"},
+                 {"source": None, "status": "applied"})
+    table = logic.by_source(frame, events())
+    assert table.values.tolist() == [
+        ["LinkedIn", 2, 1, 0.5], ["(not set)", 1, 0, 0.0], ["Referral", 1, 1, 1.0]]
+
+
+# ---- formatting -------------------------------------------------------------
+
+def test_salary_range():
+    assert logic.salary_range(90000, 110000) == "$90,000–$110,000"
+    assert logic.salary_range(90000, None) == "$90,000+"
+    assert logic.salary_range(float("nan"), 120000) == "up to $120,000"
+    assert logic.salary_range(None, None) == ""
+
+
+def test_when_and_clock():
+    assert logic.when(TODAY, TODAY) == "today"
+    assert logic.when(date(2026, 10, 20), TODAY) == "Tue Oct 20"
+    assert logic.clock(time(0, 5)) == "12:05 am"
+    assert logic.clock(time(12, 0)) == "12:00 pm"
+
+
+# ---- import -----------------------------------------------------------------
+
+def test_import_matches_loose_headers_and_reads_values():
+    frame = pd.DataFrame([{
+        "Company Name": " Acme ", "Job_Title": "Data Analyst", "Stage": "Phone Screen",
+        "Date Applied": "10/01/2026", "Salary": "$90k - $110K", "Work-Mode": "Remote (US)",
+        "Notes": "", "Unrelated": "x",
+    }])
+    rows, problems = logic.map_import(frame)
+    assert problems == []
+    assert rows == [{
+        "company": "Acme", "role": "Data Analyst", "status": "screening",
+        "applied_on": date(2026, 10, 1), "job_url": None, "location": None,
+        "work_mode": "remote", "source": None, "salary_min": 90000, "salary_max": 110000,
+        "notes": None,
+    }]
+
+
+def test_import_explains_what_it_skipped_or_guessed():
+    frame = pd.DataFrame([
+        {"Company": "Acme", "Role": "", "Status": "applied", "Applied": ""},
+        {"Company": "Beta", "Role": "PM", "Status": "maybe?", "Applied": "not a date"},
+        {"Company": "", "Role": "", "Status": "", "Applied": ""},
+    ])
+    rows, problems = logic.map_import(frame)
+    assert [(r["company"], r["status"], r["applied_on"]) for r in rows] == [
+        ("Beta", "saved", None)]
+    assert problems == [
+        "Row 2: skipped — needs both a company and a role.",
+        "Row 3: couldn't read the date “not a date”; left blank.",
+        "Row 3: unknown status “maybe?”; set to saved.",
+    ]
+
+
+def test_import_needs_company_and_role_columns():
+    rows, problems = logic.map_import(pd.DataFrame([{"Name": "x"}]))
+    assert rows == [] and len(problems) == 2
+
+
+def test_parse_salary():
+    assert logic.parse_salary("95,500") == (95500, None)
+    assert logic.parse_salary("120k") == (120000, None)
+    assert logic.parse_salary("competitive") == (None, None)

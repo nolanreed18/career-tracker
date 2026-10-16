@@ -1,0 +1,15 @@
+# Tool configuration only: the app is not a package.
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# The app imports its modules by bare name (data, logic, ...) with app/ on the
+# path, as Streamlit runs it; listing it here keeps them first-party.
+src = [".", "app", "tests"]
+
+[tool.ruff.lint]
+# Unused and undefined names, syntax errors, import order. Nothing stylistic.
+select = ["F", "E9", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,39 @@
+# Weekly copy of every table (see backup.py). Each run's CSVs are kept as the
+# run's `backups` artifact for 90 days: Actions -> Backup -> the run. Needs the
+# DATABASE_URL repository secret (Settings -> Secrets and variables ->
+# Actions). A failed run shows red and GitHub emails the owner.
+name: Backup
+
+on:
+  schedule:
+    # Sundays 11:00 UTC: 06:00 Chicago in summer (CDT), 05:00 in winter (CST).
+    - cron: "0 11 * * 0"
+  workflow_dispatch: # the "Run workflow" button on the Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - run: python backup.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backups
+          path: data/backups/*.csv
+          if-no-files-found: error
+          retention-days: 90
