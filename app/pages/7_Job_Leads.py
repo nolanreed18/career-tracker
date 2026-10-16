@@ -1,0 +1,130 @@
+"""Job leads: jobs from your alert emails, scored for fit by the daily
+review, and what you're looking for, which the scores are based on."""
+
+import streamlit as st
+
+import config
+import data
+import logic
+from ui import md, setup
+
+setup("Job Leads")
+st.title("Job Leads")
+
+if message := st.session_state.pop("flash", None):
+    st.success(message)
+
+today = data.today()
+
+
+def done(message: str) -> None:
+    st.session_state["flash"] = message
+    st.rerun()
+
+
+def describe(lead) -> str:
+    location, mode = logic.value(lead.location), logic.value(lead.work_mode)
+    if mode and location and mode in location.lower():
+        mode = None                                 # "Remote (US) · remote"
+    parts = [lead.source, location, mode, logic.salary_range(lead.salary_min, lead.salary_max)]
+    found = f"found {logic.when(lead.found_on, today)}"
+    return " · ".join(str(p) for p in parts if p) + f" · {found}"
+
+
+inbox_tab, dismissed_tab, profile_tab = st.tabs(["Inbox", "Dismissed", "What I'm looking for"])
+
+# ---- inbox ------------------------------------------------------------------
+
+with inbox_tab:
+    leads = data.job_leads("new")
+    if data.job_profile() is None:
+        st.warning("Fill in **What I'm looking for** so the daily review can score jobs "
+                   "for fit.")
+    if leads.empty:
+        st.info("No new leads. Jobs from your alert emails show up here after the daily "
+                "review, best fit first.")
+    else:
+        strong = int((leads["fit_score"].fillna(0) >= config.STRONG_FIT).sum())
+        st.caption(f"{logic.plural(len(leads), 'new lead')}, {strong} strong "
+                   f"(fit {config.STRONG_FIT}+).")
+        only_strong = st.toggle("Strong fits only", key="leads_only_strong")
+        if only_strong:
+            leads = leads[leads["fit_score"].fillna(0) >= config.STRONG_FIT]
+        for lead in leads.itertuples():
+            lead_id = int(lead.lead_id)
+            with st.container(border=True):
+                fit = logic.fit_label(lead.fit_score)
+                title = md(lead.title)
+                if url := logic.value(lead.job_url):          # the title opens the posting
+                    title = f"[{title}]({url.replace(')', '%29').replace(' ', '%20')})"
+                st.markdown(f"{fit + ' · ' if fit else ''}**{title}** — {md(lead.company)}")
+                st.caption(md(describe(lead)))
+                if logic.value(lead.fit_reason):
+                    st.markdown(md(lead.fit_reason))
+                move_col, dismiss_col = st.columns(2, wrap=False)
+                if move_col.button("Add", key=f"move_{lead_id}", type="primary",
+                                   width="stretch",
+                                   help="Add to Applications as Saved, with this fit note"):
+                    application_id = data.move_lead_to_applications(lead_id, today)
+                    st.session_state["flash"] = "Added to Applications as Saved."
+                    st.session_state["open_application"] = application_id
+                    st.switch_page("pages/1_Applications.py")
+                if dismiss_col.button("Dismiss", key=f"dismiss_{lead_id}", width="stretch"):
+                    data.set_lead_status(lead_id, "dismissed")
+                    done(f"Dismissed {lead.title} — {lead.company}.")
+
+# ---- dismissed --------------------------------------------------------------
+
+with dismissed_tab:
+    dismissed = data.job_leads("dismissed")
+    if dismissed.empty:
+        st.info("Nothing dismissed.")
+    for lead in dismissed.itertuples():
+        lead_id = int(lead.lead_id)
+        text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
+        fit = logic.fit_label(lead.fit_score)
+        text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}** — "
+                          f"{md(lead.company)}  \n{md(describe(lead))}")
+        if button_col.button("Restore", key=f"restore_{lead_id}"):
+            data.set_lead_status(lead_id, "new")
+            done(f"Restored {lead.title} — {lead.company}.")
+
+# ---- profile ----------------------------------------------------------------
+
+with profile_tab:
+    profile = data.job_profile() or {}
+    st.caption("The daily review reads this to score each job from 1 to 10. Plain "
+               "sentences are fine; the more specific, the better the scores.")
+    if profile:
+        st.caption(f"Last saved {profile['updated_on']:%b %d, %Y}.")
+    with st.form("job_profile"):
+        target_roles = st.text_area(
+            "Roles I want", value=profile.get("target_roles") or "",
+            placeholder="e.g. Data Analyst, Analytics Engineer; mid or senior level")
+        locations = st.text_input(
+            "Where", value=profile.get("locations") or "",
+            placeholder="e.g. Chicago area, or remote anywhere in the US")
+        work_modes = st.multiselect(
+            "Work modes I'd take", config.WORK_MODES,
+            default=[m.strip() for m in (profile.get("work_modes") or "").split(",")
+                     if m.strip() in config.WORK_MODES])
+        min_salary = st.number_input("Lowest base salary I'd take ($/yr)", min_value=0,
+                                     step=5000, value=profile.get("min_salary"))
+        must_haves = st.text_area("Must-haves", value=profile.get("must_haves") or "",
+                                  placeholder="e.g. SQL-heavy work, a real data team")
+        nice_to_haves = st.text_area("Nice to have", value=profile.get("nice_to_haves") or "",
+                                     placeholder="e.g. healthcare or fintech, 4-day week")
+        deal_breakers = st.text_area("Deal-breakers", value=profile.get("deal_breakers") or "",
+                                     placeholder="e.g. 100% travel, commission-only, "
+                                                 "contract-to-hire")
+        about_me = st.text_area(
+            "About me", value=profile.get("about_me") or "", height=200,
+            placeholder="Your experience and skills, as on a resume: years, tools, "
+                        "industries, highlights. Pasting your resume summary works.")
+        saved = st.form_submit_button("Save", type="primary")
+    if saved:
+        data.save_job_profile(
+            today, target_roles=target_roles, locations=locations,
+            work_modes=", ".join(work_modes), min_salary=min_salary, must_haves=must_haves,
+            nice_to_haves=nice_to_haves, deal_breakers=deal_breakers, about_me=about_me)
+        done("Saved. The next daily review will use it.")

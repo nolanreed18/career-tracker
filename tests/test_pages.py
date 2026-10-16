@@ -8,6 +8,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import data
+import logic
 import ui
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -62,6 +63,13 @@ def seed() -> int:
     data.add_contact("Sam", TODAY, company_id=acme, kind="recruiter")
     data.add_career_entry("win", "Cut report time 90%", date(2026, 9, 1))
     data.add_position("Acme", "Analyst", date(2024, 1, 8), base_salary=85000)
+    data.save_job_profile(TODAY, target_roles="Data Analyst", work_modes="remote, hybrid")
+    data.add_leads([logic.clean_lead(r)[0] for r in (
+        {"source": "LinkedIn", "title": "Analytics Engineer", "company": "Gamma",
+         "salary": "$120k-$140k", "fit_score": 9, "fit_reason": "Strong dbt and SQL match",
+         "job_url": "https://example.com/1"},
+        {"source": "Dice", "title": "BI Developer", "company": "Delta", "fit_score": 4},
+    )], TODAY)
     return quiet
 
 
@@ -175,3 +183,47 @@ def test_no_password_set_keeps_the_app_locked(monkeypatch):
     at = new_app(HOME, signed_in=False).run()
     assert "APP_PASSWORD is not set" in at.error[0].value
     assert not at.text_input and not at.metric
+
+
+LEADS = ROOT / "app" / "pages" / "7_Job_Leads.py"
+
+
+def test_leads_are_listed_best_fit_first_and_home_points_to_them():
+    seed()
+    at = run(LEADS)
+    titles = [m.value for m in at.markdown if "**" in m.value]
+    assert "Analytics Engineer" in titles[0] and "🟢 9/10" in titles[0]
+    assert "BI Developer" in titles[1]
+    home = run(HOME)
+    assert any("2 new job leads to review, 1 strong" in m.value for m in home.markdown)
+
+
+def test_dismissing_a_lead_moves_it_to_dismissed_and_restore_brings_it_back():
+    seed()
+    at = run(LEADS)
+    widget(at.button, "Dismiss", 1).click().run()
+    assert data.job_leads("new")["title"].tolist() == ["Analytics Engineer"]
+    click(at, "Restore")
+    assert len(data.job_leads("new")) == 2
+
+
+def test_moving_a_lead_creates_the_application():
+    seed()
+    at = run(LEADS)
+    widget(at.button, "Add").click().run()
+    apps = data.applications()
+    moved = apps[apps["role"] == "Analytics Engineer"].iloc[0]
+    assert (moved["company"], moved["status"]) == ("Gamma", "saved")
+    assert data.job_leads("moved")["title"].tolist() == ["Analytics Engineer"]
+
+
+def test_the_profile_form_saves():
+    at = run(LEADS)
+    assert any("Fill in" in w.value for w in at.warning)
+    widget(at.text_area, "Roles I want").set_value("Data Analyst")
+    widget(at.number_input, "Lowest base salary I'd take ($/yr)").set_value(100000)
+    widget(at.multiselect, "Work modes I'd take").set_value(["remote"])
+    click(at, "Save")
+    profile = data.job_profile()
+    assert (profile["target_roles"], profile["min_salary"], profile["work_modes"]) == (
+        "Data Analyst", 100000, "remote")

@@ -32,6 +32,8 @@ TABLES = [
     ("interviews", "interview_id"),
     ("career_entries", "entry_id"),
     ("positions", "position_id"),
+    ("job_profile", "profile_id"),
+    ("job_leads", "lead_id"),
 ]
 
 

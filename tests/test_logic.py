@@ -211,3 +211,42 @@ def test_parse_salary():
     assert logic.parse_salary("95,500") == (95500, None)
     assert logic.parse_salary("120k") == (120000, None)
     assert logic.parse_salary("competitive") == (None, None)
+
+
+# ---- job leads --------------------------------------------------------------
+
+def test_the_same_job_from_two_sites_gets_the_same_key():
+    a = logic.lead_key("Acme, Inc.", "Senior Data Analyst", "Chicago, IL")
+    b = logic.lead_key("acme inc", "Senior  Data Analyst ", "chicago il")
+    assert a == b == "acme inc|senior data analyst|chicago il"
+    assert logic.lead_key("Acme", "Analyst", None) != logic.lead_key("Acme", "Analyst", "Remote")
+
+
+def test_a_lead_is_cleaned_for_the_database():
+    lead, problem = logic.clean_lead({
+        "source": "Indeed", "title": " Data Analyst ", "company": "Acme",
+        "location": "Remote (US)", "work_mode": "Remote", "salary": "$140k - $120k",
+        "posted_on": "2026-10-12", "fit_score": "8", "fit_reason": "SQL-heavy, remote",
+        "job_url": "https://example.com/j/1"})
+    assert problem is None
+    assert lead["title"] == "Data Analyst" and lead["work_mode"] == "remote"
+    assert (lead["salary_min"], lead["salary_max"]) == (120000, 140000)
+    assert lead["posted_on"] == date(2026, 10, 12) and lead["fit_score"] == 8
+    assert lead["dedupe_key"] == "acme|data analyst|remote us"
+
+
+def test_a_lead_without_a_company_or_with_a_bad_score_is_refused():
+    assert logic.clean_lead({"source": "Dice", "title": "Analyst"})[0] is None
+    assert logic.clean_lead({"source": "Dice", "title": "A", "company": "B",
+                             "fit_score": 11})[0] is None
+    assert logic.clean_lead({"source": "Dice", "title": "A", "company": "B",
+                             "fit_score": "great"})[0] is None
+    lead, _ = logic.clean_lead({"source": "Dice", "title": "A", "company": "B"})
+    assert lead["fit_score"] is None and lead["salary_min"] is None
+
+
+def test_fit_labels():
+    assert logic.fit_label(config.STRONG_FIT) == f"🟢 {config.STRONG_FIT}/10"
+    assert logic.fit_label(5) == "🟡 5/10"
+    assert logic.fit_label(2) == "⚪ 2/10"
+    assert logic.fit_label(None) == ""

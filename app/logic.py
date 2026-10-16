@@ -356,3 +356,63 @@ def map_import(frame: pd.DataFrame) -> tuple[list[dict], list[str]]:
         rows.append({k: (str(v) if k in ("job_url", "location", "source", "notes")
                          and v is not None else v) for k, v in mapped.items()})
     return rows, problems
+
+
+# ---- job leads --------------------------------------------------------------
+
+def lead_key(company, title, location=None) -> str:
+    """The same job from different sites gets the same key: company, title and
+    location, lower-cased, with punctuation and extra spaces dropped."""
+    def words(text) -> str:
+        return " ".join(re.findall(r"[a-z0-9]+", str(text or "").lower()))
+    return "|".join(words(part) for part in (company, title, location))
+
+
+def clean_lead(row: dict) -> tuple[dict | None, str | None]:
+    """A lead from the daily review, ready for data.add_leads, or the reason it
+    was refused. Needs a source, a title and a company; salary may be given as
+    salary text ("$120k–$140k") or salary_min / salary_max; a fit score must
+    be 1-10."""
+    source, title, company = (value(row.get(k)) for k in ("source", "title", "company"))
+    if source is None or title is None or company is None:
+        return None, f"needs a source, a title and a company: {row}"
+    lead = {
+        "source": str(source).strip(),
+        "title": str(title).strip(),
+        "company": str(company).strip(),
+        "location": value(row.get("location")),
+        "work_mode": parse_work_mode(row.get("work_mode")),
+        "job_url": value(row.get("job_url")),
+        "fit_reason": value(row.get("fit_reason")),
+    }
+    low, high = value(row.get("salary_min")), value(row.get("salary_max"))
+    if low is None and high is None:
+        low, high = parse_salary(row.get("salary"))
+    low, high = (None if n is None else int(n) for n in (low, high))
+    if low is not None and high is not None and high < low:
+        low, high = high, low
+    lead["salary_min"], lead["salary_max"] = low, high
+    posted = value(row.get("posted_on"))
+    if posted is not None:
+        parsed = pd.to_datetime(posted, errors="coerce")
+        posted = None if pd.isna(parsed) else parsed.date()
+    lead["posted_on"] = posted
+    score = value(row.get("fit_score"))
+    if score is not None:
+        try:
+            score = int(round(float(score)))
+        except (TypeError, ValueError):
+            return None, f"fit_score isn't a number: {row}"
+        if not 1 <= score <= 10:
+            return None, f"fit_score must be 1-10: {row}"
+    lead["fit_score"] = score
+    lead["dedupe_key"] = lead_key(lead["company"], lead["title"], lead["location"])
+    return lead, None
+
+
+def fit_label(score) -> str:
+    """'🟢 8/10' for a strong fit, '🟡 5/10' otherwise, '' when unscored."""
+    score = value(score)
+    if score is None:
+        return ""
+    return f"{'🟢' if score >= config.STRONG_FIT else '🟡' if score >= 4 else '⚪'} {int(score)}/10"

@@ -44,6 +44,16 @@ for n, item in enumerate(items):
             st.session_state["open_application"] = item.application_id
             st.switch_page("pages/1_Applications.py")
 
+new_leads = data.job_leads("new")
+if not new_leads.empty:
+    strong = int((new_leads["fit_score"].fillna(0) >= config.STRONG_FIT).sum())
+    with st.container(border=True):
+        text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
+        text_col.markdown(f"💼 {logic.plural(len(new_leads), 'new job lead')} to review"
+                          + (f", {strong} strong" if strong else ""))
+        if button_col.button("Review", key="review_leads"):
+            st.switch_page("pages/7_Job_Leads.py")
+
 st.caption(f"Applications with no update for {config.FOLLOW_UP_DAYS} days are flagged for a "
            "follow-up. Logging any update, or setting a next step, clears the flag.")
 
