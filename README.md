@@ -47,11 +47,15 @@ window, the status list) are in `app/config.py`.
 
      ```toml
      DATABASE_URL = "postgresql://…the string from Neon…"
+     APP_PASSWORD = "a password you choose"
      ```
 
-   This app holds personal information, so check the app's **Settings →
-   Sharing** and make sure only you can view it. The first time the app opens
-   it creates its tables in the new database; there's nothing to run.
+   Streamlit's free plan allows one private app, and the Fitness app uses it,
+   so this repository and app are public. The **password screen** is what
+   keeps your data private: every page asks for `APP_PASSWORD` first, and the
+   app stays locked if it isn't set. Use a long password that you don't use
+   anywhere else. The first time the app opens it creates its tables in the
+   new database; there's nothing to run.
 4. **Test the backup.** On GitHub go to **Actions → Backup → Run workflow**. A
    green check means it worked; the CSVs are on that run's page under
    **Artifacts**.
@@ -68,7 +72,8 @@ streamlit run app/Home.py
 ```
 
 It opens at `http://localhost:8501`. It needs a file named `.env` in this
-folder with one line, `DATABASE_URL=postgresql://…` (the string from Neon);
+folder with two lines, `DATABASE_URL=postgresql://…` (the string from Neon)
+and `APP_PASSWORD=…` (the password the app asks for);
 `.env` is never uploaded to GitHub. `Ctrl+C` stops it.
 
 `python apply_schema.py` creates the tables by hand. The app does this itself,
