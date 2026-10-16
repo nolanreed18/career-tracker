@@ -178,11 +178,54 @@ def test_the_right_password_opens_the_app_and_a_wrong_one_does_not(monkeypatch):
     assert widget(at.metric, "Open").value == "0"
 
 
-def test_no_password_set_keeps_the_app_locked(monkeypatch):
+def test_no_way_to_sign_in_set_up_keeps_the_app_locked(monkeypatch):
     monkeypatch.delenv("APP_PASSWORD")
     at = new_app(HOME, signed_in=False).run()
-    assert "APP_PASSWORD is not set" in at.error[0].value
-    assert not at.text_input and not at.metric
+    assert "no way to sign in is set up" in at.error[0].value
+    assert not at.text_input and not at.metric and not at.button
+
+
+@pytest.fixture
+def google(monkeypatch):
+    """Sign in with Google set up, for you; who is signed in is set per test."""
+    monkeypatch.setattr(ui, "_google_ready", lambda: True)
+    monkeypatch.setenv("ALLOWED_EMAILS", "Me@Example.com, other@example.com")
+
+    def signed_in_as(email):
+        monkeypatch.setattr(ui, "_google_email", lambda: email)
+    return signed_in_as
+
+
+def test_google_offers_both_ways_in_until_someone_signs_in(google):
+    seed()
+    google(None)
+    at = new_app(HOME, signed_in=False).run()
+    assert [b.label for b in at.button] == ["Sign in with Google", "Sign in with password"]
+    assert not at.metric and "Acme" not in str(at)
+
+
+def test_an_allowed_google_account_goes_straight_in(google):
+    google("me@example.com")
+    at = new_app(HOME, signed_in=False).run()
+    assert widget(at.metric, "Open").value == "0"
+    for path in PAGES:                              # and stays in on every page
+        assert not new_app(path, signed_in=False).run().exception
+
+
+def test_any_other_google_account_is_turned_away(google):
+    seed()
+    google("stranger@example.com")
+    at = new_app(HOME, signed_in=False).run()
+    assert "stranger@example.com isn't allowed" in at.error[0].value
+    assert [b.label for b in at.button] == ["Sign out"]
+    assert not at.metric and "Acme" not in str(at)
+
+
+def test_google_without_allowed_emails_lets_nobody_in(google, monkeypatch):
+    monkeypatch.delenv("ALLOWED_EMAILS")
+    google("me@example.com")
+    at = new_app(HOME, signed_in=False).run()
+    assert "isn't allowed" in at.error[0].value and not at.metric
 
 
 LEADS = ROOT / "app" / "pages" / "7_Job_Leads.py"
