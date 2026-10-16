@@ -23,7 +23,7 @@ import data  # noqa: E402
 import db  # noqa: E402
 
 TABLES = ("companies, contacts, applications, application_events, interviews, "
-          "career_entries, positions")
+          "career_entries, positions, job_profile, job_leads")
 
 
 @pytest.fixture(autouse=True)

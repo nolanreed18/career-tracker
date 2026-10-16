@@ -430,3 +430,101 @@ def update_position(position_id: int, **fields) -> None:
 
 def delete_position(position_id: int) -> None:
     _delete("positions", "position_id", position_id)
+
+
+# ---- job search profile -----------------------------------------------------
+
+PROFILE_FIELDS = {"target_roles", "locations", "work_modes", "min_salary", "must_haves",
+                  "nice_to_haves", "deal_breakers", "about_me"}
+
+
+def job_profile() -> dict | None:
+    return _one("select * from job_profile where profile_id = 1")
+
+
+def save_job_profile(on: date, **fields) -> None:
+    """Create or replace what you're looking for (there is only one)."""
+    unknown = set(fields) - PROFILE_FIELDS
+    if unknown:
+        raise ValueError(f"unknown profile fields {sorted(unknown)}")
+    cleaned = {k: _clean(fields.get(k)) for k in sorted(PROFILE_FIELDS)}
+    columns = ["profile_id", *cleaned, "updated_on"]
+    query = sql.SQL("""
+        insert into job_profile ({columns}) values ({values})
+        on conflict (profile_id) do update set {updates}
+    """).format(
+        columns=sql.SQL(", ").join(map(sql.Identifier, columns)),
+        values=sql.SQL(", ").join(map(sql.Placeholder, columns)),
+        updates=sql.SQL(", ").join(
+            sql.SQL("{0} = excluded.{0}").format(sql.Identifier(c)) for c in columns[1:]),
+    )
+    with _cursor() as cur:
+        cur.execute(query, {"profile_id": 1, **cleaned, "updated_on": on})
+
+
+# ---- job leads --------------------------------------------------------------
+
+def job_leads(status: str | None = None) -> pd.DataFrame:
+    """Leads, best fit first (unscored last), then newest."""
+    where = "" if status is None else "where status = %(status)s"
+    return _read(f"""
+        select * from job_leads {where}
+        order by fit_score desc nulls last, found_on desc, lead_id desc
+    """, {"status": status})
+
+
+def lead(lead_id: int) -> dict | None:
+    return _one("select * from job_leads where lead_id = %s", (lead_id,))
+
+
+def add_leads(leads: list[dict], on: date) -> tuple[int, int]:
+    """Add cleaned leads (logic.clean_lead), all or none; (added, skipped).
+
+    A lead whose dedupe_key is already stored -- the same job seen before,
+    from any site -- is skipped, whatever became of the first one.
+    """
+    added = 0
+    with _transaction() as cur:
+        for row in leads:
+            row = {k: _clean(v) for k, v in row.items()}
+            columns = [*row, "found_on", "status"]
+            cur.execute(sql.SQL("""
+                insert into job_leads ({}) values ({})
+                on conflict (dedupe_key) do nothing
+            """).format(sql.SQL(", ").join(map(sql.Identifier, columns)),
+                        sql.SQL(", ").join(map(sql.Placeholder, columns))),
+                {**row, "found_on": on, "status": "new"})
+            added += cur.rowcount
+    return added, len(leads) - added
+
+
+def known_lead_keys() -> set[str]:
+    with _cursor() as cur:
+        cur.execute("select dedupe_key from job_leads")
+        return {row[0] for row in cur.fetchall()}
+
+
+def set_lead_status(lead_id: int, status: str) -> None:
+    """Dismiss a lead, or bring a dismissed one back as new."""
+    with _cursor() as cur:
+        cur.execute("update job_leads set status = %s where lead_id = %s", (status, lead_id))
+
+
+def move_lead_to_applications(lead_id: int, on: date) -> int:
+    """The lead as a new "saved" application (its company made if new), the
+    fit score and reason in its notes; the lead is marked moved."""
+    with _transaction() as cur:
+        row = lead(lead_id)
+        notes = None
+        if row["fit_score"] is not None:
+            notes = f"Fit {row['fit_score']}/10" + (
+                f": {row['fit_reason']}" if row["fit_reason"] else "")
+        application_id = add_application(
+            company_id_for(row["company"], on), row["title"], "saved", on,
+            job_url=row["job_url"], location=row["location"], work_mode=row["work_mode"],
+            salary_min=row["salary_min"], salary_max=row["salary_max"],
+            source=row["source"], notes=notes)
+        cur.execute("""
+            update job_leads set status = 'moved', application_id = %s where lead_id = %s
+        """, (application_id, lead_id))
+    return application_id

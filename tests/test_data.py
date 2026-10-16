@@ -157,3 +157,68 @@ def test_a_new_database_gets_its_tables_on_first_connection(database, monkeypatc
     monkeypatch.setattr(data, "_schema_ready", False)
     data.reset_connection()
     assert data.career_entries().empty                # recreated, not an error
+
+
+# ---- job leads --------------------------------------------------------------
+
+def leads(*rows):
+    import logic
+    return [logic.clean_lead({"source": "LinkedIn", "company": "Acme", **r})[0] for r in rows]
+
+
+def test_the_profile_is_one_row_saved_over():
+    assert data.job_profile() is None
+    data.save_job_profile(TODAY, target_roles="Data Analyst", min_salary=90000)
+    data.save_job_profile(date(2026, 10, 15), target_roles="Analytics Engineer")
+    profile = data.job_profile()
+    assert profile["target_roles"] == "Analytics Engineer"
+    assert profile["min_salary"] is None                # every field is replaced
+    assert profile["updated_on"] == date(2026, 10, 15)
+    with pytest.raises(ValueError):
+        data.save_job_profile(TODAY, favourite_colour="blue")
+
+
+def test_a_job_seen_before_from_any_site_is_skipped():
+    assert data.add_leads(leads({"title": "Analyst", "fit_score": 6},
+                                {"title": "Engineer", "fit_score": 9}), TODAY) == (2, 0)
+    again = leads({"title": "analyst", "source": "Indeed"}, {"title": "Scientist"},
+                  {"title": "Scientist"})
+    assert data.add_leads(again, TODAY) == (1, 2)
+    assert data.job_leads("new")["title"].tolist() == ["Engineer", "Analyst", "Scientist"]
+    assert len(data.known_lead_keys()) == 3
+
+
+def test_a_dismissed_lead_stays_dismissed_when_seen_again():
+    data.add_leads(leads({"title": "Analyst"}), TODAY)
+    lead_id = int(data.job_leads()["lead_id"][0])
+    data.set_lead_status(lead_id, "dismissed")
+    assert data.add_leads(leads({"title": "Analyst"}), TODAY) == (0, 1)
+    assert data.job_leads("new").empty
+    data.set_lead_status(lead_id, "new")
+    assert len(data.job_leads("new")) == 1
+
+
+def test_moving_a_lead_makes_a_saved_application_with_the_fit_in_its_notes():
+    data.add_leads(leads({"title": "Analyst", "salary": "$90k-$110k", "work_mode": "hybrid",
+                          "job_url": "https://example.com/1", "fit_score": 8,
+                          "fit_reason": "Strong SQL match"}), TODAY)
+    lead_id = int(data.job_leads()["lead_id"][0])
+    app_id = data.move_lead_to_applications(lead_id, TODAY)
+    app = data.application(app_id)
+    assert (app["company"], app["role"], app["status"], app["source"]) == (
+        "Acme", "Analyst", "saved", "LinkedIn")
+    assert (app["salary_min"], app["salary_max"], app["work_mode"]) == (90000, 110000, "hybrid")
+    assert app["notes"] == "Fit 8/10: Strong SQL match"
+    moved = data.lead(lead_id)
+    assert (moved["status"], moved["application_id"]) == ("moved", app_id)
+    data.delete_application(app_id)                 # the lead stays, unlinked
+    assert data.lead(lead_id)["application_id"] is None
+
+
+def test_every_lead_status_is_allowed_by_the_schema_and_nothing_else():
+    data.add_leads(leads({"title": "Analyst"}), TODAY)
+    lead_id = int(data.job_leads()["lead_id"][0])
+    for status in config.LEAD_STATUSES:
+        data.set_lead_status(lead_id, status)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        data.set_lead_status(lead_id, "maybe")

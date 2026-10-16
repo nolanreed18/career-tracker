@@ -23,6 +23,12 @@ database, hosted free on Streamlit Community Cloud.
   source.
 - **Import**: bring in applications from a spreadsheet saved as CSV. Headers
   are matched loosely, and importing the same file twice adds nothing.
+- **Job Leads**: jobs from your job-alert emails, each scored 1–10 for fit
+  with a one-line reason, best first. **Add** makes one a Saved application;
+  **Dismiss** hides it (the same job won't come back from another site). The
+  **What I'm looking for** tab holds the roles, places, pay floor, must-haves
+  and deal-breakers the scores are based on. Home shows how many new leads are
+  waiting.
 
 Settings you might want to change (the 14-day follow-up, the 7-day interview
 window, the status list) are in `app/config.py`.
@@ -122,4 +128,5 @@ up automatically (`.claude/hooks/session-start.sh`).
 | `schema.sql`, `apply_schema.py` | The tables (created automatically when the app first connects), and a script to create them by hand. |
 | `db.py` | Finds `DATABASE_URL` (in `.env`, or Streamlit secrets when online). |
 | `backup.py` | Dumps every table to CSV. |
+| `leads.py` | How the daily job-alert review reads your profile and adds leads. |
 | `CLAUDE.md` | Rules for Claude when it works on this project. |

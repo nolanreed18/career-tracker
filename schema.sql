@@ -106,3 +106,42 @@ create table if not exists positions (
     notes        text,
     check (ended_on is null or ended_on >= started_on)
 );
+
+-- What you're looking for. One row; the daily job-alert review scores every
+-- lead against it.
+create table if not exists job_profile (
+    profile_id     smallint primary key check (profile_id = 1),
+    target_roles   text,
+    locations      text,
+    work_modes     text,              -- e.g. "remote, hybrid"
+    min_salary     integer check (min_salary >= 0),
+    must_haves     text,
+    nice_to_haves  text,
+    deal_breakers  text,
+    about_me       text,              -- experience and skills, resume-style
+    updated_on     date not null
+);
+
+-- Jobs found in alert emails, scored for fit. "moved" ones became an
+-- application; the same job from several sites is stored once (dedupe_key:
+-- company, title and location, lower-cased, punctuation dropped).
+create table if not exists job_leads (
+    lead_id         bigint generated always as identity primary key,
+    source          text not null check (btrim(source) <> ''),
+    title           text not null check (btrim(title) <> ''),
+    company         text not null check (btrim(company) <> ''),
+    location        text,
+    work_mode       text check (work_mode in ('onsite', 'hybrid', 'remote')),
+    salary_min      integer check (salary_min >= 0),
+    salary_max      integer check (salary_max >= 0),
+    job_url         text,
+    posted_on       date,
+    found_on        date not null,
+    fit_score       smallint check (fit_score between 1 and 10),
+    fit_reason      text,
+    status          text not null check (status in ('new', 'moved', 'dismissed')),
+    application_id  bigint references applications on delete set null,
+    dedupe_key      text not null,
+    check (salary_min is null or salary_max is null or salary_max >= salary_min)
+);
+create unique index if not exists job_leads_dedupe on job_leads (dedupe_key);
