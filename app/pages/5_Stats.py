@@ -1,0 +1,53 @@
+"""How the search is going, in numbers."""
+
+import streamlit as st
+
+import config
+import data
+import logic
+from ui import setup, status_label
+
+setup("Stats")
+st.title("Stats")
+
+today = data.today()
+apps = data.applications()
+events = data.all_events()
+
+if apps.empty:
+    st.info("Stats appear once you've added some applications.")
+    st.stop()
+
+responded, sent = logic.response_rate(apps, events)
+open_count = int(apps["status"].isin(config.OPEN_STATUSES).sum())
+offers = int(apps["status"].isin(["offer", "accepted"]).sum())
+sent_col, rate_col, offer_col = st.columns(3, gap="xsmall", wrap=False)
+sent_col.metric("Applied", sent, help="Every application past Saved.")
+rate_col.metric("Response rate", f"{responded / sent:.0%}" if sent else "—",
+                help=f"{responded} of {sent} reached a screen or further.")
+offer_col.metric("Offers", offers)
+
+st.subheader("Pipeline")
+pipe = logic.pipeline(apps)
+pipe["status"] = pipe["status"].map(status_label)
+st.bar_chart(pipe, x="status", y="applications", x_label="", y_label="Applications",
+             sort=False, horizontal=True)
+st.caption(f"{open_count} open.")
+
+st.subheader("Applications per week")
+weekly = logic.weekly_applications(apps, today)
+weekly["week"] = weekly["week"].map(lambda d: f"{d:%b} {d.day}")
+st.bar_chart(weekly, x="week", y="applications", x_label="Week of", y_label="", sort=False)
+
+st.subheader("What's working")
+sources = logic.by_source(apps, events)
+if sources.empty:
+    st.caption("Nothing applied for yet.")
+else:
+    st.dataframe(sources, hide_index=True, width="stretch", column_config={
+        "source": "Source", "applied": "Applied", "responded": "Responses",
+        "rate": st.column_config.ProgressColumn("Response rate", format="percent",
+                                                min_value=0, max_value=1),
+    })
+    st.caption("Response = reached a screen or further. Set each application's "
+               "source to see which channels pay off.")

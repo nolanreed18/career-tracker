@@ -1,0 +1,432 @@
+"""Every database read and write the app makes.
+
+Reads return DataFrames (or a dict for one row). Writes take plain Python
+values; dates are computed in Python ("today" comes from today() below, in
+America/Chicago) and passed in, never current_date or now() in SQL.
+
+One connection per process, in autocommit, shared by every page. Neon
+suspends idle databases, so a connection idle for PING_AFTER_IDLE_S or more
+is pinged before use and replaced if it has died. The first connection a
+process opens also runs schema.sql -- every statement in it is "if not
+exists" -- so a brand-new database gets its tables the first time the app
+opens, with nothing to run by hand.
+"""
+
+import sys
+import threading
+import time
+from contextlib import contextmanager
+from datetime import date, datetime
+from pathlib import Path
+
+import pandas as pd
+import psycopg
+from psycopg import sql
+from psycopg.rows import dict_row
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import db  # noqa: E402
+
+PING_AFTER_IDLE_S = 20
+
+_lock = threading.RLock()
+_conn: psycopg.Connection | None = None
+_last_used = 0.0
+_schema_ready = False
+
+
+class InUse(Exception):
+    """A delete refused because other rows still point at this one."""
+
+
+def today() -> date:
+    return datetime.now(db.LOCAL_TZ).date()
+
+
+# ---- connection -------------------------------------------------------------
+
+def _connection() -> psycopg.Connection:
+    global _conn, _last_used, _schema_ready
+    if _conn is None or _conn.closed:
+        _conn = db.connect(autocommit=True)
+        if not _schema_ready:
+            _conn.execute((ROOT / "schema.sql").read_text(encoding="utf-8"))
+            _schema_ready = True
+    elif time.monotonic() - _last_used >= PING_AFTER_IDLE_S:
+        try:
+            _conn.execute("select 1")
+        except psycopg.Error:
+            reset_connection()
+            _conn = db.connect(autocommit=True)
+    _last_used = time.monotonic()
+    return _conn
+
+
+def reset_connection() -> None:
+    """Drop the shared connection; the next call opens a fresh one."""
+    global _conn
+    if _conn is not None:
+        try:
+            _conn.close()
+        except psycopg.Error:
+            pass
+    _conn = None
+
+
+@contextmanager
+def _cursor(row_factory=None):
+    with _lock:
+        conn = _connection()
+        with conn.cursor(row_factory=row_factory) as cur:
+            yield cur
+
+
+@contextmanager
+def _transaction():
+    """All-or-nothing: every statement inside commits together or not at all.
+    Nests (as a savepoint) inside another _transaction()."""
+    with _lock:
+        conn = _connection()
+        with conn.transaction(), conn.cursor() as cur:
+            yield cur
+
+
+def _read(query: str, params=None) -> pd.DataFrame:
+    with _cursor() as cur:
+        cur.execute(query, params)
+        columns = [c.name for c in cur.description]
+        return pd.DataFrame(cur.fetchall(), columns=columns)
+
+
+def _one(query: str, params=None) -> dict | None:
+    with _cursor(row_factory=dict_row) as cur:
+        cur.execute(query, params)
+        return cur.fetchone()
+
+
+def _clean(value):
+    """Strip text; blank text becomes NULL."""
+    if isinstance(value, str):
+        value = value.strip()
+        return value or None
+    return value
+
+
+def _insert(table: str, key: str, fields: dict) -> int:
+    cleaned = {k: _clean(v) for k, v in fields.items()}
+    query = sql.SQL("insert into {} ({}) values ({}) returning {}").format(
+        sql.Identifier(table),
+        sql.SQL(", ").join(map(sql.Identifier, cleaned)),
+        sql.SQL(", ").join(map(sql.Placeholder, cleaned)),
+        sql.Identifier(key),
+    )
+    with _cursor() as cur:
+        cur.execute(query, cleaned)
+        return cur.fetchone()[0]
+
+
+def _update(table: str, key: str, key_value: int, fields: dict, allowed: set[str]) -> None:
+    unknown = set(fields) - allowed
+    if unknown:
+        raise ValueError(f"cannot update {sorted(unknown)} on {table}")
+    if not fields:
+        return
+    cleaned = {k: _clean(v) for k, v in fields.items()}
+    query = sql.SQL("update {} set {} where {} = {}").format(
+        sql.Identifier(table),
+        sql.SQL(", ").join(
+            sql.SQL("{} = {}").format(sql.Identifier(k), sql.Placeholder(k)) for k in cleaned
+        ),
+        sql.Identifier(key),
+        sql.Placeholder("_key"),
+    )
+    with _cursor() as cur:
+        cur.execute(query, {**cleaned, "_key": key_value})
+
+
+def _delete(table: str, key: str, key_value: int, in_use_message: str = "") -> None:
+    query = sql.SQL("delete from {} where {} = %s").format(
+        sql.Identifier(table), sql.Identifier(key))
+    try:
+        with _cursor() as cur:
+            cur.execute(query, (key_value,))
+    except psycopg.errors.ForeignKeyViolation as exc:
+        raise InUse(in_use_message or "other records still use this one") from exc
+
+
+# ---- companies --------------------------------------------------------------
+
+COMPANY_FIELDS = {"name", "website", "industry", "location", "notes"}
+
+
+def companies() -> pd.DataFrame:
+    return _read("""
+        select c.*, count(a.application_id) as applications
+        from companies c left join applications a using (company_id)
+        group by c.company_id
+        order by lower(c.name)
+    """)
+
+
+def add_company(name: str, on: date, **fields) -> int:
+    return _insert("companies", "company_id", {"name": name, "created_on": on, **fields})
+
+
+def company_id_for(name: str, on: date) -> int:
+    """The company with this name, whatever its capitalisation, made if new."""
+    name = name.strip()
+    with _cursor() as cur:
+        cur.execute("""
+            insert into companies (name, created_on) values (%s, %s)
+            on conflict ((lower(name))) do nothing
+            returning company_id
+        """, (name, on))
+        row = cur.fetchone()
+        if row:
+            return row[0]
+        cur.execute("select company_id from companies where lower(name) = lower(%s)", (name,))
+        return cur.fetchone()[0]
+
+
+def update_company(company_id: int, **fields) -> None:
+    _update("companies", "company_id", company_id, fields, COMPANY_FIELDS)
+
+
+def delete_company(company_id: int) -> None:
+    _delete("companies", "company_id", company_id,
+            "this company still has applications; delete those first")
+
+
+# ---- contacts ---------------------------------------------------------------
+
+CONTACT_FIELDS = {"company_id", "name", "title", "kind", "email", "phone", "linkedin",
+                  "notes", "last_contacted_on"}
+
+
+def contacts() -> pd.DataFrame:
+    return _read("""
+        select ct.*, co.name as company
+        from contacts ct left join companies co using (company_id)
+        order by lower(ct.name)
+    """)
+
+
+def add_contact(name: str, on: date, **fields) -> int:
+    return _insert("contacts", "contact_id", {"name": name, "created_on": on, **fields})
+
+
+def update_contact(contact_id: int, **fields) -> None:
+    _update("contacts", "contact_id", contact_id, fields, CONTACT_FIELDS)
+
+
+def delete_contact(contact_id: int) -> None:
+    _delete("contacts", "contact_id", contact_id)
+
+
+# ---- applications -----------------------------------------------------------
+
+APPLICATION_FIELDS = {"company_id", "role", "job_url", "location", "work_mode", "salary_min",
+                      "salary_max", "source", "applied_on", "next_action", "next_action_on",
+                      "contact_id", "notes"}
+
+_APPLICATIONS = """
+    select a.*, co.name as company,
+           coalesce((select max(e.happened_on) from application_events e
+                     where e.application_id = a.application_id),
+                    a.created_on) as last_update_on,
+           (select count(*) from interviews i
+            where i.application_id = a.application_id) as interviews
+    from applications a join companies co using (company_id)
+"""
+
+
+def applications() -> pd.DataFrame:
+    """Every application, newest first, with its company name, the date of its
+    latest update and how many interviews it has."""
+    return _read(_APPLICATIONS + """
+        order by coalesce(a.applied_on, a.created_on) desc, a.application_id desc
+    """)
+
+
+def application(application_id: int) -> dict | None:
+    return _one(_APPLICATIONS + " where a.application_id = %s", (application_id,))
+
+
+def add_application(company_id: int, role: str, status: str, on: date,
+                    applied_on: date | None = None, **fields) -> int:
+    """A new application and its first history row, together.
+
+    Anything past "saved" has been applied for, so applied_on defaults to
+    `on`. The first history row is dated applied_on when there is one -- an
+    application entered late, or imported, keeps its real age.
+    """
+    unknown = set(fields) - APPLICATION_FIELDS
+    if unknown:
+        raise ValueError(f"unknown application fields {sorted(unknown)}")
+    if status != "saved" and applied_on is None:
+        applied_on = on
+    with _transaction():
+        application_id = _insert("applications", "application_id", {
+            "company_id": company_id, "role": role, "status": status,
+            "applied_on": applied_on, "created_on": on, **fields,
+        })
+        _insert("application_events", "event_id", {
+            "application_id": application_id, "status": status,
+            "happened_on": applied_on or on,
+        })
+    return application_id
+
+
+def set_status(application_id: int, status: str, on: date, note: str | None = None) -> None:
+    """Log an update: the (possibly unchanged) status, the day, and a note.
+
+    Any update resets the follow-up clock, so "Emailed the recruiter" with
+    the status unchanged is a useful entry.
+    """
+    with _transaction() as cur:
+        cur.execute("""
+            update applications
+            set status = %(status)s,
+                applied_on = case when %(status)s <> 'saved' and applied_on is null
+                                  then %(on)s else applied_on end
+            where application_id = %(id)s
+        """, {"status": status, "on": on, "id": application_id})
+        cur.execute("""
+            insert into application_events (application_id, status, happened_on, note)
+            values (%s, %s, %s, %s)
+        """, (application_id, status, on, _clean(note)))
+
+
+def update_application(application_id: int, **fields) -> None:
+    _update("applications", "application_id", application_id, fields, APPLICATION_FIELDS)
+
+
+def delete_application(application_id: int) -> None:
+    """Deletes its history and interviews with it."""
+    _delete("applications", "application_id", application_id)
+
+
+def events(application_id: int) -> pd.DataFrame:
+    return _read("""
+        select * from application_events where application_id = %s
+        order by happened_on, event_id
+    """, (application_id,))
+
+
+def all_events() -> pd.DataFrame:
+    return _read("select * from application_events order by happened_on, event_id")
+
+
+def import_applications(rows: list[dict], on: date) -> tuple[int, int]:
+    """Add rows from logic.map_import, all or none; (added, skipped).
+
+    A row matching an existing application -- same company, role and applied
+    date -- is skipped, so importing the same file twice adds nothing.
+    """
+    added = skipped = 0
+    with _transaction() as cur:
+        cur.execute("""
+            select lower(co.name), lower(a.role), a.applied_on
+            from applications a join companies co using (company_id)
+        """)
+        existing = set(cur.fetchall())
+        for row in rows:
+            row = dict(row)
+            company = row.pop("company")
+            key = (company.strip().lower(), row["role"].strip().lower(), row.get("applied_on"))
+            if key in existing:
+                skipped += 1
+                continue
+            company_id = company_id_for(company, on)
+            add_application(company_id, row.pop("role"), row.pop("status"), on,
+                            applied_on=row.pop("applied_on", None), **row)
+            existing.add(key)
+            added += 1
+    return added, skipped
+
+
+# ---- interviews -------------------------------------------------------------
+
+INTERVIEW_FIELDS = {"scheduled_on", "start_time", "round", "format", "interviewers",
+                    "prep_notes", "outcome_notes", "rating"}
+
+
+def interviews(application_id: int | None = None) -> pd.DataFrame:
+    """Interviews with their company, role and application status, in date order."""
+    where = "" if application_id is None else "where i.application_id = %(id)s"
+    return _read(f"""
+        select i.*, co.name as company, a.role, a.status
+        from interviews i
+        join applications a using (application_id)
+        join companies co using (company_id)
+        {where}
+        order by i.scheduled_on, i.start_time nulls first, i.interview_id
+    """, {"id": application_id})
+
+
+def add_interview(application_id: int, scheduled_on: date, **fields) -> int:
+    unknown = set(fields) - INTERVIEW_FIELDS
+    if unknown:
+        raise ValueError(f"unknown interview fields {sorted(unknown)}")
+    return _insert("interviews", "interview_id", {
+        "application_id": application_id, "scheduled_on": scheduled_on, **fields})
+
+
+def update_interview(interview_id: int, **fields) -> None:
+    _update("interviews", "interview_id", interview_id, fields, INTERVIEW_FIELDS)
+
+
+def delete_interview(interview_id: int) -> None:
+    _delete("interviews", "interview_id", interview_id)
+
+
+# ---- career log -------------------------------------------------------------
+
+CAREER_FIELDS = {"kind", "title", "details", "happened_on", "tags"}
+
+
+def career_entries(kind: str | None = None) -> pd.DataFrame:
+    where = "" if kind is None else "where kind = %(kind)s"
+    return _read(f"""
+        select * from career_entries {where}
+        order by happened_on desc, entry_id desc
+    """, {"kind": kind})
+
+
+def add_career_entry(kind: str, title: str, happened_on: date, **fields) -> int:
+    return _insert("career_entries", "entry_id",
+                   {"kind": kind, "title": title, "happened_on": happened_on, **fields})
+
+
+def update_career_entry(entry_id: int, **fields) -> None:
+    _update("career_entries", "entry_id", entry_id, fields, CAREER_FIELDS)
+
+
+def delete_career_entry(entry_id: int) -> None:
+    _delete("career_entries", "entry_id", entry_id)
+
+
+# ---- job history ------------------------------------------------------------
+
+POSITION_FIELDS = {"employer", "title", "started_on", "ended_on", "base_salary", "bonus",
+                   "other_comp", "notes"}
+
+
+def positions() -> pd.DataFrame:
+    return _read("select * from positions order by started_on desc, position_id desc")
+
+
+def add_position(employer: str, title: str, started_on: date, **fields) -> int:
+    return _insert("positions", "position_id",
+                   {"employer": employer, "title": title, "started_on": started_on, **fields})
+
+
+def update_position(position_id: int, **fields) -> None:
+    _update("positions", "position_id", position_id, fields, POSITION_FIELDS)
+
+
+def delete_position(position_id: int) -> None:
+    _delete("positions", "position_id", position_id)

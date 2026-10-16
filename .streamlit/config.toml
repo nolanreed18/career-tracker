@@ -1,0 +1,13 @@
+[theme]
+base = "dark"
+primaryColor = "#5B8DEF"
+backgroundColor = "#121417"
+secondaryBackgroundColor = "#1B1E23"
+textColor = "#E8E6E1"
+
+[browser]
+gatherUsageStats = false
+
+[client]
+# No "Deploy" button or developer menu in the toolbar.
+toolbarMode = "minimal"

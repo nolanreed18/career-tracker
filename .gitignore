@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# Personal data: exports, imports and backups never go to GitHub.
+data/
+*.csv
+
+.streamlit/secrets.toml
+.DS_Store

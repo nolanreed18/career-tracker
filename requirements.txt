@@ -1,0 +1,10 @@
+# What the app imports at runtime -- the whole Streamlit Community Cloud
+# install. Test-only packages go in requirements-dev.txt.
+psycopg[binary]==3.3.5
+pandas==3.0.5
+python-dotenv==1.2.3
+tzdata==2026.4
+streamlit==1.63.0
+# Streamlit's own dependency, pinned below 25 because Cloud resolved it to a
+# different version on every rebuild (same pin as the Fitness app).
+pyarrow<25
