@@ -8,6 +8,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import data
+import ui
 
 ROOT = Path(__file__).resolve().parent.parent
 HOME = ROOT / "app" / "Home.py"
@@ -15,13 +16,24 @@ PAGES = sorted((ROOT / "app" / "pages").glob("*.py"))
 TODAY = date(2026, 10, 14)
 
 
+PASSWORD = "correct horse"
+
+
 @pytest.fixture(autouse=True)
 def fixed_today(database, monkeypatch):
     monkeypatch.setattr(data, "today", lambda: TODAY)
+    monkeypatch.setenv("APP_PASSWORD", PASSWORD)
+
+
+def new_app(path: Path, signed_in: bool = True) -> AppTest:
+    at = AppTest.from_file(str(path), default_timeout=30)
+    if signed_in:
+        at.session_state[ui.SIGNED_IN] = True
+    return at
 
 
 def run(path: Path) -> AppTest:
-    at = AppTest.from_file(str(path), default_timeout=30).run()
+    at = new_app(path).run()
     assert not at.exception, [e.message for e in at.exception]
     return at
 
@@ -98,7 +110,7 @@ def test_an_application_needs_a_company_and_a_role():
 def test_logging_an_update_records_history_and_clears_the_step():
     app_id = seed()
     data.update_application(app_id, next_action="Call", next_action_on=TODAY)
-    at = AppTest.from_file(str(PAGES[0]), default_timeout=30)
+    at = new_app(PAGES[0])
     at.session_state["open_application"] = app_id
     at.run()
     widget(at.selectbox, "Status", -1).set_value("screening")
@@ -112,7 +124,7 @@ def test_logging_an_update_records_history_and_clears_the_step():
 
 def test_deleting_needs_the_confirmation():
     app_id = seed()
-    at = AppTest.from_file(str(PAGES[0]), default_timeout=30)
+    at = new_app(PAGES[0])
     at.session_state["open_application"] = app_id
     at.run()
     assert widget(at.button, "Delete application").disabled
@@ -136,3 +148,30 @@ def test_logging_a_win():
     widget(at.text_input, "What").set_value("Led the migration")
     click(at, "Add")
     assert data.career_entries("win")["title"].tolist() == ["Led the migration"]
+
+
+@pytest.mark.parametrize("path", [HOME, *PAGES], ids=lambda p: p.stem)
+def test_every_page_asks_for_the_password_first(path):
+    seed()
+    at = new_app(path, signed_in=False).run()
+    assert [t.label for t in at.text_input] == ["Password"]
+    assert not at.metric and not at.dataframe and "Acme" not in str(at)
+
+
+def test_the_right_password_opens_the_app_and_a_wrong_one_does_not(monkeypatch):
+    monkeypatch.setattr(ui.time, "sleep", lambda s: None)
+    at = new_app(HOME, signed_in=False).run()
+    widget(at.text_input, "Password").set_value("guess")
+    click(at, "Sign in")
+    assert at.error[0].value == "Wrong password."
+    assert not at.metric
+    widget(at.text_input, "Password").set_value(PASSWORD)
+    click(at, "Sign in")
+    assert widget(at.metric, "Open").value == "0"
+
+
+def test_no_password_set_keeps_the_app_locked(monkeypatch):
+    monkeypatch.delenv("APP_PASSWORD")
+    at = new_app(HOME, signed_in=False).run()
+    assert "APP_PASSWORD is not set" in at.error[0].value
+    assert not at.text_input and not at.metric

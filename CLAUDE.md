@@ -7,6 +7,9 @@ only they can do (accounts, secrets, clicking merge).
 
 ## Rules
 - `.env` holds `DATABASE_URL`. **Never read, print or copy it**; use `db.py`.
+- The repo and app are **public** (Streamlit's free plan allows one private
+  app). `ui.setup()` puts every page behind `APP_PASSWORD`: every page calls it
+  first, and it stays locked when the password isn't set. Never commit data or secrets.
   Never commit real data: `data/` and `*.csv` are gitignored.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
