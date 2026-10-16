@@ -38,6 +38,9 @@ window, the status list) are in `app/config.py`.
 2. **Add it to GitHub for the weekly backup.** In this repository go to
    **Settings → Secrets and variables → Actions → New repository secret**.
    Name it `DATABASE_URL` and paste the connection string as the value.
+   Then add a second secret named `BACKUP_PASSWORD`: a long password you make
+   up and **keep somewhere safe** (a password manager). The backups are locked
+   with it, and without it they can't be opened.
 3. **Put it online.** At [share.streamlit.io](https://share.streamlit.io)
    click **Create app** and deploy from GitHub, as for the Fitness app:
    - **Repository:** `nolanreed18/career-tracker`, **Branch:** `main`
@@ -82,9 +85,15 @@ and it's safe to run again: it never deletes anything.
 ## Backups
 
 `.github/workflows/backup.yml` runs `backup.py` every Sunday morning (and
-whenever you click **Run workflow**). It copies every table to CSV, and
-GitHub keeps each run's files for 90 days under **Actions → Backup → the
-run → Artifacts**. If a run fails, GitHub emails you. Run
+whenever you click **Run workflow**). It copies every table to CSV and locks
+the CSVs in a password-protected file, `career-tracker-backup.7z`, using
+`BACKUP_PASSWORD`. That's needed because the repo is public, and anyone signed
+in to GitHub can download a public repo's run files. GitHub keeps each run's
+file for 90 days under **Actions → Backup → the run → Artifacts**. To open
+one, unzip the download, then open the `.7z` file with
+[7-Zip](https://www.7-zip.org) (Windows) or
+[The Unarchiver](https://theunarchiver.com) or Keka (Mac) and type the backup
+password. If a run fails, or `BACKUP_PASSWORD` isn't set, GitHub emails you. Run
 `python backup.py` yourself for a copy in `data/backups/` on your computer;
 `data/` is never uploaded to GitHub.
 
