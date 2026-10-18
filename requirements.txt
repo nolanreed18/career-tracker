@@ -5,8 +5,10 @@ pandas==3.0.5
 python-dotenv==1.2.3
 tzdata==2026.4
 streamlit==1.63.0
-# Sign in with Google (st.login).
+# Sign in with Google (st.login): Authlib, and httpx, which it uses to talk
+# to Google. Both are what streamlit[auth] would install.
 Authlib==1.8.0
+httpx==0.28.1
 # Streamlit's own dependency, pinned below 25 because Cloud resolved it to a
 # different version on every rebuild (same pin as the Fitness app).
 pyarrow<25
