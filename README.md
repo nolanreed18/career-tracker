@@ -153,9 +153,11 @@ It runs in a Claude cloud session, which reaches the database through
 Neon's HTTPS endpoint (`db.HttpCursor`) because it can't open a normal
 Postgres connection. The cloud environment needs `*.neon.tech` in its
 allowed domains and `DATABASE_URL` as an environment variable, and
-`.claude/settings.json` allows exactly the `leads.py` commands it runs. The
-pay lookup uses the session's web search; job sites themselves can't be
-opened unless the environment's network access allows them.
+`.claude/settings.json` allows exactly the `leads.py` commands it runs. For
+the pay lookup it opens the posting and salary sites when the environment's
+network access allows them (Allowed domains: linkedin.com, indeed.com,
+glassdoor.com, levels.fyi, payscale.com, salary.com), and falls back to web
+search otherwise.
 
 ## Backups
 

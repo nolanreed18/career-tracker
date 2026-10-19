@@ -68,19 +68,24 @@ the inbox, never in this public repository.
 
 5. **Find the pay** for each new job whose email gave none, unless the job is
    plainly weak (its role or location would rate 3 or under against the
-   profile: leave those unresearched). Use the web search tool, at most two
-   searches per job: `"<title>" "<company>" salary`, then
-   `<title> salary <city or state>`. Job sites can't be opened directly from
-   this session (the network allows searching, not fetching pages), so work
-   from what the results say. Take, in this order: the posting's own range
-   (Colorado postings must state one, and job boards often quote it); a
-   current range for that title at that company (Levels.fyi, Glassdoor,
-   Indeed, Payscale); else a current range for that title, level and area.
-   Write it as `salary` (a range, e.g. `"$115k-$135k"`), set `pay_source` to
-   `"estimated"`, and `pay_note` to where it came from, under 15 words (e.g.
-   `"Glassdoor range, Senior Data Analyst, Denver"`). Nothing solid in two
-   searches: leave `salary` out. Pay the email itself gave is `"listed"`;
-   never relabel a listed range, and never write an estimate as listed.
+   profile: leave those unresearched).
+   - First open the job link itself with the web fetch tool and read the
+     posting: a range stated there is `"listed"` pay, exactly like one from
+     the email (Colorado postings must state one). If the fetch fails, is
+     blocked, or shows a sign-in wall, move on; don't retry or try other
+     forms of the link.
+   - Then, still without pay, use the web search tool, at most two searches
+     per job: `"<title>" "<company>" salary`, then
+     `<title> salary <city or state>`. Take, in this order: the posting's
+     own range as a job board quotes it; a current range for that title at
+     that company (Levels.fyi, Glassdoor, Indeed, Payscale); else a current
+     range for that title, level and area. Open a result page only if its
+     snippet isn't enough and the site can be fetched. Write it as `salary`
+     (a range, e.g. `"$115k-$135k"`), set `pay_source` to `"estimated"`, and
+     `pay_note` to where it came from, under 15 words (e.g. `"Glassdoor
+     range, Senior Data Analyst, Denver"`).
+   - Nothing solid: leave `salary` out. Never relabel a listed range, and
+     never write an estimate as listed.
 
 6. **Rate each new job on the rubric categories, 1–10**, against the
    profile only (never your own idea of a good job): 10 means the profile's
