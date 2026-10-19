@@ -44,8 +44,19 @@ database, hosted free on Streamlit Community Cloud.
   deal-breakers and **companies to skip** the scores are based on. Home
   shows how many new leads are waiting.
 
+- **Resume**: your master resume as data. Under **Build from files** you
+  upload your resume as a Word file (it becomes the template every export is
+  modelled on) plus anything with more detail: a project history, a projects
+  spreadsheet, old resumes. One click asks Claude to turn them into the
+  master: the resume's bullets word for word, extra bullets from the other
+  files into a pool, skills tagged, and any disagreements between files
+  listed for you to settle. The **Master** section is where you edit it
+  (roles, bullets, which bullets print, education, skills, projects) and
+  download it as a Word file in your own layout. Every Claude call is a
+  button you click, costs about 30 cents, and is counted on the page.
+
 Settings you might want to change (the 14-day follow-up, the 7-day interview
-window, the status list) are in `app/config.py`.
+window, the status list, the Claude model) are in `app/config.py`.
 
 **Look and feel.** The app opens in a light look; the **Dark mode** switch in
 the sidebar (tap ≫ at the top left on a phone) flips it, and the choice is
@@ -77,7 +88,12 @@ carries the light look so the first paint already matches.
      ```toml
      DATABASE_URL = "postgresql://…the string from Neon…"
      APP_PASSWORD = "a password you choose"
+     ANTHROPIC_API_KEY = "…a key from console.anthropic.com, for the Resume page…"
      ```
+
+   The Claude key is optional: without it the Resume page still shows and
+   edits the master, and only the "Build the master with Claude" button is
+   off. Make the key in a workspace of its own with a monthly spend limit.
 
    Streamlit's free plan allows one private app, and the Fitness app uses it,
    so this repository and app are public. The **sign-in screen** is what
@@ -133,7 +149,8 @@ streamlit run app/Home.py
 
 It opens at `http://localhost:8501`. It needs a file named `.env` in this
 folder with two lines, `DATABASE_URL=postgresql://…` (the string from Neon)
-and `APP_PASSWORD=…` (the password the app asks for);
+and `APP_PASSWORD=…` (the password the app asks for), plus
+`ANTHROPIC_API_KEY=…` if you want the Resume page's Claude button;
 `.env` is never uploaded to GitHub. `Ctrl+C` stops it.
 
 `python apply_schema.py` creates the tables by hand. The app does this itself,
@@ -205,5 +222,8 @@ up automatically (`.claude/hooks/session-start.sh`).
 | `db.py` | Finds `DATABASE_URL` (in `.env`, or Streamlit secrets when online). |
 | `backup.py` | Dumps every table to CSV. |
 | `app/digest.py` | The daily digest email, built from the day's leads. |
+| `app/ai.py` | Claude, for the Resume page: the key, a connection check, and building the master from your files. |
+| `app/docx_io.py` | Reads Word files as text and writes the master resume back in your own layout. |
+| `app/resume_schema.py` | The shape of the master resume as data. |
 | `leads.py` | How the daily job-alert review reads your profile, adds leads and builds the digest. |
 | `CLAUDE.md` | Rules for Claude when it works on this project. |

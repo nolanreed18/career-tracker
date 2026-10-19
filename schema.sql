@@ -154,6 +154,34 @@ create table if not exists job_leads (
 create unique index if not exists job_leads_dedupe on job_leads (dedupe_key);
 
 -- App settings, one row per key: "theme" is "light" or "dark".
+-- The master resume as data (app/resume_schema.py says the shape), the files
+-- it was built from, and what each Claude call cost.
+create table if not exists resume_sources (
+    source_id    bigint generated always as identity primary key,
+    filename     text not null check (btrim(filename) <> ''),
+    kind         text not null check (kind in ('resume', 'history', 'projects', 'other')),
+    text         text not null,          -- what Claude reads
+    bytes        bytea,                   -- the Word file itself (the resume: the export template)
+    uploaded_on  date not null
+);
+
+create table if not exists resume_master (
+    profile_id          smallint primary key check (profile_id = 1),
+    content             jsonb not null,
+    template_source_id  bigint references resume_sources on delete set null,
+    updated_on          date not null
+);
+
+create table if not exists ai_usage (
+    usage_id       bigint generated always as identity primary key,
+    kind           text not null,         -- e.g. "structure resume"
+    model          text not null,
+    input_tokens   integer not null check (input_tokens >= 0),
+    output_tokens  integer not null check (output_tokens >= 0),
+    cost_usd       numeric(8,4) not null check (cost_usd >= 0),
+    happened_on    date not null
+);
+
 create table if not exists settings (
     key    text primary key,
     value  text not null

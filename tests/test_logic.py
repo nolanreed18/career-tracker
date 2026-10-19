@@ -377,3 +377,42 @@ def test_without_pay_rescores_a_lead_rated_before_its_pay_was_known():
                                                "deal_breaker": False})
     assert logic.without_pay({"ratings": {"pay": 5}})[0] is None
     assert logic.without_pay({"ratings": {"role": 9, "pay": 2}, "deal_breaker": True})[0] == 3
+
+
+def test_a_projects_spreadsheet_becomes_text_for_claude():
+    frame = pd.DataFrame([
+        {"Company": "FHR", "ProjectTitle": "USMCA Tool", "QuickSummary": "Compliance checks.",
+         "QualityRank": 5, "Situation": "Manual tracking.", "Task": "Automate it.",
+         "Action": "Built Alteryx + SQL.", "Result": "Zero misses.", "HardSkills": '["Alteryx"]'},
+        {"Company": "FHR", "ProjectTitle": None, "QuickSummary": "skipped: no title"},
+    ])
+    text = logic.projects_text(frame)
+    assert text.startswith("Project: USMCA Tool\nCompany: FHR\nRank: 5\nSummary: Compliance checks.")
+    assert "Result: Zero misses." in text and "skipped" not in text
+    assert logic.projects_text(pd.DataFrame(columns=["ProjectTitle"])) == ""
+
+
+def test_clean_resume_tidies_and_counts():
+    content = {
+        "name": " Sample ", "email": "s@example.com ", "phone": "", "linkedin": "",
+        "roles": [{"employer": " Acme ", "title": "Analyst", "location": "Denver", "start": "2025",
+                   "end": "Present", "bullets": [
+                       {"text": "  Did   x  ", "skills": [" SQL ", ""], "source": "", "rank": 9,
+                        "in_master": True},
+                       {"text": "   ", "skills": [], "source": "resume", "rank": 3,
+                        "in_master": True}]},
+                  {"employer": "  ", "title": "", "location": "", "start": "", "end": "",
+                   "bullets": []}],
+        "projects": [], "education": [{"school": "", "when": "", "degree": ""}],
+        "skill_groups": [{"name": "Languages", "skills": "Python"}], "conflicts": [],
+    }
+    cleaned = logic.clean_resume(content)
+    assert cleaned["name"] == "Sample" and len(cleaned["roles"]) == 1
+    bullet = cleaned["roles"][0]["bullets"]
+    assert bullet == [{"text": "Did x", "skills": ["SQL"], "source": "manual",
+                       "rank": config.BULLET_RANK_MAX, "in_master": True}]
+    assert cleaned["education"] == [] and len(cleaned["skill_groups"]) == 1
+    assert logic.resume_counts(cleaned) == {"roles": 1, "projects": 0, "master_bullets": 1,
+                                            "pool_bullets": 0}
+    assert logic.skills_text(["A", "B"]) == "A, B" and logic.skills_list(" A, B ,") == ["A", "B"]
+    assert logic.month_start(date(2026, 10, 19)) == date(2026, 10, 1)

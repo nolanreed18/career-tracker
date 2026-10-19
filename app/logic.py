@@ -576,3 +576,99 @@ def job_link(url) -> str | None:
     if match := _GLASSDOOR_GUESS.match(url):
         return f"https://www.glassdoor.com/partner/jobListing.htm?jobListingId={match.group(1)}"
     return url
+
+
+# ---- master resume ------------------------------------------------------------
+
+PROJECT_COLUMNS = {
+    "title": ["projecttitle", "project title", "project", "title", "name"],
+    "company": ["company", "employer"],
+    "summary": ["quicksummary", "quick summary", "summary"],
+    "rank": ["qualityrank", "quality rank", "rank"],
+    "situation": ["situation"], "task": ["task"], "action": ["action"], "result": ["result"],
+    "skills": ["hardskills", "hard skills", "skills", "tools"],
+}
+
+
+def projects_text(frame: pd.DataFrame) -> str:
+    """A projects spreadsheet (one row per project, STAR-style columns) as
+    plain text for Claude, one block per project."""
+    columns = {}
+    by_norm = {_norm(c).replace(" ", ""): c for c in frame.columns}
+    for field, names in PROJECT_COLUMNS.items():
+        for name in names:
+            if name.replace(" ", "") in by_norm:
+                columns[field] = by_norm[name.replace(" ", "")]
+                break
+    blocks = []
+    for _, row in frame.iterrows():
+        title = value(row.get(columns.get("title")))
+        if title is None:
+            continue
+        lines = [f"Project: {str(title).strip()}"]
+        for field in ("company", "rank", "summary", "situation", "task", "action", "result",
+                      "skills"):
+            text = value(row.get(columns.get(field)))
+            if isinstance(text, float) and text.is_integer():
+                text = int(text)                            # a rank of 5, not 5.0
+            if text is not None:
+                lines.append(f"{field.capitalize()}: {str(text).strip()}")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+def clean_resume(content: dict) -> dict:
+    """The master resume's data tidied for saving: text stripped, empty
+    bullets and roles dropped, ranks kept to 1..BULLET_RANK_MAX."""
+    import resume_schema
+
+    resume = resume_schema.Resume.model_validate(content)
+    for group in (resume.roles, resume.projects):
+        for role in group:
+            role.employer, role.title = role.employer.strip(), role.title.strip()
+            role.location, role.start, role.end = (role.location.strip(), role.start.strip(),
+                                                   role.end.strip())
+            kept = []
+            for bullet in role.bullets:
+                bullet.text = " ".join(bullet.text.split())
+                if not bullet.text:
+                    continue
+                bullet.skills = [s.strip() for s in bullet.skills if s.strip()]
+                bullet.rank = max(1, min(config.BULLET_RANK_MAX, int(bullet.rank)))
+                bullet.source = bullet.source.strip() or "manual"
+                kept.append(bullet)
+            role.bullets = kept
+        group[:] = [role for role in group if role.employer]
+    resume.education = [e for e in resume.education if e.school.strip()]
+    resume.skill_groups = [g for g in resume.skill_groups if g.name.strip()]
+    resume.name, resume.email = resume.name.strip(), resume.email.strip()
+    resume.phone, resume.linkedin = resume.phone.strip(), resume.linkedin.strip()
+    return resume.model_dump()
+
+
+def resume_counts(content: dict) -> dict:
+    """How much the master holds: roles, projects, bullets on the master and
+    bullets waiting in the pool."""
+    on, pool = 0, 0
+    for role in list(content.get("roles", [])) + list(content.get("projects", [])):
+        for bullet in role.get("bullets", []):
+            if bullet.get("in_master"):
+                on += 1
+            else:
+                pool += 1
+    return {"roles": len(content.get("roles", [])), "projects": len(content.get("projects", [])),
+            "master_bullets": on, "pool_bullets": pool}
+
+
+def month_start(d: date) -> date:
+    return d.replace(day=1)
+
+
+def skills_text(skills) -> str:
+    return ", ".join(skills) if isinstance(skills, list) else str(skills or "")
+
+
+def skills_list(text) -> list[str]:
+    if isinstance(text, list):
+        return [s.strip() for s in text if str(s).strip()]
+    return [s.strip() for s in str(text or "").split(",") if s.strip()]

@@ -101,6 +101,22 @@ PAY_RESEARCH = (
 # app and listed first in the daily email.
 STRONG_FIT = 7
 
+# Claude, for the resume tools (app/ai.py). Every call is a button the owner
+# clicks; nothing calls Claude on its own. The key is ANTHROPIC_API_KEY in the
+# app's secrets (or .env locally); the model is pinned here.
+AI_MODEL = "claude-opus-5-5"
+# Dollars per million input / output tokens, for the running cost shown in
+# the app (thinking counts as output).
+AI_PRICES = {"claude-opus-5-5": (4.0, 20.0)}
+AI_MAX_TOKENS = 16000
+
+# Where a piece of the master resume came from (resume_sources.kind, also a
+# CHECK in schema.sql): the resume itself, a project history, a projects
+# spreadsheet, or anything else worth reading.
+RESUME_SOURCE_KINDS = ["resume", "history", "projects", "other"]
+# Bullet strength, 1 (filler) to 5 (quantified, big scope).
+BULLET_RANK_MAX = 5
+
 # Scores below this are weak matches: the Job Leads inbox hides them until
 # asked (they stay stored, so the same job never comes back).
 MAYBE_FIT = 4

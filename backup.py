@@ -35,6 +35,9 @@ TABLES = [
     ("job_profile", "profile_id"),
     ("job_leads", "lead_id"),
     ("settings", "key"),
+    ("resume_sources", "source_id"),
+    ("resume_master", "profile_id"),
+    ("ai_usage", "usage_id"),
 ]
 
 

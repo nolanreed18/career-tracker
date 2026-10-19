@@ -12,3 +12,7 @@ httpx==0.28.1
 # Streamlit's own dependency, pinned below 25 because Cloud resolved it to a
 # different version on every rebuild (same pin as the Fitness app).
 pyarrow<25
+# The resume tools: Claude (app/ai.py) and reading/writing Word files
+# (app/docx_io.py). The SDK brings httpx2 and pydantic with it.
+anthropic==1.15.0
+python-docx==1.2.0
