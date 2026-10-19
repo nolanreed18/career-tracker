@@ -410,20 +410,19 @@ def clean_lead(row: dict) -> tuple[dict | None, str | None]:
     return lead, None
 
 
-def fit_label(score) -> str:
-    """'🟢 8/10' for a strong fit, '🟡 5/10' for a maybe, '⚪ 2/10' for a weak
-    one, '' when unscored."""
+def fit_tier(score) -> str | None:
+    """'strong' (STRONG_FIT and up), 'maybe' (MAYBE_FIT and up), 'weak', or
+    None when unscored."""
     score = value(score)
     if score is None:
-        return ""
-    icon = "🟢" if score >= config.STRONG_FIT else "🟡" if score >= config.MAYBE_FIT else "⚪"
-    return f"{icon} {int(score)}/10"
+        return None
+    return ("strong" if score >= config.STRONG_FIT
+            else "maybe" if score >= config.MAYBE_FIT else "weak")
 
 
 def is_weak(score) -> bool:
     """A scored lead below MAYBE_FIT. Unscored ones aren't weak, just unknown."""
-    score = value(score)
-    return score is not None and score < config.MAYBE_FIT
+    return fit_tier(score) == "weak"
 
 
 _GLASSDOOR_GUESS = re.compile(r"^https?://(?:www\.)?glassdoor\.com/job-listing/?\?jl=(\d+)$")

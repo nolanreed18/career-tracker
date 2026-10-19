@@ -22,6 +22,13 @@ only they can do (accounts, secrets, clicking merge).
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no
   database, no Streamlit). Pages only lay out and call those two.
+- **The look lives in `app/theme.py`**: a light palette (the default) and a dark
+  one as Streamlit theme options, applied per run by `ui.setup()` from the
+  `settings` table ("theme"), plus one stylesheet. `.streamlit/config.toml`
+  must equal the light palette (`tests/test_theme.py` checks). Pages use
+  `ui.card()`, `ui.empty()` and the badge helpers rather than emoji or raw
+  HTML; colour means something (blue = in progress, green = good, orange =
+  attention, red = overdue/closed, grey = neutral).
 - Knobs in `app/config.py`. **Status / kind lists are repeated in `schema.sql`
   CHECKs**: change both (tests fail if they drift). Add a table → add it to
   `backup.TABLES` and the `TABLES` list in `conftest.py`.

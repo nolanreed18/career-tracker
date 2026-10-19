@@ -9,10 +9,9 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import md, setup
+from ui import card, empty, kind_badge, md, setup
 
-setup("Career Log")
-st.title("Career Log")
+setup("Career Log", "Wins, skills and feedback, written down in time")
 
 if message := st.session_state.pop("flash", None):
     st.success(message)
@@ -58,7 +57,7 @@ with log_tab:
 
     entries = data.career_entries()
     if entries.empty:
-        st.info("Nothing logged yet. Start with one win from the last month.")
+        empty("emoji_events", "Nothing logged yet", "Start with one win from the last month.")
     else:
         show = st.radio("Show", ["all"] + config.CAREER_KINDS, horizontal=True,
                         format_func=lambda k: "All" if k == "all" else kind_label(k),
@@ -66,11 +65,10 @@ with log_tab:
         view = entries if show == "all" else entries[entries["kind"] == show]
         for entry in view.itertuples():
             entry_id = int(entry.entry_id)
-            with st.container(border=True):
-                st.markdown(f"**{md(entry.title)}**")
+            with card(f"entry-{entry_id}"):
+                st.markdown(f"{kind_badge(entry.kind)} **{md(entry.title)}**")
                 tags_text = f" · {entry.tags}" if logic.value(entry.tags) else ""
-                st.caption(md(f"{kind_label(entry.kind)} · {entry.happened_on:%b %d, %Y}"
-                              f"{tags_text}"))
+                st.caption(md(f"{entry.happened_on:%b %d, %Y}{tags_text}"))
                 if logic.value(entry.details):
                     st.markdown(md(entry.details))
                 with st.expander("Edit"):
@@ -104,7 +102,7 @@ with log_tab:
 # ---- job history ------------------------------------------------------------
 
 with jobs_tab:
-    with st.expander("➕ Add a job"):
+    with st.expander("Add a job", icon=":material/add:"):
         n = st.session_state.get("position_round", 0)
         with st.form(f"add_position_{n}"):
             employer = st.text_input("Employer")
@@ -130,8 +128,8 @@ with jobs_tab:
 
     jobs = data.positions()
     if jobs.empty:
-        st.info("No jobs yet. Add your current one, with pay, so raises and offers have "
-                "something to be compared against.")
+        empty("work", "No jobs yet", "Add your current one, with pay, so raises and offers "
+              "have something to be compared against.")
     else:
         st.dataframe(
             jobs.assign(ended_on=jobs["ended_on"].map(lambda d: "now" if logic.blank(d)

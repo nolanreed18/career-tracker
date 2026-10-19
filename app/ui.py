@@ -1,4 +1,4 @@
-"""Small helpers every page uses."""
+"""Small helpers every page uses: sign-in, the look, labels and badges."""
 
 import hmac
 import os
@@ -7,33 +7,108 @@ import time
 import streamlit as st
 
 import config
+import data
+import logic
+import theme
 
+# Icons for places that can't show a badge: selectbox options, table cells.
 STATUS_ICONS = {
     "saved": "🔖", "applied": "📨", "screening": "📞", "interviewing": "🗣️",
     "offer": "🎉", "accepted": "✅", "rejected": "✖️", "withdrawn": "↩️",
 }
 
-ATTENTION_ICONS = {
-    "overdue": "🔴", "due": "🟠", "interview": "🗓️", "follow_up": "📬", "stale_saved": "🔖",
+# Badge colours. Blue = in progress, green = good, orange = needs attention,
+# red = overdue or closed, grey = neutral; violet marks a second category.
+STATUS_COLORS = {
+    "saved": "gray", "applied": "blue", "screening": "blue", "interviewing": "blue",
+    "offer": "green", "accepted": "green", "rejected": "red", "withdrawn": "gray",
 }
+ATTENTION_BADGES = {
+    "overdue": ("red", "Overdue"), "due": ("orange", "Due"), "interview": ("blue", "Interview"),
+    "follow_up": ("orange", "Follow up"), "stale_saved": ("gray", "Saved"),
+}
+FIT_COLORS = {"strong": "green", "maybe": "blue", "weak": "gray"}
+KIND_COLORS = {"win": "green", "skill": "blue", "certification": "violet",
+               "feedback": "orange", "learning": "gray"}
 
 # Characters Streamlit markdown would treat as formatting. `$` matters most:
 # two of them ("$90k–$120k") turn the text between into a maths formula.
 _MARKDOWN = str.maketrans({c: "\\" + c for c in "\\`*_[]#<>$|~"})
 
+SIGNED_IN = "signed_in"
+THEME_SETTING = "theme"
 
-def setup(title: str) -> None:
-    """Page config. Phone-first: one centred column."""
+
+def setup(title: str, subtitle: str | None = None) -> None:
+    """Page config, sign-in, the look, and the page head. Phone-first: one
+    centred column."""
     st.set_page_config(
         page_title=title if title == "Career Tracker" else f"{title} · Career Tracker",
         page_icon="💼",
         layout="centered",
     )
     require_password()
+    appearance()
+    st.title(title)
+    if subtitle:
+        st.html(theme.subtitle(subtitle))
 
 
-SIGNED_IN = "signed_in"
+# ---- the look ---------------------------------------------------------------
 
+def appearance() -> None:
+    """Apply the saved look (light unless Dark mode was switched on), draw the
+    sidebar's Dark mode switch and sign-out, and add the stylesheet.
+
+    Streamlit reads its theme options as a script run starts, so a change
+    made during a run shows on the next one: after a switch, or when this
+    run began with other options (the first run after the app started),
+    the page reruns once.
+    """
+    mode = data.get_setting(THEME_SETTING)
+    if mode not in theme.MODES:
+        mode = theme.DEFAULT
+    started_with = theme.current()
+    theme.apply(mode)
+    with st.sidebar:
+        dark = st.toggle("Dark mode", value=mode == theme.DARK, key="dark_mode")
+        _account()
+    picked = theme.DARK if dark else theme.LIGHT
+    if picked != mode:
+        data.set_setting(THEME_SETTING, picked)
+        theme.apply(picked)
+        st.rerun()
+    if started_with != mode and not st.session_state.get("theme_rerun"):
+        st.session_state["theme_rerun"] = True       # once: never loop on a surprise
+        st.rerun()
+    st.session_state["theme_rerun"] = False
+    st.html(theme.stylesheet(mode))
+
+
+def _account() -> None:
+    if email := _google_email():
+        st.caption(email)
+    st.button("Sign out", on_click=sign_out, width="stretch")
+
+
+def sign_out() -> None:
+    st.session_state.pop(SIGNED_IN, None)
+    if _google_email():
+        st.logout()
+
+
+def card(key: str):
+    """A bordered container styled as a card (the stylesheet finds the key)."""
+    return st.container(border=True, key=f"card-{key}")
+
+
+def empty(icon: str, title: str, text: str) -> None:
+    """An empty state: a Material Symbols icon name, a heading, one sentence
+    saying why it's empty and what to do."""
+    st.html(theme.empty_state(icon, title, text))
+
+
+# ---- sign-in ----------------------------------------------------------------
 
 def _secret(name: str):
     """A value from the app's secrets online, or the environment (.env) on a
@@ -63,8 +138,11 @@ def _allowed_emails() -> set[str]:
 
 
 def _google_email() -> str | None:
-    """The signed-in Google account's email, or None."""
-    return (st.user.get("email") or "").lower() or None if st.user.is_logged_in else None
+    """The signed-in Google account's email, or None (st.user only works once
+    the [auth] secrets exist)."""
+    if not _google_ready() or not st.user.is_logged_in:
+        return None
+    return (st.user.get("email") or "").lower() or None
 
 
 def require_password() -> None:
@@ -77,6 +155,7 @@ def require_password() -> None:
     """
     if st.session_state.get(SIGNED_IN):
         return
+    st.html(theme.stylesheet(theme.current() or theme.DEFAULT))
     google = _google_ready()
     if google and (email := _google_email()):
         if email in _allowed_emails():
@@ -85,10 +164,12 @@ def require_password() -> None:
         st.error(f"{email} isn't allowed into this app.")
         st.button("Sign out", on_click=st.logout)
         st.stop()
+    st.title("Career Tracker")
     expected = _app_password()
     if not google and not expected:
         st.error("This app is locked: no way to sign in is set up in its secrets.")
         st.stop()
+    st.html(theme.subtitle("Sign in to continue"))
     if google:
         st.button("Sign in with Google", on_click=st.login, type="primary", width="stretch")
     if expected:
@@ -103,12 +184,41 @@ def require_password() -> None:
             st.error("Wrong password.")
     st.stop()
 
+
+# ---- text and labels --------------------------------------------------------
+
 def md(text) -> str:
     """Text safe to put inside st.markdown."""
     return "" if text is None else str(text).translate(_MARKDOWN)
 
 
+def badge(color: str, text: str) -> str:
+    """A coloured markdown badge (:blue-badge[text])."""
+    return f":{color}-badge[{text}]"
+
+
+def status_badge(status: str) -> str:
+    return badge(STATUS_COLORS.get(status, "gray"), status.capitalize())
+
+
+def attention_badge(kind: str) -> str:
+    color, text = ATTENTION_BADGES.get(kind, ("gray", kind.replace("_", " ").capitalize()))
+    return badge(color, text)
+
+
+def fit_badge(score) -> str:
+    """':green-badge[8/10]' for a strong fit, blue for a maybe, grey for a
+    weak one, '' when unscored."""
+    tier = logic.fit_tier(score)
+    return "" if tier is None else badge(FIT_COLORS[tier], f"{int(logic.value(score))}/10")
+
+
+def kind_badge(kind: str) -> str:
+    return badge(KIND_COLORS.get(kind, "gray"), kind.capitalize())
+
+
 def status_label(status: str) -> str:
+    """Icon plus name, for selectbox options and table cells."""
     return f"{STATUS_ICONS.get(status, '')} {status.capitalize()}".strip()
 
 

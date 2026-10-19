@@ -7,12 +7,10 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import ATTENTION_ICONS, md, setup
-
-setup("Career Tracker")
-st.title("Career Tracker")
+from ui import attention_badge, badge, card, empty, md, setup
 
 today = data.today()
+setup("Career Tracker", f"{today:%A, %B %-d}")
 apps = data.applications()
 interviews = data.interviews()
 events = data.all_events()
@@ -24,21 +22,21 @@ applied_this_week = (int(apps["applied_on"].map(lambda d: not logic.blank(d) and
 responded, sent = logic.response_rate(apps, events)
 
 open_col, week_col, rate_col = st.columns(3, gap="xsmall", wrap=False)
-open_col.metric("Open", len(open_apps), help="Applications not yet accepted, rejected or withdrawn.")
-week_col.metric("This week", applied_this_week, help="Applications sent in the last 7 days.")
-rate_col.metric("Response rate", f"{responded / sent:.0%}" if sent else "—",
-                help=f"{responded} of {sent} applications sent reached a screen or further.")
+open_col.metric("Open", len(open_apps), border=True)
+week_col.metric("This week", applied_this_week, border=True)
+rate_col.metric("Response rate", f"{responded / sent:.0%}" if sent else "—", border=True)
 
 st.subheader("Needs attention")
 items = logic.needs_attention(apps, interviews, today)
 if apps.empty:
-    st.info("No applications yet. Add your first one to get started.")
+    empty("inbox", "No applications yet", "Add your first one to get started.")
 elif not items:
-    st.success("Nothing needs attention right now.")
+    empty("task_alt", "Nothing needs attention",
+          "Overdue steps, follow-ups and upcoming interviews show up here.")
 for n, item in enumerate(items):
-    with st.container(border=True):
+    with card(f"attention-{n}"):
         text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
-        text_col.markdown(f"{ATTENTION_ICONS[item.kind]} **{md(item.headline)}**  \n"
+        text_col.markdown(f"{attention_badge(item.kind)} **{md(item.headline)}**  \n"
                           f"{md(item.detail)}")
         if button_col.button("Open", key=f"attention_{n}"):
             st.session_state["open_application"] = item.application_id
@@ -47,9 +45,10 @@ for n, item in enumerate(items):
 new_leads = data.job_leads("new")
 if not new_leads.empty:
     strong = int((new_leads["fit_score"].fillna(0) >= config.STRONG_FIT).sum())
-    with st.container(border=True):
+    with card("leads"):
         text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
-        text_col.markdown(f"💼 {logic.plural(len(new_leads), 'new job lead')} to review"
+        text_col.markdown(f"{badge('blue', 'Leads')} "
+                          f"{logic.plural(len(new_leads), 'new job lead')} to review"
                           + (f", {strong} strong" if strong else ""))
         if button_col.button("Review", key="review_leads"):
             st.switch_page("pages/7_Job_Leads.py")

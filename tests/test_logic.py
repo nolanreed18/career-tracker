@@ -245,11 +245,11 @@ def test_a_lead_without_a_company_or_with_a_bad_score_is_refused():
     assert lead["fit_score"] is None and lead["salary_min"] is None
 
 
-def test_fit_labels():
-    assert logic.fit_label(config.STRONG_FIT) == f"🟢 {config.STRONG_FIT}/10"
-    assert logic.fit_label(5) == "🟡 5/10"
-    assert logic.fit_label(2) == "⚪ 2/10"
-    assert logic.fit_label(None) == ""
+def test_fit_tiers():
+    assert logic.fit_tier(config.STRONG_FIT) == "strong"
+    assert logic.fit_tier(config.MAYBE_FIT) == "maybe"
+    assert logic.fit_tier(config.MAYBE_FIT - 1) == "weak"
+    assert logic.fit_tier(None) is None
 
 
 def test_weak_is_below_the_maybe_line_and_unscored_is_not_weak():

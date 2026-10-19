@@ -5,10 +5,9 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import md, optional, setup
+from ui import empty, md, optional, setup
 
-setup("Interviews")
-st.title("Interviews")
+setup("Interviews", "What's coming up, and how past ones went")
 
 if message := st.session_state.pop("flash", None):
     st.success(message)
@@ -29,7 +28,7 @@ def done(message: str) -> None:
 
 apps = data.applications()
 open_apps = apps[apps["status"].isin(config.OPEN_STATUSES)] if not apps.empty else apps
-with st.expander("➕ Add an interview"):
+with st.expander("Add an interview", icon=":material/add:"):
     if open_apps.empty:
         st.caption("Add an application first; interviews belong to one.")
     else:
@@ -56,7 +55,7 @@ with st.expander("➕ Add an interview"):
 
 interviews = data.interviews()
 if interviews.empty:
-    st.info("No interviews yet.")
+    empty("event", "No interviews yet", "Add one above, or from an application's Interviews tab.")
     st.stop()
 
 upcoming = interviews[interviews["scheduled_on"] >= today]
@@ -71,7 +70,8 @@ for heading, frame in (("Upcoming", upcoming), ("Past", past)):
         at = f" at {logic.clock(iv.start_time)}" if not logic.blank(iv.start_time) else ""
         title = (f"{iv.company} — {iv.role} · {logic.value(iv.round) or 'Interview'} · "
                  f"{logic.when(iv.scheduled_on, today)}{at}")
-        with st.expander(title):
+        with st.expander(title, icon=":material/event:" if heading == "Upcoming"
+                         else ":material/history:"):
             with st.form(f"interview_{iv_id}"):
                 day_col, time_col = st.columns(2)
                 e_on = day_col.date_input("Date", value=iv.scheduled_on)
