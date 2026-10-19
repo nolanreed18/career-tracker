@@ -547,3 +547,19 @@ def move_lead_to_applications(lead_id: int, on: date) -> int:
             update job_leads set status = 'moved', application_id = %s where lead_id = %s
         """, (application_id, lead_id))
     return application_id
+
+
+# ---- settings ---------------------------------------------------------------
+
+def get_setting(key: str, default: str | None = None) -> str | None:
+    """A saved app setting (e.g. "theme"), or the default when unset."""
+    row = _one("select value from settings where key = %s", (key,))
+    return default if row is None else row["value"]
+
+
+def set_setting(key: str, value: str) -> None:
+    with _cursor() as cur:
+        cur.execute("""
+            insert into settings (key, value) values (%s, %s)
+            on conflict (key) do update set value = excluded.value
+        """, (key, value))

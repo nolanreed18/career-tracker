@@ -159,6 +159,14 @@ def test_a_new_database_gets_its_tables_on_first_connection(database, monkeypatc
     assert data.career_entries().empty                # recreated, not an error
 
 
+def test_a_setting_is_saved_over_and_unset_means_the_default():
+    assert data.get_setting("theme") is None
+    assert data.get_setting("theme", "light") == "light"
+    data.set_setting("theme", "dark")
+    data.set_setting("theme", "light")
+    assert data.get_setting("theme") == "light"
+
+
 # ---- job leads --------------------------------------------------------------
 
 def leads(*rows):

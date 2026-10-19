@@ -1,9 +1,37 @@
+# The light look, as app/theme.py defines it (tests/test_theme.py checks they
+# match): what the page is drawn with before the app applies the saved choice.
 [theme]
-base = "dark"
-primaryColor = "#5B8DEF"
-backgroundColor = "#121417"
-secondaryBackgroundColor = "#1B1E23"
-textColor = "#E8E6E1"
+base = "light"
+primaryColor = "#2563eb"
+backgroundColor = "#f8fafc"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#0f172a"
+linkColor = "#0e7490"
+borderColor = "#e2e8f0"
+codeBackgroundColor = "#f1f5f9"
+dataframeBorderColor = "#e2e8f0"
+dataframeHeaderBackgroundColor = "#f1f5f9"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "Inter"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
+baseFontSize = 15
+headingFontSizes = ["1.5rem", "1.2rem", "1.05rem", "1rem", "0.9rem", "0.85rem"]
+headingFontWeights = [700, 700, 700, 700, 600, 600]
+baseRadius = "10px"
+buttonRadius = "6px"
+showWidgetBorder = true
+showSidebarBorder = true
+chartCategoricalColors = ["#4f91f2", "#02a998", "#dc701c", "#d863a0", "#b48c05", "#9f79e6", "#47ab4f", "#0aa0d2", "#e3645e", "#5b6777"]
+blueColor = "#3b82f6"
+greenColor = "#10b981"
+orangeColor = "#f59e0b"
+redColor = "#f43f5e"
+grayColor = "#64748b"
+violetColor = "#8b5cf6"
+
+[theme.sidebar]
+backgroundColor = "#f1f5f9"
+secondaryBackgroundColor = "#ffffff"
 
 [browser]
 gatherUsageStats = false

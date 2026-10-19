@@ -34,6 +34,7 @@ TABLES = [
     ("positions", "position_id"),
     ("job_profile", "profile_id"),
     ("job_leads", "lead_id"),
+    ("settings", "key"),
 ]
 
 

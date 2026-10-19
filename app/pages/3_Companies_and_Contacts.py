@@ -5,10 +5,9 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import index_of, md, optional, setup
+from ui import empty, index_of, md, optional, setup
 
-setup("Companies & Contacts")
-st.title("Companies & Contacts")
+setup("Companies & Contacts", "Who you're looking at, and who you know there")
 
 if message := st.session_state.pop("flash", None):
     st.success(message)
@@ -33,7 +32,7 @@ companies_tab, contacts_tab = st.tabs(["Companies", "Contacts"])
 # ---- companies --------------------------------------------------------------
 
 with companies_tab:
-    with st.expander("➕ Add a company"):
+    with st.expander("Add a company", icon=":material/add:"):
         n = st.session_state.get("company_round", 0)
         with st.form(f"add_company_{n}"):
             name = st.text_input("Name")
@@ -54,7 +53,8 @@ with companies_tab:
                 done(f"Added {name.strip()}.", "company_round")
 
     if companies.empty:
-        st.info("No companies yet. They're also added for you with each application.")
+        empty("domain", "No companies yet",
+              "They're added for you with each application, or add one above.")
     else:
         st.dataframe(
             companies[["name", "industry", "location", "applications"]], hide_index=True,
@@ -104,7 +104,7 @@ with contacts_tab:
     kinds = optional(config.CONTACT_KINDS)
     company_choices = optional(company_names)
 
-    with st.expander("➕ Add a contact"):
+    with st.expander("Add a contact", icon=":material/add:"):
         n = st.session_state.get("contact_round", 0)
         with st.form(f"add_contact_{n}"):
             name = st.text_input("Name")
@@ -129,7 +129,7 @@ with contacts_tab:
                 done(f"Added {name.strip()}.", "contact_round")
 
     if contacts.empty:
-        st.info("No contacts yet.")
+        empty("group", "No contacts yet", "Recruiters, hiring managers and referrals go here.")
     else:
         st.dataframe(
             contacts[["name", "company", "title", "kind", "last_contacted_on"]],

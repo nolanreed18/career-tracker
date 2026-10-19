@@ -11,6 +11,7 @@ from streamlit.testing.v1 import AppTest
 
 import data
 import logic
+import theme
 import ui
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -180,6 +181,23 @@ def test_the_right_password_opens_the_app_and_a_wrong_one_does_not(monkeypatch):
     assert widget(at.metric, "Open").value == "0"
 
 
+def test_dark_mode_is_a_saved_choice_and_light_is_the_default():
+    at = run(HOME)
+    assert theme.current() == "light" and data.get_setting("theme") is None
+    widget(at.toggle, "Dark mode").set_value(True).run()
+    assert not at.exception
+    assert data.get_setting("theme") == "dark" and theme.current() == "dark"
+    assert run(PAGES[0]).toggle[0].value is True          # every page follows
+    widget(at.toggle, "Dark mode").set_value(False).run()
+    assert data.get_setting("theme") == "light" and theme.current() == "light"
+
+
+def test_signing_out_locks_the_app_again():
+    at = run(HOME)
+    click(at, "Sign out")
+    assert [t.label for t in at.text_input] == ["Password"] and not at.metric
+
+
 def test_no_way_to_sign_in_set_up_keeps_the_app_locked(monkeypatch):
     monkeypatch.delenv("APP_PASSWORD")
     at = new_app(HOME, signed_in=False).run()
@@ -237,7 +255,7 @@ def test_leads_are_listed_best_fit_first_and_home_points_to_them():
     seed()
     at = run(LEADS)
     titles = [m.value for m in at.markdown if "**" in m.value]
-    assert "Analytics Engineer" in titles[0] and "🟢 9/10" in titles[0]
+    assert "Analytics Engineer" in titles[0] and ":green-badge[9/10]" in titles[0]
     assert "BI Developer" in titles[1]
     home = run(HOME)
     assert any("2 new job leads to review, 1 strong" in m.value for m in home.markdown)

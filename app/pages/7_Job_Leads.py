@@ -6,10 +6,9 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import md, setup
+from ui import card, empty, fit_badge, md, setup
 
-setup("Job Leads")
-st.title("Job Leads")
+setup("Job Leads", "From your alert emails, scored for fit every morning")
 
 if message := st.session_state.pop("flash", None):
     st.success(message)
@@ -41,8 +40,8 @@ with inbox_tab:
         st.warning("Fill in **What I'm looking for** so the daily review can score jobs "
                    "for fit.")
     if leads.empty:
-        st.info("No new leads. Jobs from your alert emails show up here after the daily "
-                "review, best fit first.")
+        empty("inbox", "No new leads",
+              "Jobs from your alert emails show up here after the daily review, best fit first.")
     else:
         strong = leads["fit_score"].fillna(0) >= config.STRONG_FIT
         weak = leads["fit_score"].map(logic.is_weak)
@@ -58,11 +57,11 @@ with inbox_tab:
         elif show == "maybe":
             leads = leads[~weak]
         if leads.empty:
-            st.info("Nothing in this view. Choose **All** to see every lead.")
+            empty("filter_alt", "Nothing in this view", "Choose All to see every lead.")
         for lead in leads.itertuples():
             lead_id = int(lead.lead_id)
-            with st.container(border=True):
-                fit = logic.fit_label(lead.fit_score)
+            with card(f"lead-{lead_id}"):
+                fit = fit_badge(lead.fit_score)
                 title = md(lead.title)
                 if url := logic.job_link(lead.job_url):       # the title opens the posting
                     title = f"[{title}]({url.replace(')', '%29').replace(' ', '%20')})"
@@ -87,11 +86,11 @@ with inbox_tab:
 with dismissed_tab:
     dismissed = data.job_leads("dismissed")
     if dismissed.empty:
-        st.info("Nothing dismissed.")
+        empty("delete_sweep", "Nothing dismissed", "Leads you dismiss wait here in case you change your mind.")
     for lead in dismissed.itertuples():
         lead_id = int(lead.lead_id)
         text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
-        fit = logic.fit_label(lead.fit_score)
+        fit = fit_badge(lead.fit_score)
         text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}** — "
                           f"{md(lead.company)}  \n{md(describe(lead))}")
         if button_col.button("Restore", key=f"restore_{lead_id}"):

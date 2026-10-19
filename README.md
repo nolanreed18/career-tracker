@@ -34,6 +34,12 @@ database, hosted free on Streamlit Community Cloud.
 Settings you might want to change (the 14-day follow-up, the 7-day interview
 window, the status list) are in `app/config.py`.
 
+**Look and feel.** The app opens in a light look; the **Dark mode** switch in
+the sidebar (tap ≫ at the top left on a phone) flips it, and the choice is
+saved in the database, so every device follows. Both looks, and the fonts,
+badges and cards, are defined in `app/theme.py`; `.streamlit/config.toml`
+carries the light look so the first paint already matches.
+
 ## First-time setup (once)
 
 1. **Create the database.** Sign in at [neon.tech](https://neon.tech) with the

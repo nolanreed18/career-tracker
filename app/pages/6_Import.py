@@ -7,8 +7,7 @@ import data
 import logic
 from ui import md, setup, status_label
 
-setup("Import")
-st.title("Import")
+setup("Import", "Bring applications in from a spreadsheet")
 
 st.markdown(
     "Upload a CSV of applications (in Excel or Google Sheets: **File → Download → CSV**). "

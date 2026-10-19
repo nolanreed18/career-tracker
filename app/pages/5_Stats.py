@@ -5,27 +5,27 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import setup, status_label
+from ui import empty, setup, status_label
 
-setup("Stats")
-st.title("Stats")
+setup("Stats", "How the search is going, in numbers")
 
 today = data.today()
 apps = data.applications()
 events = data.all_events()
 
 if apps.empty:
-    st.info("Stats appear once you've added some applications.")
+    empty("bar_chart", "No stats yet", "They appear once you've added some applications.")
     st.stop()
 
 responded, sent = logic.response_rate(apps, events)
 open_count = int(apps["status"].isin(config.OPEN_STATUSES).sum())
 offers = int(apps["status"].isin(["offer", "accepted"]).sum())
 sent_col, rate_col, offer_col = st.columns(3, gap="xsmall", wrap=False)
-sent_col.metric("Applied", sent, help="Every application past Saved.")
-rate_col.metric("Response rate", f"{responded / sent:.0%}" if sent else "—",
-                help=f"{responded} of {sent} reached a screen or further.")
-offer_col.metric("Offers", offers)
+sent_col.metric("Applied", sent, border=True)
+rate_col.metric("Response rate", f"{responded / sent:.0%}" if sent else "—", border=True)
+offer_col.metric("Offers", offers, border=True)
+st.caption(f"Applied counts everything past Saved; {responded} of {sent} reached a screen or "
+           "further.")
 
 st.subheader("Pipeline")
 pipe = logic.pipeline(apps)

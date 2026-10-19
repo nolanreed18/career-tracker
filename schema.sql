@@ -145,3 +145,9 @@ create table if not exists job_leads (
     check (salary_min is null or salary_max is null or salary_max >= salary_min)
 );
 create unique index if not exists job_leads_dedupe on job_leads (dedupe_key);
+
+-- App settings, one row per key: "theme" is "light" or "dark".
+create table if not exists settings (
+    key    text primary key,
+    value  text not null
+);

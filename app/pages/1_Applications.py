@@ -5,10 +5,9 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import STATUS_HELP, index_of, md, optional, setup, status_label
+from ui import STATUS_HELP, empty, index_of, md, optional, setup, status_badge, status_label
 
-setup("Applications")
-st.title("Applications")
+setup("Applications", "Add one, find one, keep it up to date")
 
 if message := st.session_state.pop("flash", None):
     st.success(message)
@@ -36,7 +35,7 @@ def done(message: str, form_counter: str | None = None) -> None:
 # ---- add --------------------------------------------------------------------
 
 add_round = st.session_state.get("add_round", 0)
-with st.expander("➕ Add an application",
+with st.expander("Add an application", icon=":material/add:",
                  expanded=st.session_state.pop("add_application_open", False)):
     with st.form(f"add_application_{add_round}"):
         company = st.selectbox("Company", optional(company_names),
@@ -83,7 +82,7 @@ with st.expander("➕ Add an application",
 
 apps = data.applications()
 if apps.empty:
-    st.info("No applications yet. Add one above.")
+    empty("inbox", "No applications yet", "Add one above, or bring in a spreadsheet on Import.")
     st.stop()
 
 st.subheader("Your applications")
@@ -141,13 +140,13 @@ if app is None:
 
 st.divider()
 st.markdown(f"### {md(app['company'])} — {md(app['role'])}")
-facts = [status_label(app["status"])]
+facts = []
 if app["applied_on"]:
     facts.append(f"applied {logic.when(app['applied_on'], today)}")
 if salary := logic.salary_range(app["salary_min"], app["salary_max"]):
     facts.append(salary)
 facts += [x for x in (app["location"], app["work_mode"], app["source"]) if x]
-st.markdown(md(" · ".join(facts)))
+st.markdown(f"{status_badge(app['status'])} {md(' · '.join(facts))}")
 if app["next_action"] or app["next_action_on"]:
     due = f" — due {logic.when(app['next_action_on'], today)}" if app["next_action_on"] else ""
     st.markdown(f"**Next step:** {md(app['next_action'] or 'Next step')}{md(due)}")
