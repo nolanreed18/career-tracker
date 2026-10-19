@@ -39,13 +39,13 @@ SIGNED_IN = "signed_in"
 THEME_SETTING = "theme"
 
 
-def setup(title: str, subtitle: str | None = None) -> None:
+def setup(title: str, subtitle: str | None = None, wide: bool = False) -> None:
     """Page config, sign-in, the look, and the page head. Phone-first: one
-    centred column."""
+    centred column (wide for a page of editing grids)."""
     st.set_page_config(
         page_title=title if title == "Career Tracker" else f"{title} · Career Tracker",
         page_icon="💼",
-        layout="centered",
+        layout="wide" if wide else "centered",
     )
     require_password()
     appearance()

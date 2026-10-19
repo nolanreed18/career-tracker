@@ -34,6 +34,17 @@ def test_the_master_is_written_in_the_templates_layout():
                           "Jan 2025 - Present"]
     assert "Built a pipeline that saved 2 hours a day." in texts
     assert "Pool bullet, not on the master." not in texts              # in_master False
+    pool_only = {**docx_fixture.SAMPLE,
+                 "roles": docx_fixture.SAMPLE["roles"] + [{
+                     "employer": "Gamma Corp", "title": "Analyst", "location": "Remote",
+                     "start": "Jan 2024", "end": "Dec 2024", "bullets": [
+                         {"text": "Pool only.", "skills": [], "source": "history", "rank": 2,
+                          "in_master": False}]}],
+                 "projects": [{**docx_fixture.SAMPLE["projects"][0], "bullets": []}]}
+    pool_texts = [p.text for p in docx_io.outline(docx_io.build(docx_fixture.template(),
+                                                                pool_only))]
+    assert "Gamma Corp" not in pool_texts and "Pool only." not in pool_texts   # nothing ticked
+    assert "Personal Projects" not in pool_texts                               # no project prints
     assert texts.index("Beta Chemicals") > texts.index("Acme Energy")   # order kept
     column_breaks = [p for p in paras if p.column_break]
     assert len(column_breaks) == 1

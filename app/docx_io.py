@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from docx import Document
 from docx.oxml.ns import qn
 
+import logic
+
 DATE_RANGE = re.compile(r"\b(?:19|20)\d{2}\b.*?(?:-|–|—).*?(?:\b(?:19|20)\d{2}\b|present)", re.I)
 DEFAULT_COLUMN_TWIPS = 6840          # the left column's width when the template doesn't say
 
@@ -191,7 +193,8 @@ def _column_width(body) -> int:
 
 def build(template: bytes, content: dict) -> bytes:
     """The master resume (resume_schema.Resume as a dict; bullets with
-    in_master only) as a Word file modelled on the template."""
+    in_master only, and only roles and projects that have one) as a Word
+    file modelled on the template."""
     doc, paras = _paragraphs(template)
     body = doc.element.body
     ex = _examples(paras)
@@ -229,6 +232,8 @@ def build(template: bytes, content: dict) -> bytes:
 
     section("Experience", first=True)
     for role in content.get("roles", []):
+        if not logic.prints(role):             # nothing ticked: the role stays off the page
+            continue
         out.append(_clone(ex["employer"], [(lead["employer"] + role["employer"], True)]))
         where = " – ".join(v for v in (role.get("title"), role.get("location")) if v)
         when = " - ".join(v for v in (role.get("start"), role.get("end")) if v)
@@ -251,9 +256,10 @@ def build(template: bytes, content: dict) -> bytes:
     for group in content.get("skill_groups", []):
         out.append(_clone(ex["bold_line"], [(lead["bold_line"] + group["name"], True)]))
         out.append(_clone(ex["plain_line"], [(lead["plain_line"] + group["skills"], False)]))
-    if content.get("projects"):
+    projects = [p for p in content.get("projects", []) if logic.prints(p)]
+    if projects:
         section("Personal Projects")
-        for project in content["projects"]:
+        for project in projects:
             out.append(_clone(ex["bold_line"], [(lead["bold_line"] + project["employer"], True)]))
             for bullet in project.get("bullets", []):
                 if bullet.get("in_master"):
