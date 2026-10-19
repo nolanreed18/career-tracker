@@ -5,7 +5,7 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import empty, index_of, md, optional, setup
+from ui import bump_round, delete_button, empty, index_of, md, optional, round_key, sections, setup
 
 setup("Companies & Contacts", "Who you're looking at, and who you know there")
 
@@ -27,11 +27,11 @@ company_names = companies["name"].tolist()
 # Plain ints: the database driver doesn't take numpy's.
 company_ids = {name: int(i) for name, i in zip(companies["name"], companies["company_id"])}
 
-companies_tab, contacts_tab = st.tabs(["Companies", "Contacts"])
+section = sections("companies", ["Companies", "Contacts"])
 
 # ---- companies --------------------------------------------------------------
 
-with companies_tab:
+if section == "Companies":
     with st.expander("Add a company", icon=":material/add:"):
         n = st.session_state.get("company_round", 0)
         with st.form(f"add_company_{n}"):
@@ -62,7 +62,7 @@ with companies_tab:
             column_config={"name": "Company", "industry": "Industry", "location": "Location",
                            "applications": "Applications"})
         picked = st.selectbox("Edit a company", company_names, index=None,
-                              placeholder="Choose one…", key="pick_company")
+                              placeholder="Choose one…", key=round_key("pick_company"))
         if picked:
             row = companies[companies["name"] == picked].iloc[0]
             company_id = int(row["company_id"])
@@ -86,20 +86,21 @@ with companies_tab:
                     data.update_company(company_id, name=e_name, website=e_website,
                                         industry=e_industry, location=e_location,
                                         notes=e_notes)
-                    st.session_state.pop("pick_company", None)
+                    if e_name.strip() != picked:
+                        bump_round("pick_company")      # the old name is no longer a choice
                     done("Saved.")
-            if st.button("Delete company", key=f"delete_company_{company_id}"):
+            if delete_button("company", f"company_{company_id}"):
                 try:
                     data.delete_company(company_id)
                 except data.InUse as exc:
                     st.error(f"Can't delete: {exc}.")
                 else:
-                    st.session_state.pop("pick_company", None)
+                    bump_round("pick_company")
                     done(f"Deleted {picked}.")
 
 # ---- contacts ---------------------------------------------------------------
 
-with contacts_tab:
+if section == "Contacts":
     contacts = data.contacts()
     kinds = optional(config.CONTACT_KINDS)
     company_choices = optional(company_names)
@@ -143,7 +144,8 @@ with contacts_tab:
         labels = {int(r.contact_id): (f"{r.name} ({r.company})" if logic.value(r.company)
                                       else r.name) for r in contacts.itertuples()}
         picked = st.selectbox("Open a contact", list(labels), format_func=labels.get,
-                              index=None, placeholder="Choose one…", key="pick_contact")
+                              index=None, placeholder="Choose one…",
+                              key=round_key("pick_contact"))
         if picked is not None:
             row = contacts[contacts["contact_id"] == picked].iloc[0]
             details = [logic.value(row[c]) for c in ("email", "phone", "linkedin")]
@@ -178,7 +180,7 @@ with contacts_tab:
                                         phone=e_phone, linkedin=e_linkedin,
                                         last_contacted_on=e_last, notes=e_notes)
                     done("Saved.")
-            if st.button("Delete contact", key=f"delete_contact_{picked}"):
+            if delete_button("contact", f"contact_{picked}"):
                 data.delete_contact(picked)
-                st.session_state.pop("pick_contact", None)
+                bump_round("pick_contact")
                 done(f"Deleted {row['name']}.")

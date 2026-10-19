@@ -7,6 +7,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 import data
@@ -138,6 +139,7 @@ def test_deleting_needs_the_confirmation():
     at = new_app(PAGES[0])
     at.session_state["open_application"] = app_id
     at.run()
+    widget(at.radio, "Section").set_value("Edit").run()
     assert widget(at.button, "Delete application").disabled
     widget(at.checkbox, "I want to delete this application").check().run()
     click(at, "Delete application")
@@ -149,9 +151,34 @@ def test_a_company_in_use_is_not_deleted():
     seed()
     at = run(PAGES[2])
     widget(at.selectbox, "Edit a company").set_value("Acme").run()
+    assert widget(at.button, "Delete company").disabled           # tick box first
+    widget(at.checkbox, "I want to delete this company").check().run()
     click(at, "Delete company")
     assert "still has applications" in at.error[0].value
     assert "Acme" in data.companies()["name"].tolist()
+
+
+def test_a_deleted_company_leaves_the_dropdown():
+    seed()
+    data.add_company("Solo", TODAY)
+    at = run(PAGES[2])
+    widget(at.selectbox, "Edit a company").set_value("Solo").run()
+    widget(at.checkbox, "I want to delete this company").check().run()
+    click(at, "Delete company")
+    assert at.success[0].value == "Deleted Solo."
+    dropdown = widget(at.selectbox, "Edit a company")
+    assert dropdown.value is None and "Solo" not in dropdown.options
+
+
+def test_sections_stay_put_after_an_action():
+    seed()
+    at = run(PAGES[2])
+    widget(at.radio, "Section").set_value("Contacts").run()
+    widget(at.text_input, "Name").set_value("Ana")
+    click(at, "Add contact")
+    assert at.success[0].value == "Added Ana."
+    assert widget(at.radio, "Section").value == "Contacts"
+    assert "Ana" in data.contacts()["name"].tolist()
 
 
 def test_logging_a_win():
@@ -190,6 +217,19 @@ def test_dark_mode_is_a_saved_choice_and_light_is_the_default():
     assert run(PAGES[0]).toggle[0].value is True          # every page follows
     widget(at.toggle, "Dark mode").set_value(False).run()
     assert data.get_setting("theme") == "light" and theme.current() == "light"
+
+
+def test_the_switch_follows_a_change_made_on_another_device():
+    at = run(HOME)
+    assert widget(at.toggle, "Dark mode").value is False
+    data.set_setting("theme", "dark")                 # flipped on the phone, say
+    at.run()
+    assert not at.exception
+    assert widget(at.toggle, "Dark mode").value is True
+    assert data.get_setting("theme") == "dark" and theme.current() == "dark"
+    data.set_setting("theme", "light")
+    at.run()
+    assert widget(at.toggle, "Dark mode").value is False and theme.current() == "light"
 
 
 def test_signing_out_locks_the_app_again():
@@ -241,6 +281,19 @@ def test_any_other_google_account_is_turned_away(google):
     assert not at.metric and "Acme" not in str(at)
 
 
+def test_the_sidebar_is_hidden_only_while_signed_out(google, monkeypatch):
+    shown = []
+    original = st.html
+    monkeypatch.setattr(st, "html", lambda body, **kw: (shown.append(body), original(body, **kw)))
+    google("me@example.com")
+    new_app(HOME, signed_in=False).run()
+    assert shown and not any(theme.LOCKED in body for body in shown)
+    shown.clear()
+    google(None)
+    new_app(HOME, signed_in=False).run()
+    assert any(theme.LOCKED in body for body in shown)
+
+
 def test_google_without_allowed_emails_lets_nobody_in(google, monkeypatch):
     monkeypatch.delenv("ALLOWED_EMAILS")
     google("me@example.com")
@@ -266,6 +319,7 @@ def test_dismissing_a_lead_moves_it_to_dismissed_and_restore_brings_it_back():
     at = run(LEADS)
     widget(at.button, "Dismiss", 1).click().run()
     assert data.job_leads("new")["title"].tolist() == ["Analytics Engineer"]
+    widget(at.radio, "Section").set_value("Dismissed").run()
     click(at, "Restore")
     assert len(data.job_leads("new")) == 2
 
@@ -283,6 +337,7 @@ def test_moving_a_lead_creates_the_application():
 def test_the_profile_form_saves():
     at = run(LEADS)
     assert any("Fill in" in w.value for w in at.warning)
+    widget(at.radio, "Section").set_value("What I'm looking for").run()
     widget(at.text_area, "Roles I want").set_value("Data Analyst")
     widget(at.number_input, "Lowest base salary I'd take ($/yr)").set_value(100000)
     widget(at.multiselect, "Work modes I'd take").set_value(["remote"])

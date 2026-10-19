@@ -70,12 +70,18 @@ def appearance() -> None:
         mode = theme.DEFAULT
     started_with = theme.current()
     theme.apply(mode)
+    if "dark_mode" not in st.session_state or st.session_state.get("theme_shown") != mode:
+        # First draw, or the choice was changed on another device: the switch
+        # follows the saved choice rather than flipping it back.
+        st.session_state["dark_mode"] = mode == theme.DARK
+        st.session_state["theme_shown"] = mode
     with st.sidebar:
-        dark = st.toggle("Dark mode", value=mode == theme.DARK, key="dark_mode")
+        dark = st.toggle("Dark mode", key="dark_mode")
         _account()
     picked = theme.DARK if dark else theme.LIGHT
     if picked != mode:
         data.set_setting(THEME_SETTING, picked)
+        st.session_state["theme_shown"] = picked
         theme.apply(picked)
         st.rerun()
     if started_with != mode and not st.session_state.get("theme_rerun"):
@@ -100,6 +106,31 @@ def sign_out() -> None:
 def card(key: str):
     """A bordered container styled as a card (the stylesheet finds the key)."""
     return st.container(border=True, key=f"card-{key}")
+
+
+def sections(key: str, names: list[str]) -> str:
+    """A page's sub-pages as pills. Unlike st.tabs, the chosen one stays put
+    when an action reruns the page."""
+    with st.container(key=f"sections-{key}"):
+        return st.radio("Section", names, horizontal=True, key=f"section_{key}",
+                        label_visibility="collapsed")
+
+
+def delete_button(what: str, key: str) -> bool:
+    """A Delete button that needs its tick box first: nothing goes in one click."""
+    sure = st.checkbox(f"I want to delete this {what}", key=f"sure_{key}")
+    return st.button(f"Delete {what}", disabled=not sure, key=f"delete_{key}")
+
+
+def round_key(name: str) -> str:
+    """A widget key with a counter in it. A widget whose options change (a
+    "pick one" dropdown after a delete) keeps showing its old choice; a new
+    key (bump_round) gives a fresh widget instead."""
+    return f"{name}_{st.session_state.get(f'{name}_round', 0)}"
+
+
+def bump_round(name: str) -> None:
+    st.session_state[f"{name}_round"] = st.session_state.get(f"{name}_round", 0) + 1
 
 
 def empty(icon: str, title: str, text: str) -> None:
@@ -155,16 +186,16 @@ def require_password() -> None:
     """
     if st.session_state.get(SIGNED_IN):
         return
-    st.html(theme.stylesheet(theme.current() or theme.DEFAULT))
-    st.html(theme.LOCKED)
     google = _google_ready()
     if google and (email := _google_email()):
         if email in _allowed_emails():
             st.session_state[SIGNED_IN] = True
             return
+        _locked_look()
         st.error(f"{email} isn't allowed into this app.")
         st.button("Sign out", on_click=st.logout)
         st.stop()
+    _locked_look()
     st.title("Career Tracker")
     expected = _app_password()
     if not google and not expected:
@@ -184,6 +215,13 @@ def require_password() -> None:
             time.sleep(1)  # slows down guessing
             st.error("Wrong password.")
     st.stop()
+
+
+def _locked_look() -> None:
+    """The stylesheet plus the sidebar hidden: only for a page that stops at
+    sign-in (a signed-in run must not hide its own sidebar)."""
+    st.html(theme.stylesheet(theme.current() or theme.DEFAULT))
+    st.html(theme.LOCKED)
 
 
 # ---- text and labels --------------------------------------------------------
