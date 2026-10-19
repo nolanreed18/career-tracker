@@ -109,3 +109,31 @@ def test_structure_resume_needs_the_resume_and_handles_a_refusal(monkeypatch):
     fake_client(monkeypatch, messages=FakeMessages(None, error=api_error(anthropic.RateLimitError, 429)))
     with pytest.raises(ai.AIError, match="rate-limiting"):
         ai.structure_resume({"resume": "x"})
+
+
+def test_tailor_sends_the_master_the_posting_and_the_steer(monkeypatch):
+    parsed = resume_schema.Tailored(
+        fit_notes="Strong on SQL.", roles=[resume_schema.TailoredRole(
+            employer="Acme", title="Analyst", location="Denver", start="2025", end="Present",
+            bullets=[resume_schema.TailoredBullet(text="Did x for finance", original="Did x",
+                                                  skills=["SQL"])])],
+        projects=[], skill_groups=[resume_schema.SkillGroup(name="Languages", skills="SQL")],
+        keywords=[resume_schema.Keyword(term="SQL", covered=True, where="Did x for finance")],
+        changes=["Reworded 'Did x' to name finance, which the posting leads with."],
+        cover_letter="Dear Hiring Team,\n\nI did x.\n\nSincerely,\nSample")
+    messages = FakeMessages(parsed)
+    fake_client(monkeypatch, messages=messages)
+    master = {"name": "Sample", "email": "s@example.com", "roles": [{"employer": "Acme"}],
+              "projects": [], "skill_groups": [], "education": [], "conflicts": ["x"]}
+    content, usage = ai.tailor(master, "  We need SQL.  ", "Acme", "Analyst", "lead with SQL")
+    assert content["roles"][0]["bullets"][0]["original"] == "Did x"
+    assert content["keywords"] == [{"term": "SQL", "covered": True, "where": "Did x for finance"}]
+    assert usage.cost_usd == 0.184
+    call = messages.calls[0]
+    sent = call["messages"][0]["content"]
+    assert call["system"] == ai.TAILOR_SYSTEM and call["output_format"] is resume_schema.Tailored
+    assert '<posting company="Acme" role="Analyst">\nWe need SQL.\n</posting>' in sent
+    assert '"employer": "Acme"' in sent and "s@example.com" not in sent and "conflicts" not in sent
+    assert "<notes" in sent and "lead with SQL" in sent
+    with pytest.raises(ai.AIError, match="Paste the job posting"):
+        ai.tailor(master, "   ", "Acme", "Analyst")

@@ -177,7 +177,7 @@ if app["job_url"]:
 if app["notes"]:
     st.caption(md(app["notes"]))
 
-section = sections("application", ["Log update", "Interviews", "Edit", "History"])
+section = sections("application", ["Log update", "Interviews", "Posting", "Edit", "History"])
 
 if section == "Log update":
     update_round = st.session_state.get("update_round", 0)
@@ -226,6 +226,27 @@ if section == "Interviews":
         data.add_interview(picked, iv_on, start_time=iv_at, round=iv_round,
                            format=iv_format or None, interviewers=iv_who, prep_notes=iv_prep)
         done("Interview added.", "interview_round")
+
+if section == "Posting":
+    with st.form(f"posting_{picked}"):
+        posting = st.text_area("Job posting", value=app["posting"] or "", height=260,
+                               help="Paste the whole posting: Claude tailors the resume to "
+                                    "its words.")
+        saved_posting = st.form_submit_button("Save posting", type="primary")
+    if saved_posting:
+        data.update_application(picked, posting=posting)
+        done("Posting saved.")
+    versions = data.tailored_versions(picked)
+    if not versions.empty:
+        st.caption(f"{logic.plural(len(versions), 'tailored version')} on the Resume page, "
+                   f"the latest {logic.when(versions['created_on'].iloc[0], today)}.")
+    if st.button("Tailor the resume for this job", icon=":material/auto_awesome:",
+                 disabled=not app["posting"]):
+        st.session_state["tailor_application"] = picked
+        st.session_state["resume_goto"] = "Tailor"
+        st.switch_page("pages/8_Resume.py")
+    if not app["posting"]:
+        st.caption("Save the posting first: tailoring reads it.")
 
 if section == "Edit":
     edit_round = st.session_state.get("edit_round", 0)

@@ -681,3 +681,96 @@ def skills_list(text) -> list[str]:
     if isinstance(text, list):
         return [s.strip() for s in text if str(s).strip()]
     return [s.strip() for s in str(text or "").split(",") if s.strip()]
+
+
+# ---- tailored resumes ---------------------------------------------------------
+
+def clean_tailored(content: dict) -> dict:
+    """A tailored resume's data tidied for saving: text stripped, empty
+    bullets dropped, roles with no bullets dropped (a tailored role is what
+    prints), blank keywords and changes dropped."""
+    import resume_schema
+
+    tailored = resume_schema.Tailored.model_validate(content)
+    for group in (tailored.roles, tailored.projects):
+        for role in group:
+            role.employer, role.title = role.employer.strip(), role.title.strip()
+            role.location, role.start, role.end = (role.location.strip(), role.start.strip(),
+                                                   role.end.strip())
+            kept = []
+            for bullet in role.bullets:
+                bullet.text = " ".join(bullet.text.split())
+                if not bullet.text:
+                    continue
+                bullet.original = " ".join(bullet.original.split())
+                bullet.skills = [s.strip() for s in bullet.skills if s.strip()]
+                kept.append(bullet)
+            role.bullets = kept
+        group[:] = [role for role in group if role.employer and role.bullets]
+    tailored.skill_groups = [g for g in tailored.skill_groups if g.name.strip()]
+    tailored.keywords = [k for k in tailored.keywords if k.term.strip()]
+    tailored.changes = [c.strip() for c in tailored.changes if c.strip()]
+    tailored.fit_notes = tailored.fit_notes.strip()
+    tailored.cover_letter = tailored.cover_letter.strip()
+    return tailored.model_dump()
+
+
+def tailored_export(master: dict, tailored: dict) -> dict:
+    """The tailored resume in the master's shape (resume_schema.Resume), so
+    docx_io.build prints it: contact line and education from the master,
+    roles, projects and skills from the tailored version, every bullet on."""
+    def roles(items: list[dict]) -> list[dict]:
+        return [{"employer": r["employer"], "title": r["title"], "location": r["location"],
+                 "start": r["start"], "end": r["end"],
+                 "bullets": [{"text": b["text"], "skills": list(b.get("skills", [])),
+                              "source": "tailored", "rank": 3, "in_master": True}
+                             for b in r["bullets"]]} for r in items]
+    return {"name": master.get("name", ""), "email": master.get("email", ""),
+            "phone": master.get("phone", ""), "linkedin": master.get("linkedin", ""),
+            "roles": roles(tailored.get("roles", [])),
+            "projects": roles(tailored.get("projects", [])),
+            "education": list(master.get("education", [])),
+            "skill_groups": list(tailored.get("skill_groups", [])), "conflicts": []}
+
+
+def tailored_counts(tailored: dict) -> dict:
+    """What a tailored version did: bullets printed, how many kept word for
+    word, reworded, or without a master original; keywords and covered."""
+    bullets = [b for role in list(tailored.get("roles", [])) + list(tailored.get("projects", []))
+               for b in role.get("bullets", [])]
+    kept = sum(1 for b in bullets if b.get("original") and b["text"] == b["original"])
+    unmatched = sum(1 for b in bullets if not b.get("original"))
+    keywords = list(tailored.get("keywords", []))
+    return {"bullets": len(bullets), "kept": kept, "reworded": len(bullets) - kept - unmatched,
+            "unmatched": unmatched, "keywords": len(keywords),
+            "covered": sum(1 for k in keywords if k.get("covered"))}
+
+
+def letter_paragraphs(text: str) -> list[str]:
+    """A cover letter's paragraphs: split on blank lines, spaces tidied, a
+    single line break (a sign-off above the name) kept."""
+    paragraphs = []
+    for part in text.replace("\r\n", "\n").split("\n\n"):
+        lines = [" ".join(line.split()) for line in part.split("\n")]
+        lines = [line for line in lines if line]
+        if lines:
+            paragraphs.append("\n".join(lines))
+    return paragraphs
+
+
+def file_stem(*parts: str) -> str:
+    """A file name from names: letters and digits only, parts joined with _
+    ("Nolan Hughes", "Resume", "Acme Corp" -> NolanHughes_Resume_AcmeCorp)."""
+    cleaned = ["".join(ch for ch in part if ch.isalnum()) for part in parts]
+    return "_".join(c for c in cleaned if c) or "Resume"
+
+
+def contact_line(master: dict) -> str:
+    """The resume's contact line: email, phone and LinkedIn, dotted."""
+    return " • ".join(v for v in (master.get("email"), master.get("phone"),
+                                  master.get("linkedin")) if v)
+
+
+def long_date(d: date) -> str:
+    """October 19, 2026: how a letter is dated."""
+    return f"{d:%B} {d.day}, {d.year}"

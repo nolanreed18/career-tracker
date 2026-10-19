@@ -20,6 +20,8 @@ import logic
 
 DATE_RANGE = re.compile(r"\b(?:19|20)\d{2}\b.*?(?:-|–|—).*?(?:\b(?:19|20)\d{2}\b|present)", re.I)
 DEFAULT_COLUMN_TWIPS = 6840          # the left column's width when the template doesn't say
+DEFAULT_RIGHT_COLUMN_TWIPS = 4392    # and the right column's
+TWIPS_PER_CHAR = 88                  # about one character of 10pt text, for hand-wrapped lines
 
 
 @dataclass(frozen=True)
@@ -39,7 +41,14 @@ def _paragraphs(data: bytes):
 
 
 def _text(p) -> str:
-    return "".join(t.text or "" for t in p.iter(qn("w:t")))
+    """The text of a paragraph or run; a line break inside it as a newline."""
+    parts = []
+    for node in p.iter():
+        if node.tag == qn("w:t"):
+            parts.append(node.text or "")
+        elif node.tag == qn("w:br") and node.get(qn("w:type")) != "column":
+            parts.append("\n")
+    return "".join(parts)
 
 
 def _style(p) -> str:
@@ -140,13 +149,16 @@ def _set_run_text(run, value: str) -> None:
     for child in list(run):
         if child.tag in (qn("w:t"), qn("w:tab"), qn("w:br")):
             run.remove(child)
-    for n, piece in enumerate(value.split("\t")):
+    for n, line in enumerate(value.split("\n")):
         if n:
-            run.append(run.makeelement(qn("w:tab"), {}))
-        t = run.makeelement(qn("w:t"), {})
-        t.text = piece
-        t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
-        run.append(t)
+            run.append(run.makeelement(qn("w:br"), {}))
+        for m, piece in enumerate(line.split("\t")):
+            if m:
+                run.append(run.makeelement(qn("w:tab"), {}))
+            t = run.makeelement(qn("w:t"), {})
+            t.text = piece
+            t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+            run.append(t)
 
 
 def _run_bold(run) -> bool:
@@ -191,6 +203,48 @@ def _column_width(body) -> int:
     return int(col.get(qn("w:w"))) if col is not None and col.get(qn("w:w")) else DEFAULT_COLUMN_TWIPS
 
 
+def _header(header, name: str, contact: str):
+    """The template's name-and-contact line carrying a new name and contact:
+    the name run, the run of spaces the template pushes the contact right
+    with (kept as it is), then one run modelled on the contact's."""
+    runs = header.findall(qn("w:r"))
+    with_text = [r for r in runs if _text(r).strip()]
+    new = copy.deepcopy(header)
+    for run in new.findall(qn("w:r")):
+        new.remove(run)
+    name_run = copy.deepcopy(with_text[0]) if with_text else copy.deepcopy(_prototype(header, None))
+    _set_run_text(name_run, name)
+    new.append(name_run)
+    if contact:
+        after_name = runs[runs.index(with_text[0]) + 1:] if with_text else []
+        spacer = next((r for r in after_name if _text(r) and not _text(r).strip()), None)
+        model = next((r for r in with_text if "@" in _text(r)), with_text[-1] if with_text else name_run)
+        contact_run = copy.deepcopy(model)
+        _set_run_text(contact_run, contact if spacer is not None else "    " + contact)
+        if spacer is not None:
+            new.append(copy.deepcopy(spacer))
+        new.append(contact_run)
+    return new
+
+
+def _wrapped(ex, lead: str, text: str, chars: int) -> list:
+    """A plain line as the template writes long ones: broken by hand into
+    lines of about `chars` characters, each with the lead."""
+    import textwrap
+    lines = textwrap.wrap(text, width=max(20, chars - len(lead))) or [""]
+    return [_clone(ex["plain_line"], [(lead + line, False)]) for line in lines]
+
+
+def _right_column_chars(body) -> int:
+    """How many characters the right column fits on a line (the template's
+    skills lines are wrapped by hand to about that)."""
+    sect = body.find(qn("w:sectPr"))
+    cols = [] if sect is None else sect.findall(f"{qn('w:cols')}/{qn('w:col')}")
+    width = int(cols[1].get(qn("w:w"))) if len(cols) >= 2 and cols[1].get(qn("w:w")) \
+        else DEFAULT_RIGHT_COLUMN_TWIPS
+    return max(30, width // TWIPS_PER_CHAR)
+
+
 def build(template: bytes, content: dict) -> bytes:
     """The master resume (resume_schema.Resume as a dict; bullets with
     in_master only, and only roles and projects that have one) as a Word
@@ -202,39 +256,27 @@ def build(template: bytes, content: dict) -> bytes:
     column = _column_width(body)
     end = body.find(qn("w:sectPr"))
 
-    header = ex["header"]
-    contact = " • ".join(v for v in (content.get("email"), content.get("phone"),
-                                      content.get("linkedin")) if v)
-    runs = [r for r in header.findall(qn("w:r"))
-            if "".join(t.text or "" for t in r.iter(qn("w:t"))).strip()]
-    new = copy.deepcopy(header)
-    for run in new.findall(qn("w:r")):
-        new.remove(run)
-    name_run = copy.deepcopy(runs[0]) if runs else copy.deepcopy(_prototype(header, None))
-    _set_run_text(name_run, content.get("name", ""))
-    new.append(name_run)
-    if contact:
-        model = next((r for r in runs if "@" in _text(r)), runs[-1] if runs else name_run)
-        contact_run = copy.deepcopy(model)
-        _set_run_text(contact_run, "    " + contact)
-        new.append(contact_run)
-    body.replace(header, new)
+    body.replace(ex["header"], _header(ex["header"], content.get("name", ""),
+                                       logic.contact_line(content)))
     for p in paras[1:]:
         body.remove(p)
 
     out = []
+    chars = _right_column_chars(body)
 
-    def section(title: str, first: bool = False) -> None:
-        if not first:
+    def section(title: str, spacer_before: bool = True) -> None:
+        if spacer_before:
             out.append(copy.deepcopy(ex["spacer"]))
         out.append(_clone(ex["section"], [(title, True)]))
-        out.append(copy.deepcopy(ex["spacer"]))
 
-    section("Experience", first=True)
+    section("Experience")
+    last_employer = None
     for role in content.get("roles", []):
         if not logic.prints(role):             # nothing ticked: the role stays off the page
             continue
-        out.append(_clone(ex["employer"], [(lead["employer"] + role["employer"], True)]))
+        if role["employer"] != last_employer:  # one employer line for roles there in a row
+            out.append(_clone(ex["employer"], [(lead["employer"] + role["employer"], True)]))
+            last_employer = role["employer"]
         where = " – ".join(v for v in (role.get("title"), role.get("location")) if v)
         when = " - ".join(v for v in (role.get("start"), role.get("end")) if v)
         line = _clone(ex["title"], [(lead["title"] + where + ("\t" + when if when else ""), False)])
@@ -245,17 +287,17 @@ def build(template: bytes, content: dict) -> bytes:
                 out.append(_clone(ex["bullet"], [(bullet["text"], None)]))
 
     out.append(copy.deepcopy(ex["column_break"]))
-    section("Education", first=True)
+    section("Education", spacer_before=False)
     for edu in content.get("education", []):
         when = f"| {edu['when']}" if edu.get("when") else ""
         out.append(_clone(ex["school_line"], [(lead["bold_line"] + edu["school"] + " ", True),
                                               (when, False)]))
         if edu.get("degree"):
-            out.append(_clone(ex["plain_line"], [(lead["plain_line"] + edu["degree"], False)]))
+            out.extend(_wrapped(ex, lead["plain_line"], edu["degree"], chars))
     section("Applicable Skills")
     for group in content.get("skill_groups", []):
         out.append(_clone(ex["bold_line"], [(lead["bold_line"] + group["name"], True)]))
-        out.append(_clone(ex["plain_line"], [(lead["plain_line"] + group["skills"], False)]))
+        out.extend(_wrapped(ex, lead["plain_line"], group["skills"], chars))
     projects = [p for p in content.get("projects", []) if logic.prints(p)]
     if projects:
         section("Personal Projects")
@@ -267,6 +309,30 @@ def build(template: bytes, content: dict) -> bytes:
 
     for p in out:
         end.addprevious(p)
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+def letter(template: bytes, name: str, contact: str, paragraphs: list[str]) -> bytes:
+    """A letter in the template's look: its name-and-contact line, then the
+    paragraphs as plain lines (a blank line between), in one column."""
+    doc, paras = _paragraphs(template)
+    body = doc.element.body
+    ex = _examples(paras)
+    end = body.find(qn("w:sectPr"))
+    body.replace(ex["header"], _header(ex["header"], name, contact))
+    for p in paras[1:]:
+        body.remove(p)
+    cols = end.find(qn("w:cols"))
+    if cols is not None:                       # the resume's two columns become one
+        for col in list(cols):
+            cols.remove(col)
+        cols.set(qn("w:num"), "1")
+        cols.attrib.pop(qn("w:equalWidth"), None)
+    for text in paragraphs:
+        end.addprevious(copy.deepcopy(ex["spacer"]))
+        end.addprevious(_clone(ex["plain_line"], [(text, False)]))
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()

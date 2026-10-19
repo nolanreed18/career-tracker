@@ -76,6 +76,8 @@ MIGRATIONS = [
     "'already applied', 'other'))",
     "alter table job_leads add column if not exists dismissed_on date",
     "alter table job_profile add column if not exists skip_companies text",
+    # 2026-10: the job posting's text on an application, for tailoring the resume.
+    "alter table applications add column if not exists posting text",
 ]
 
 
@@ -334,7 +336,7 @@ def delete_contact(contact_id: int) -> None:
 
 APPLICATION_FIELDS = {"company_id", "role", "job_url", "location", "work_mode", "salary_min",
                       "salary_max", "source", "applied_on", "next_action", "next_action_on",
-                      "contact_id", "notes"}
+                      "contact_id", "notes", "posting"}
 
 _APPLICATIONS = """
     select a.*, co.name as company,
@@ -696,6 +698,45 @@ def save_resume_master(content: dict, on: date) -> None:
             on conflict (profile_id) do update
                 set content = excluded.content, updated_on = excluded.updated_on
         """, (json.dumps(content), on))
+
+
+def tailored_versions(application_id: int) -> pd.DataFrame:
+    """Every tailored version of one application's resume, newest first
+    (tailor_id, version, notes, model, created_on)."""
+    return _read("""
+        select tailor_id, version, notes, model, created_on from tailored_resumes
+        where application_id = %s order by version desc
+    """, (application_id,))
+
+
+def tailored(tailor_id: int) -> dict | None:
+    """One tailored version with its content (resume_schema.Tailored as a dict)."""
+    return _one("select * from tailored_resumes where tailor_id = %s", (tailor_id,))
+
+
+def add_tailored(application_id: int, content: dict, notes: str | None, model: str,
+                 on: date) -> int:
+    """A new version of the application's tailored resume, numbered after the last."""
+    with _cursor() as cur:
+        cur.execute("""
+            insert into tailored_resumes (application_id, version, content, notes, model,
+                                          created_on)
+            select %s, coalesce(max(version), 0) + 1, %s::jsonb, %s, %s, %s
+            from tailored_resumes where application_id = %s
+            returning tailor_id
+        """, (application_id, json.dumps(content), _clean(notes), model, on, application_id))
+        return cur.fetchone()[0]
+
+
+def save_tailored(tailor_id: int, content: dict) -> None:
+    """Replace a version's content after the owner edits it."""
+    with _cursor() as cur:
+        cur.execute("update tailored_resumes set content = %s::jsonb where tailor_id = %s",
+                    (json.dumps(content), tailor_id))
+
+
+def delete_tailored(tailor_id: int) -> None:
+    _delete("tailored_resumes", "tailor_id", tailor_id)
 
 
 def set_resume_template(source_id: int | None, on: date) -> None:

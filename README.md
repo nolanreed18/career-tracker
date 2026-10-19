@@ -53,7 +53,13 @@ database, hosted free on Streamlit Community Cloud.
   listed for you to settle. The **Master** section is where you edit it
   (roles, bullets, which bullets print, education, skills, projects) and
   download it as a Word file in your own layout; a role or project prints
-  only when at least one of its bullets is ticked **On master**. Every Claude call is a
+  only when at least one of its bullets is ticked **On master**. Under
+  **Tailor** you pick an open application, paste its job posting (also on
+  the application's **Posting** section), and one click has Claude choose
+  and reword the master's bullets for that posting, write the cover
+  letter, mark which of the posting's keywords the resume shows, and list
+  every change with its reason. Each click is a new version; you edit the
+  bullets and the letter, and download both as Word files in your layout. Every Claude call is a
   button you click, costs about 30 cents, and is counted on the page.
 
 Settings you might want to change (the 14-day follow-up, the 7-day interview

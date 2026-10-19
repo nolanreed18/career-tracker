@@ -142,7 +142,15 @@ class _Column:
 # Neon's JSON carries dates, times and numerics as text, and says each
 # column's Postgres type (its OID) in "fields": turn them back into what a
 # psycopg cursor would give, so logic.py's date arithmetic works over HTTPS.
+def _bytea(value: str) -> bytes:
+    """Neon's HTTPS endpoint sends bytea as "\\x" plus hex."""
+    if not value.startswith("\\x"):
+        raise ValueError("not hex bytea")
+    return bytes.fromhex(value[2:])
+
+
 _PARSERS = {
+    17: _bytea,                                                 # bytea
     20: int, 21: int, 23: int,                                  # int8, int2, int4
     700: float, 701: float,                                     # float4, float8
     1700: decimal.Decimal,                                      # numeric
@@ -178,8 +186,9 @@ class HttpCursor:
         if not isinstance(query, str):
             query = query.as_string(None)
         text, values = to_numbered(query, params)
-        values = [v if v is None or isinstance(v, (bool, int, float)) else str(v)
-                  for v in values]
+        values = [v if v is None or isinstance(v, (bool, int, float))
+                  else "\\x" + bytes(v).hex() if isinstance(v, (bytes, memoryview))
+                  else str(v) for v in values]
         reply = http_query(text, values)
         fields = reply.get("fields", [])
         names = [field["name"] for field in fields]

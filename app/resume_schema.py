@@ -46,6 +46,39 @@ class Resume(BaseModel):
     conflicts: list[str]    # facts the sources disagree on, for the owner to settle
 
 
+class TailoredBullet(BaseModel):
+    text: str               # as it will print on the tailored resume
+    original: str           # the master bullet it was made from, word for word ("" if none)
+    skills: list[str]
+
+
+class TailoredRole(BaseModel):
+    employer: str           # for a project: its name
+    title: str
+    location: str
+    start: str
+    end: str
+    bullets: list[TailoredBullet]
+
+
+class Keyword(BaseModel):
+    term: str               # a requirement or term from the posting a screener would look for
+    covered: bool           # the tailored resume shows it
+    where: str              # the bullet or skill group that shows it ("" when not covered)
+
+
+class Tailored(BaseModel):
+    """One application's resume: the master chosen and reworded for a job
+    posting, with the cover letter and what Claude did and why."""
+    fit_notes: str          # for the owner only: strongest matches and honest gaps
+    roles: list[TailoredRole]
+    projects: list[TailoredRole]
+    skill_groups: list[SkillGroup]
+    keywords: list[Keyword]
+    changes: list[str]      # one line per change from the master, with the reason
+    cover_letter: str       # greeting to sign-off, paragraphs separated by blank lines
+
+
 def empty() -> dict:
     return Resume(name="", email="", phone="", linkedin="", roles=[], projects=[],
                   education=[], skill_groups=[], conflicts=[]).model_dump()

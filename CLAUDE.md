@@ -26,10 +26,13 @@ only they can do (accounts, secrets, clicking merge).
   in secrets (or `.env`), never printed; every call sits behind a button the
   owner clicks and is logged to `ai_usage` with its cost (`config.AI_MODEL`,
   `AI_PRICES`); nothing calls Claude on its own. Structured output goes
-  through `resume_schema` (pydantic, every field required). Word files are
+  through `resume_schema` (pydantic, every field required): `Resume` for
+  the master, `Tailored` for one application's version (`tailored_resumes`,
+  one row per click, never overwritten by a new click). Word files are
   `app/docx_io.py`: the writer clones paragraphs from the owner's own resume
-  (the template), never styles anything itself. Tests stand the API in
-  (`tests/test_ai.py`); no test calls Claude.
+  (the template), never styles anything itself; `build` prints a resume,
+  `letter` a cover letter. Tests stand the API in (`tests/test_ai.py`); no
+  test calls Claude.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no

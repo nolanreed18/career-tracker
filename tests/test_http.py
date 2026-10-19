@@ -5,6 +5,7 @@ goes over the network."""
 
 import json
 import re
+from datetime import date
 
 import psycopg
 import pytest
@@ -28,11 +29,18 @@ def neon(database, monkeypatch):
             rows = [dict(zip(names, r)) for r in cur.fetchall()] if names else []
             reply = {"fields": [{"name": c.name, "dataTypeID": c.type_code} for c in columns],
                      "rows": rows, "rowCount": cur.rowcount}
-        return json.loads(json.dumps(reply, default=str))   # what crosses the wire
+        return json.loads(json.dumps(reply, default=_wire))   # what crosses the wire
 
     monkeypatch.setattr(db, "http_query", http_query)
     data.use_http()
     return sent
+
+
+def _wire(value):
+    """How Neon's endpoint spells values JSON can't: bytea as hex, the rest as text."""
+    if isinstance(value, (bytes, memoryview)):
+        return "\\x" + bytes(value).hex()
+    return str(value)
 
 
 def _as_psycopg(query: str) -> str:
@@ -89,3 +97,13 @@ def test_a_cloud_session_switches_leads_py_to_https(database, monkeypatch, capsy
     monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
     assert leads.main(["known"]) == 0
     assert calls and "job_leads" in calls[0]
+
+
+
+def test_bytea_comes_back_as_bytes_over_https(neon):
+    assert db.typed("\\x6869", 17) == b"hi" and db.typed(None, 17) is None
+    assert db.typed("not hex", 17) == "not hex"
+    source = data.add_resume_source("Resume.docx", "resume", "## Sample", b"PK\x03\x04word",
+                                    date(2026, 10, 19))
+    data.set_resume_template(source, date(2026, 10, 19))
+    assert data.resume_template() == b"PK\x03\x04word"
