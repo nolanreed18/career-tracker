@@ -122,8 +122,9 @@ if view.empty:
     empty("filter_alt", "Nothing matches", hint)
 else:
     st.dataframe(
-        view.assign(status=view["status"].map(status_label))[
+        logic.for_display(view.assign(status=view["status"].map(status_label))[
             ["company", "role", "status", "applied_on", "next_action_on", "last_update_on"]],
+            dates=("applied_on", "next_action_on", "last_update_on")),
         hide_index=True, width="stretch",
         column_config={
             "company": "Company", "status": "Status",
@@ -268,8 +269,8 @@ if section == "Edit":
 if section == "History":
     history = data.events(picked)
     st.dataframe(
-        history.assign(status=history["status"].map(status_label))[
-            ["happened_on", "status", "note"]],
+        logic.for_display(history.assign(status=history["status"].map(status_label))[
+            ["happened_on", "status", "note"]], dates=("happened_on",)),
         hide_index=True, width="stretch",
         column_config={"happened_on": st.column_config.DateColumn("Date", format="MMM D, YYYY"),
                        "status": "Status", "note": "Note"})
