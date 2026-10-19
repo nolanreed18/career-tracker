@@ -38,7 +38,7 @@ for n, item in enumerate(items):
         text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
         text_col.markdown(f"{attention_badge(item.kind)} **{md(item.headline)}**  \n"
                           f"{md(item.detail)}")
-        if button_col.button("Open", key=f"attention_{n}"):
+        if button_col.button("Open", key=f"attention_{n}", width="stretch"):
             st.session_state["open_application"] = item.application_id
             st.switch_page("pages/1_Applications.py")
 
@@ -50,7 +50,7 @@ if not new_leads.empty:
         text_col.markdown(f"{badge('blue', 'Leads')} "
                           f"{logic.plural(len(new_leads), 'new job lead')} to review"
                           + (f", {strong} strong" if strong else ""))
-        if button_col.button("Review", key="review_leads"):
+        if button_col.button("Review", key="review_leads", width="stretch"):
             st.switch_page("pages/7_Job_Leads.py")
 
 st.caption(f"Applications with no update for {config.FOLLOW_UP_DAYS} days are flagged for a "

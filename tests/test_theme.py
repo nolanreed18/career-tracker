@@ -60,9 +60,12 @@ def test_the_stylesheet_carries_its_mode_tokens():
     assert light.startswith("<style>") and light.endswith("</style>")
     assert "--ct-card: #ffffff;" in light and "--ct-card: #111827;" in dark
     assert "st-key-card-" in light and "stRadioOption" in light
+    assert "stBaseButton-primaryFormSubmit" in light     # form Save/Add buttons too
+    assert "stSidebar" in theme.LOCKED
 
 
 def test_html_helpers_escape_text():
     assert theme.subtitle("<b>") == '<div class="ct-sub">&lt;b&gt;</div>'
     panel = theme.empty_state("inbox", "No leads", "Try <later>")
     assert ">inbox<" in panel and "Try &lt;later&gt;" in panel
+    assert theme.note("me@example.com") == '<div class="ct-note">me@example.com</div>'

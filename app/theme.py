@@ -159,7 +159,9 @@ def stylesheet(mode: str) -> str:
     font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--ct-text2); }}
 
-/* Stat cards: a muted microlabel over a big mono number. */
+/* Stat cards: a muted microlabel over a big mono number. Their columns may
+   shrink below Streamlit's 120px minimum so three fit on a phone. */
+[data-testid="stColumn"]:has([data-testid="stMetric"]) {{ min-width: 0; }}
 [data-testid="stMetric"] {{ background: var(--ct-card); border: 1px solid var(--ct-border);
     border-radius: 10px; padding: 10px 12px; transition: border-color var(--ct-ease); }}
 [data-testid="stMetric"]:hover {{ border-color: var(--ct-blue); }}
@@ -175,6 +177,10 @@ def stylesheet(mode: str) -> str:
     background: var(--ct-card); border: 1px solid var(--ct-border); border-radius: 16px;
     padding: 0.9rem 1rem; transition: border-color var(--ct-ease), background var(--ct-ease); }}
 [class*="st-key-card-"]:hover {{ border-color: var(--ct-blue); background: var(--ct-card-hover); }}
+/* A card's text-and-button row: the text column shrinks, the button column
+   keeps its width, and nothing inside scrolls. */
+[class*="st-key-card-"] [data-testid="stHorizontalBlock"] {{ overflow: visible; }}
+[class*="st-key-card-"] [data-testid="stColumn"]:first-child {{ min-width: 0; }}
 
 /* Badges: mono pills with a hairline. */
 .stMarkdownBadge {{ font-family: var(--ct-mono); font-size: 0.7rem !important; font-weight: 600;
@@ -182,15 +188,18 @@ def stylesheet(mode: str) -> str:
     border: 1px solid color-mix(in srgb, currentColor 35%, transparent); }}
 
 /* Buttons: the gradient means the main action; others are quiet cards. */
-[data-testid="stBaseButton-primary"] {{ background: {GRADIENT}; color: #fff; font-weight: 600;
+[data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {{
+    background: {GRADIENT}; color: #fff; font-weight: 600;
     border: 1px solid rgba(6, 182, 212, 0.5); transition: filter var(--ct-ease); }}
-[data-testid="stBaseButton-primary"]:hover,
-[data-testid="stBaseButton-primary"]:focus-visible {{ filter: brightness(1.1); color: #fff;
-    border-color: #06b6d4; }}
-[data-testid="stBaseButton-secondary"] {{ background: var(--ct-card); font-weight: 600;
-    border: 1px solid var(--ct-border); color: var(--ct-text);
-    transition: border-color var(--ct-ease), background var(--ct-ease); }}
-[data-testid="stBaseButton-secondary"]:hover {{ border-color: var(--ct-blue);
+[data-testid="stBaseButton-primary"]:hover, [data-testid="stBaseButton-primary"]:focus-visible,
+[data-testid="stBaseButton-primaryFormSubmit"]:hover,
+[data-testid="stBaseButton-primaryFormSubmit"]:focus-visible {{ filter: brightness(1.1);
+    color: #fff; border-color: #06b6d4; }}
+[data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-secondaryFormSubmit"] {{
+    background: var(--ct-card); font-weight: 600; border: 1px solid var(--ct-border);
+    color: var(--ct-text); transition: border-color var(--ct-ease), background var(--ct-ease); }}
+[data-testid="stBaseButton-secondary"]:hover,
+[data-testid="stBaseButton-secondaryFormSubmit"]:hover {{ border-color: var(--ct-blue);
     background: var(--ct-card-hover); color: var(--ct-text); }}
 
 /* Horizontal radios become a segmented control: one of a few, all visible. */
@@ -228,6 +237,10 @@ def stylesheet(mode: str) -> str:
     color: var(--ct-text); }}
 .ct-empty p {{ margin: 0; }}
 
+/* A small mono note (the signed-in address in the sidebar). */
+.ct-note {{ font-family: var(--ct-mono); font-size: 0.75rem; color: var(--ct-muted);
+    overflow-wrap: anywhere; }}
+
 @media (prefers-reduced-motion: reduce) {{ * {{ transition: none !important; }} }}
 </style>"""
 
@@ -235,6 +248,16 @@ def stylesheet(mode: str) -> str:
 def subtitle(text: str) -> str:
     """The page head's mono subtitle, as HTML for st.html."""
     return f'<div class="ct-sub">{escape(text)}</div>'
+
+
+def note(text: str) -> str:
+    """A small mono note, as HTML for st.html (plain text: no links made)."""
+    return f'<div class="ct-note">{escape(text)}</div>'
+
+
+# While nobody is signed in, the sidebar (and its page list) stays out of sight.
+LOCKED = ('<style>[data-testid="stSidebar"], [data-testid="stExpandSidebarButton"] '
+          '{ display: none; }</style>')
 
 
 def empty_state(icon: str, title: str, text: str) -> str:
