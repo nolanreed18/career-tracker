@@ -76,8 +76,23 @@ def reset_connection() -> None:
     _conn = None
 
 
+_over_http = False
+
+
+def use_http() -> None:
+    """Send every query over Neon's HTTPS endpoint (db.HttpCursor) instead of
+    a Postgres connection: for the daily review's cloud session, which can't
+    open one. Statements then commit one at a time, and schema.sql isn't run
+    (the app has made the tables)."""
+    global _over_http
+    _over_http = True
+
+
 @contextmanager
 def _cursor(row_factory=None):
+    if _over_http:
+        yield db.HttpCursor(row_factory)
+        return
     with _lock:
         conn = _connection()
         with conn.cursor(row_factory=row_factory) as cur:
@@ -87,7 +102,11 @@ def _cursor(row_factory=None):
 @contextmanager
 def _transaction():
     """All-or-nothing: every statement inside commits together or not at all.
-    Nests (as a savepoint) inside another _transaction()."""
+    Nests (as a savepoint) inside another _transaction(). Over HTTPS each
+    statement commits on its own."""
+    if _over_http:
+        yield db.HttpCursor()
+        return
     with _lock:
         conn = _connection()
         with conn.transaction(), conn.cursor() as cur:

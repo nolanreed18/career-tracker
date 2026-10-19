@@ -32,6 +32,9 @@ def no_real_database(monkeypatch):
         raise RuntimeError("tests must not reach the real database: use the `database` fixture")
 
     monkeypatch.setattr(db, "get_dsn", refuse)
+    # Never over HTTPS in tests (a cloud session sets CLAUDE_CODE_REMOTE).
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
+    monkeypatch.setattr(data, "_over_http", False)
     data.reset_connection()
     yield
     data.reset_connection()

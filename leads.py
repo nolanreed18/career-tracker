@@ -12,6 +12,7 @@ is added unless every row is valid.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -22,6 +23,8 @@ import logic  # noqa: E402
 
 
 def main(argv: list[str]) -> int:
+    if os.environ.get("CLAUDE_CODE_REMOTE") == "true":
+        data.use_http()          # cloud sessions can't open a Postgres connection
     command = argv[0] if argv else ""
     if command == "profile":
         profile = data.job_profile()
