@@ -29,6 +29,7 @@ def test_rubric_prints_the_scoring_categories(capsys):
     assert [c["key"] for c in rubric["categories"]] == list(config.FIT_CATEGORIES)
     assert sum(c["weight"] for c in rubric["categories"]) == pytest.approx(1)
     assert rubric["strong_fit"] == config.STRONG_FIT
+    assert rubric["today"] == data.today().isoformat()      # the owner's date, for the digest
 
 
 def test_add_stores_new_leads_and_skips_ones_already_seen(tmp_path, capsys):
