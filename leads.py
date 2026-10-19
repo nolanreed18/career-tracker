@@ -1,7 +1,8 @@
 """The daily job-alert review's way into the database.
 
     python leads.py profile          what you're looking for, as JSON
-    python leads.py rubric           the scoring categories, weights and thresholds, as JSON
+    python leads.py rubric           today's date (owner's time zone) and the scoring
+                                     categories, weights and thresholds, as JSON
     python leads.py known            every stored lead's dedupe key, one per line
     python leads.py add leads.json   add scored leads; prints how many were new
 
@@ -37,6 +38,7 @@ def main(argv: list[str]) -> int:
         return 0
     if command == "rubric":
         print(json.dumps({
+            "today": data.today().isoformat(),      # the owner's date; the session clock is UTC
             "categories": [{"key": key, "label": label, "weight": weight, "what": what}
                            for key, (label, weight, what) in config.FIT_CATEGORIES.items()],
             "score": "weighted average of the ratings, to one decimal",

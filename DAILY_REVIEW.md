@@ -56,10 +56,11 @@ the inbox, never in this public repository.
    python3 leads.py known
    ```
 
-   `profile` is what the owner is looking for. `rubric` lists the scoring
-   categories with their weights and what each one means. `known` lists the
-   jobs already stored as `company|title|location` (lower-case, punctuation
-   dropped). Skip jobs already there.
+   `profile` is what the owner is looking for. `rubric` gives `today` (the
+   owner's date; the session's clock is UTC, which can be a day ahead) and
+   the scoring categories with their weights and what each one means.
+   `known` lists the jobs already stored as `company|title|location`
+   (lower-case, punctuation dropped). Skip jobs already there.
 
 5. **Rate each new job on every rubric category, 1–10**, against the
    profile only (never your own idea of a good job): 10 means the profile's
@@ -86,7 +87,8 @@ the inbox, never in this public repository.
 
 7. **Email the owner one digest**, from the connected Gmail to that same
    job-search address:
-   - Subject: `Job leads <Mon D>: N new, S strong`
+   - Subject: `Job leads <Mon D>: N new, S strong`, dated with `today` from
+     `rubric` (never the session clock).
    - Strong fits (7+) first, best first: score (one decimal), title —
      company, location, pay, the reason, and the link. Then a one-line
      count of the rest.
