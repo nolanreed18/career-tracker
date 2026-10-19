@@ -32,6 +32,7 @@ if str(ROOT) not in sys.path:
 import config  # noqa: E402
 import db  # noqa: E402
 import logic  # noqa: E402
+import resume_schema  # noqa: E402
 
 PING_AFTER_IDLE_S = 20
 
@@ -675,6 +676,102 @@ def move_lead_to_applications(lead_id: int, on: date) -> int:
             update job_leads set status = 'moved', application_id = %s where lead_id = %s
         """, (application_id, lead_id))
     return application_id
+
+
+# ---- master resume ----------------------------------------------------------
+
+def resume_master() -> dict | None:
+    """The master resume as data (resume_schema.Resume as a dict), with
+    template_source_id and updated_on; None before the first build."""
+    return _one("select content, template_source_id, updated_on from resume_master "
+                "where profile_id = 1")
+
+
+def save_resume_master(content: dict, on: date) -> None:
+    """Create or replace the master resume's data (the template choice stays)."""
+    with _cursor() as cur:
+        cur.execute("""
+            insert into resume_master (profile_id, content, template_source_id, updated_on)
+            values (1, %s::jsonb, null, %s)
+            on conflict (profile_id) do update
+                set content = excluded.content, updated_on = excluded.updated_on
+        """, (json.dumps(content), on))
+
+
+def set_resume_template(source_id: int | None, on: date) -> None:
+    """Which uploaded Word file the export is modelled on (None: none)."""
+    with _cursor() as cur:
+        cur.execute("""
+            insert into resume_master (profile_id, content, template_source_id, updated_on)
+            values (1, %s::jsonb, %s, %s)
+            on conflict (profile_id) do update set template_source_id = excluded.template_source_id
+        """, (json.dumps(resume_schema.empty()), source_id, on))
+
+
+def resume_template() -> bytes | None:
+    """The Word file the export is modelled on, or None."""
+    row = _one("""
+        select s.bytes from resume_master m join resume_sources s on s.source_id = m.template_source_id
+        where m.profile_id = 1 and s.bytes is not null
+    """)
+    return None if row is None else bytes(row["bytes"])
+
+
+def resume_sources() -> pd.DataFrame:
+    """The uploaded files, newest first: id, filename, kind, uploaded_on, how
+    much text each gave, and whether the file itself is kept."""
+    return _read("""
+        select source_id, filename, kind, uploaded_on, length(text) as chars,
+               bytes is not null as has_file
+        from resume_sources order by uploaded_on desc, source_id desc
+    """)
+
+
+def resume_source(source_id: int) -> dict | None:
+    return _one("select * from resume_sources where source_id = %s", (source_id,))
+
+
+def resume_source_texts() -> dict[str, str]:
+    """What Claude reads: every source's text, keyed by kind (several of a
+    kind are joined, newest first)."""
+    frame = _read("select kind, text from resume_sources order by uploaded_on desc, source_id desc")
+    texts: dict[str, str] = {}
+    for row in frame.itertuples(index=False):
+        texts[row.kind] = (texts[row.kind] + "\n\n" + row.text) if row.kind in texts else row.text
+    return texts
+
+
+def add_resume_source(filename: str, kind: str, text: str, data: bytes | None, on: date) -> int:
+    """Keep an uploaded file's text (and the file itself for a Word resume);
+    a file of the same name replaces the earlier copy."""
+    with _transaction() as cur:
+        cur.execute("delete from resume_sources where lower(filename) = lower(%s)", (filename,))
+        cur.execute("""
+            insert into resume_sources (filename, kind, text, bytes, uploaded_on)
+            values (%s, %s, %s, %s, %s) returning source_id
+        """, (filename.strip(), kind, text, data, on))
+        return cur.fetchone()[0]
+
+
+def delete_resume_source(source_id: int) -> None:
+    with _cursor() as cur:
+        cur.execute("delete from resume_sources where source_id = %s", (source_id,))
+
+
+def log_ai_usage(kind: str, model: str, input_tokens: int, output_tokens: int,
+                 cost_usd: float, on: date) -> None:
+    with _cursor() as cur:
+        cur.execute("""
+            insert into ai_usage (kind, model, input_tokens, output_tokens, cost_usd, happened_on)
+            values (%s, %s, %s, %s, %s, %s)
+        """, (kind, model, input_tokens, output_tokens, cost_usd, on))
+
+
+def ai_usage_since(since: date) -> tuple[int, float]:
+    """(calls, dollars) spent on Claude from a date on."""
+    row = _one("select count(*) as calls, coalesce(sum(cost_usd), 0) as cost from ai_usage "
+               "where happened_on >= %s", (since,))
+    return int(row["calls"]), float(row["cost"])
 
 
 # ---- settings ---------------------------------------------------------------

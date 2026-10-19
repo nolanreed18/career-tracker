@@ -460,3 +460,66 @@ def test_todays_glassdoor_links_open_the_right_form():
     at = run(LEADS)
     assert any("partner/jobListing.htm?jobListingId=1010293120973" in m.value
                for m in at.markdown)
+
+
+RESUME = ROOT / "app" / "pages" / "8_Resume.py"
+
+
+def test_resume_page_draws_empty_and_says_whether_claude_has_a_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    at = run(RESUME)
+    assert any("No master resume yet" in h.value for h in at.get("html"))
+    widget(at.radio, "Section").set_value("Build from files").run()
+    assert any(":red-badge[No key]" in m.value for m in at.markdown)
+    assert any("No files yet" in h.value for h in at.get("html"))
+    assert widget(at.button, "Build the master with Claude").disabled
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Build from files").run()
+    assert any(":green-badge[Key found]" in m.value for m in at.markdown)
+    assert any("$0.00 this month across 0 Claude calls" in m.value for m in at.markdown)
+
+
+def test_resume_page_shows_the_master_and_exports_it_in_the_templates_layout():
+    import docx_fixture
+    import docx_io
+    source = data.add_resume_source("Resume.docx", "resume", "## Sample", docx_fixture.template(),
+                                    TODAY)
+    data.set_resume_template(source, TODAY)
+    data.save_resume_master({**docx_fixture.SAMPLE, "conflicts": ["GPA: 3.88 in the history, "
+                                                                  "3.90 on the resume"]}, TODAY)
+    at = run(RESUME)
+    assert any("2 roles, 1 project, 3 bullets on the master and 1 more in the pool" in c.value
+               for c in at.caption)
+    assert any("GPA: 3.88" in m.value for m in at.markdown)
+    assert widget(at.text_input, "Name").value == "Sample Person"
+    assert [w.value for w in at.text_input if w.label == "Employer"] == ["Acme Energy",
+                                                                         "Beta Chemicals"]
+    download = [b for b in at.get("download_button")]
+    assert download and download[0].label == "Download Word file"
+    texts = [p.text for p in docx_io.outline(docx_io.build(data.resume_template(),
+                                                           data.resume_master()["content"]))]
+    assert "Built a pipeline that saved 2 hours a day." in texts
+    widget(at.text_input, "Name").set_value("Sample P. Person").run()
+    click(at, "Save")
+    master = data.resume_master()
+    assert master["content"]["name"] == "Sample P. Person" and master["content"]["conflicts"] == []
+    click(at, "Add a role")
+    assert len(data.resume_master()["content"]["roles"]) == 3
+
+
+def test_resume_sources_are_listed_with_the_template_marked_and_can_be_removed():
+    import docx_fixture
+    source = data.add_resume_source("Resume.docx", "resume", "## Sample", docx_fixture.template(),
+                                    TODAY)
+    data.set_resume_template(source, TODAY)
+    data.add_resume_source("Projects.csv", "projects", "Project: x", None, TODAY)
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Build from files").run()
+    listed = [m.value for m in at.markdown if "**" in m.value and ".docx" in m.value
+              or ".csv" in m.value]
+    assert any(":green-badge[Template]" in m and "Resume.docx" in m for m in listed)
+    assert any(":blue-badge[Projects spreadsheet]" in m for m in listed)
+    widget(at.checkbox, "I want to delete this file").check().run()      # newest first: the CSV
+    widget(at.button, "Delete file").click().run()
+    assert data.resume_sources()["filename"].tolist() == ["Resume.docx"]

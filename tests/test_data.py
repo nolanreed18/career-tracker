@@ -349,3 +349,42 @@ def test_every_lead_status_is_allowed_by_the_schema_and_nothing_else():
         data.set_lead_status(lead_id, status)
     with pytest.raises(psycopg.errors.CheckViolation):
         data.set_lead_status(lead_id, "maybe")
+
+
+def test_the_master_resume_its_sources_and_the_template_round_trip():
+    assert data.resume_master() is None and data.resume_template() is None
+    first = data.add_resume_source("Resume.docx", "resume", "## Sample", b"PK-word-file", TODAY)
+    data.add_resume_source("History.docx", "history", "Project: x", None, date(2026, 10, 10))
+    data.set_resume_template(first, TODAY)
+    assert data.resume_template() == b"PK-word-file"
+    assert data.resume_master()["content"]["roles"] == []        # a placeholder row for now
+    content = {"name": "Sample", "email": "", "phone": "", "linkedin": "", "roles": [],
+               "projects": [], "education": [], "skill_groups": [], "conflicts": ["x"]}
+    data.save_resume_master(content, TODAY)
+    master = data.resume_master()
+    assert master["content"] == content and master["template_source_id"] == first
+    assert master["updated_on"] == TODAY
+    assert data.resume_source_texts() == {"resume": "## Sample", "history": "Project: x"}
+    sources = data.resume_sources()
+    assert sources["filename"].tolist() == ["Resume.docx", "History.docx"]
+    assert sources["has_file"].tolist() == [True, False] and sources["chars"].tolist() == [9, 10]
+    again = data.add_resume_source("resume.docx", "resume", "## Newer", b"PK2", TODAY)
+    assert again != first and len(data.resume_sources()) == 2    # same name: replaced
+    assert data.resume_template() is None                         # the template row was replaced
+    data.delete_resume_source(again)
+    assert data.resume_sources()["filename"].tolist() == ["History.docx"]
+
+
+def test_every_resume_source_kind_is_allowed_by_the_schema_and_nothing_else():
+    for kind in config.RESUME_SOURCE_KINDS:
+        data.add_resume_source(f"{kind}.txt", kind, "x", None, TODAY)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        data.add_resume_source("odd.txt", "diary", "x", None, TODAY)
+
+
+def test_claude_usage_adds_up_from_a_date():
+    data.log_ai_usage("structure resume", "claude-opus-5-5", 6000, 8000, 0.184, TODAY)
+    data.log_ai_usage("structure resume", "claude-opus-5-5", 1000, 1000, 0.024, date(2026, 9, 1))
+    assert data.ai_usage_since(date(2026, 10, 1)) == (1, 0.184)
+    assert data.ai_usage_since(date(2026, 9, 1)) == (2, 0.208)
+    assert data.ai_usage_since(date(2027, 1, 1)) == (0, 0.0)

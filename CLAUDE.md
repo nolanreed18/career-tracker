@@ -22,6 +22,14 @@ only they can do (accounts, secrets, clicking merge).
   `leads.py digest`; the run pastes it into Gmail, so keep it under 100 KB
   (Gmail clips) and email-safe (tables, the class stylesheet, no web fonts).
   A new `leads.py` command also goes in `.claude/settings.json`.
+- Claude inside the app is `app/ai.py` only: the key is `ANTHROPIC_API_KEY`
+  in secrets (or `.env`), never printed; every call sits behind a button the
+  owner clicks and is logged to `ai_usage` with its cost (`config.AI_MODEL`,
+  `AI_PRICES`); nothing calls Claude on its own. Structured output goes
+  through `resume_schema` (pydantic, every field required). Word files are
+  `app/docx_io.py`: the writer clones paragraphs from the owner's own resume
+  (the template), never styles anything itself. Tests stand the API in
+  (`tests/test_ai.py`); no test calls Claude.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no
@@ -44,8 +52,8 @@ only they can do (accounts, secrets, clicking merge).
   lead has a salary, listed or estimated; `logic.clean_lead` refuses a pay
   rating without one, and unknown pay stays out of the score.
   **Status / kind lists are repeated in `schema.sql` CHECKs** (statuses,
-  kinds, lead statuses, `DISMISS_REASONS`): change both (tests fail if they
-  drift). A lead's dedupe key is company|title (`logic.lead_key`); stale
+  kinds, lead statuses, `DISMISS_REASONS`, `RESUME_SOURCE_KINDS`): change
+  both (tests fail if they drift). A lead's dedupe key is company|title (`logic.lead_key`); stale
   leads (`LEAD_STALE_DAYS`) are a view, not a status. Add a table → add it to `backup.TABLES` and the
   `TABLES` list in `conftest.py`.
 - `schema.sql` must stay re-runnable (`if not exists`): `data.py` runs it on the
