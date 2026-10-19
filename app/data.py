@@ -172,7 +172,8 @@ def _delete(table: str, key: str, key_value: int, in_use_message: str = "") -> N
     try:
         with _cursor() as cur:
             cur.execute(query, (key_value,))
-    except psycopg.errors.ForeignKeyViolation as exc:
+    except psycopg.errors.IntegrityError as exc:
+        # ForeignKeyViolation or RestrictViolation, depending on the Postgres version.
         raise InUse(in_use_message or "other records still use this one") from exc
 
 

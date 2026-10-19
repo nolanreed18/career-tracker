@@ -5,14 +5,25 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import STATUS_HELP, empty, index_of, md, optional, setup, status_badge, status_label
+from ui import (
+    STATUS_HELP,
+    bump_round,
+    delete_button,
+    empty,
+    index_of,
+    md,
+    optional,
+    round_key,
+    sections,
+    setup,
+    status_badge,
+    status_label,
+)
 
 setup("Applications", "Add one, find one, keep it up to date")
 
 if message := st.session_state.pop("flash", None):
     st.success(message)
-if st.session_state.pop("clear_pick", False):
-    st.session_state.pop("pick_application", None)
 
 today = data.today()
 companies = data.companies()
@@ -36,7 +47,7 @@ def done(message: str, form_counter: str | None = None) -> None:
 
 add_round = st.session_state.get("add_round", 0)
 with st.expander("Add an application", icon=":material/add:",
-                 expanded=st.session_state.pop("add_application_open", False)):
+                 expanded=st.session_state.get("add_application_open", False)):
     with st.form(f"add_application_{add_round}"):
         company = st.selectbox("Company", optional(company_names),
                                help="Pick one you've used before, or type a new one below.")
@@ -75,7 +86,8 @@ with st.expander("Add an application", icon=":material/add:",
                 job_url=job_url, location=location, work_mode=work_mode or None,
                 source=source, salary_min=salary_min, salary_max=salary_max,
                 next_action=next_action, next_action_on=next_action_on, notes=notes)
-            st.session_state["pick_application"] = new_id
+            st.session_state.pop("add_application_open", None)
+            st.session_state[round_key("pick_application")] = new_id
             done(f"Added {role.strip()} at {name}.", "add_round")
 
 # ---- find -------------------------------------------------------------------
@@ -101,14 +113,19 @@ if search.strip():
                 | view["role"].str.contains(term, case=False, regex=False)]
 
 if view.empty:
-    empty("filter_alt", "Nothing matches", "Try Closed or All, or clear the search.")
+    if show == "All":
+        hint = "Clear the search to see every application."
+    else:
+        hint = "Try All" + (", or clear the search." if search.strip() else ".")
+    empty("filter_alt", "Nothing matches", hint)
 else:
     st.dataframe(
         view.assign(status=view["status"].map(status_label))[
             ["company", "role", "status", "applied_on", "next_action_on", "last_update_on"]],
         hide_index=True, width="stretch",
         column_config={
-            "company": "Company", "role": "Role", "status": "Status",
+            "company": "Company", "status": "Status",
+            "role": st.column_config.TextColumn("Role", width="medium"),
             "applied_on": st.column_config.DateColumn("Applied", format="MMM D"),
             "next_action_on": st.column_config.DateColumn("Next step", format="MMM D"),
             "last_update_on": st.column_config.DateColumn("Updated", format="MMM D"),
@@ -116,18 +133,20 @@ else:
 
 labels = {int(r.application_id): f"{r.company} — {r.role}" for r in apps.itertuples()}
 options = [int(i) for i in view["application_id"]]
+pick_key = round_key("pick_application")
 if (requested := st.session_state.pop("open_application", None)) is not None:
-    st.session_state["pick_application"] = requested
-picked_now = st.session_state.get("pick_application")
+    st.session_state[pick_key] = requested
+picked_now = st.session_state.get(pick_key)
 if picked_now is not None and picked_now not in options:
     if picked_now in labels:
         options = [picked_now] + options        # opened from elsewhere; keep it on the list
-    else:
-        st.session_state.pop("pick_application")
+    else:                                       # gone (deleted elsewhere): a fresh dropdown
+        bump_round("pick_application")
+        pick_key, picked_now = round_key("pick_application"), None
 picked = st.selectbox(
     "Open an application", options, format_func=lambda i: labels.get(i, str(i)),
-    placeholder="Choose one…", key="pick_application",
-    **({} if "pick_application" in st.session_state else {"index": None}))
+    placeholder="Choose one…", key=pick_key,
+    **({} if pick_key in st.session_state else {"index": None}))
 
 if picked is None:
     st.stop()
@@ -155,10 +174,9 @@ if app["job_url"]:
 if app["notes"]:
     st.caption(md(app["notes"]))
 
-update_tab, interview_tab, edit_tab, history_tab = st.tabs(
-    ["Log update", "Interviews", "Edit", "History"])
+section = sections("application", ["Log update", "Interviews", "Edit", "History"])
 
-with update_tab:
+if section == "Log update":
     update_round = st.session_state.get("update_round", 0)
     with st.form(f"update_{picked}_{update_round}"):
         status_col, on_col = st.columns(2)
@@ -180,7 +198,7 @@ with update_tab:
                                 next_action_on=None if clear_step else step_on)
         done("Update logged.", "update_round")
 
-with interview_tab:
+if section == "Interviews":
     for iv in data.interviews(picked).itertuples():
         at = f" at {logic.clock(iv.start_time)}" if not logic.blank(iv.start_time) else ""
         st.markdown(f"**{md(logic.value(iv.round) or 'Interview')}** — "
@@ -206,7 +224,7 @@ with interview_tab:
                            format=iv_format or None, interviewers=iv_who, prep_notes=iv_prep)
         done("Interview added.", "interview_round")
 
-with edit_tab:
+if section == "Edit":
     edit_round = st.session_state.get("edit_round", 0)
     with st.form(f"edit_{picked}_{edit_round}"):
         e_company = st.selectbox("Company", company_names,
@@ -240,13 +258,12 @@ with edit_tab:
             done("Saved.", "edit_round")
 
     st.divider()
-    sure = st.checkbox("I want to delete this application", key=f"sure_{picked}")
-    if st.button("Delete application", disabled=not sure, key=f"delete_{picked}"):
+    if delete_button("application", f"application_{picked}"):
         data.delete_application(picked)
-        st.session_state["clear_pick"] = True
+        bump_round("pick_application")
         done(f"Deleted {app['role']} at {app['company']}.")
 
-with history_tab:
+if section == "History":
     history = data.events(picked)
     st.dataframe(
         history.assign(status=history["status"].map(status_label))[

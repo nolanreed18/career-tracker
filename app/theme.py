@@ -163,12 +163,12 @@ def stylesheet(mode: str) -> str:
    shrink below Streamlit's 120px minimum so three fit on a phone. */
 [data-testid="stColumn"]:has([data-testid="stMetric"]) {{ min-width: 0; }}
 [data-testid="stMetric"] {{ background: var(--ct-card); border: 1px solid var(--ct-border);
-    border-radius: 10px; padding: 10px 12px; transition: border-color var(--ct-ease); }}
+    border-radius: 10px; padding: 10px; transition: border-color var(--ct-ease); }}
 [data-testid="stMetric"]:hover {{ border-color: var(--ct-blue); }}
 [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {{ overflow: visible;
     white-space: normal; text-overflow: clip; }}
-[data-testid="stMetricLabel"] p {{ font-size: 0.68rem; font-weight: 600; line-height: 1.3;
-    text-transform: uppercase; letter-spacing: 0.05em; color: var(--ct-muted); }}
+[data-testid="stMetricLabel"] p {{ font-size: 0.62rem; font-weight: 600; line-height: 1.3;
+    text-transform: uppercase; letter-spacing: 0.04em; color: var(--ct-muted); }}
 [data-testid="stMetricValue"] {{ font-family: var(--ct-mono); font-size: 1.55rem;
     font-weight: 700; font-variant-numeric: tabular-nums; }}
 
@@ -214,6 +214,15 @@ def stylesheet(mode: str) -> str:
 [data-testid="stRadioOption"]:has(input:checked) {{ background: {GRADIENT_SOFT};
     border-color: rgba(6, 182, 212, 0.6); color: var(--ct-text);
     box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.15); }}
+
+/* Sub-pages (ui.sections): bigger pills, a hairline under the row. */
+[class*="st-key-sections-"] {{ border-bottom: 1px solid var(--ct-border); padding-bottom: 0.6rem;
+    margin-bottom: 0.2rem; }}
+[class*="st-key-sections-"] [data-testid="stRadioOption"] {{ padding: 7px 14px; }}
+[class*="st-key-sections-"] [data-testid="stRadioOption"] p {{ font-size: 0.85rem; }}
+
+/* No "Press Enter to submit form" hint inside inputs: it sits on the value. */
+[data-testid="InputInstructions"] {{ display: none; }}
 
 /* Tabs, expanders, sidebar navigation. */
 [data-testid="stTab"] p {{ font-weight: 600; font-size: 0.85rem; }}

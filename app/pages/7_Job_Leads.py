@@ -6,7 +6,7 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import card, empty, fit_badge, md, setup
+from ui import card, empty, fit_badge, md, sections, setup
 
 setup("Job Leads", "From your alert emails, scored for fit every morning")
 
@@ -30,11 +30,11 @@ def describe(lead) -> str:
     return " · ".join(str(p) for p in parts if p) + f" · {found}"
 
 
-inbox_tab, dismissed_tab, profile_tab = st.tabs(["Inbox", "Dismissed", "What I'm looking for"])
+section = sections("leads", ["Inbox", "Dismissed", "What I'm looking for"])
 
 # ---- inbox ------------------------------------------------------------------
 
-with inbox_tab:
+if section == "Inbox":
     leads = data.job_leads("new")
     if data.job_profile() is None:
         st.warning("Fill in **What I'm looking for** so the daily review can score jobs "
@@ -83,7 +83,7 @@ with inbox_tab:
 
 # ---- dismissed --------------------------------------------------------------
 
-with dismissed_tab:
+if section == "Dismissed":
     dismissed = data.job_leads("dismissed")
     if dismissed.empty:
         empty("delete_sweep", "Nothing dismissed", "Leads you dismiss wait here in case you change your mind.")
@@ -99,7 +99,7 @@ with dismissed_tab:
 
 # ---- profile ----------------------------------------------------------------
 
-with profile_tab:
+if section == "What I'm looking for":
     profile = data.job_profile() or {}
     st.caption("The daily review reads this to score each job from 1 to 10. Plain "
                "sentences are fine; the more specific, the better the scores.")

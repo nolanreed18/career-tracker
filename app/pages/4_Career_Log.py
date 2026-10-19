@@ -9,7 +9,7 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import card, empty, kind_badge, md, setup
+from ui import bump_round, card, delete_button, empty, kind_badge, md, round_key, sections, setup
 
 setup("Career Log", "Wins, skills and feedback, written down in time")
 
@@ -32,11 +32,11 @@ def done(message: str, counter: str | None = None) -> None:
     st.rerun()
 
 
-log_tab, jobs_tab = st.tabs(["Log", "Job history"])
+section = sections("log", ["Log", "Job history"])
 
 # ---- log --------------------------------------------------------------------
 
-with log_tab:
+if section == "Log":
     n = st.session_state.get("entry_round", 0)
     with st.form(f"add_entry_{n}"):
         st.markdown("**Add to the log**")
@@ -63,6 +63,9 @@ with log_tab:
                         format_func=lambda k: "All" if k == "all" else kind_label(k),
                         key="log_show")
         view = entries if show == "all" else entries[entries["kind"] == show]
+        if view.empty:
+            empty("filter_alt", f"Nothing filed under {show.capitalize()}",
+                  "Choose All to see every entry.")
         for entry in view.itertuples():
             entry_id = int(entry.entry_id)
             with card(f"entry-{entry_id}"):
@@ -91,7 +94,7 @@ with log_tab:
                                                      title=e_title, details=e_details,
                                                      tags=e_tags)
                             done("Saved.")
-                    if st.button("Delete", key=f"delete_entry_{entry_id}"):
+                    if delete_button("entry", f"entry_{entry_id}"):
                         data.delete_career_entry(entry_id)
                         done("Deleted.")
         st.download_button(
@@ -101,7 +104,7 @@ with log_tab:
 
 # ---- job history ------------------------------------------------------------
 
-with jobs_tab:
+if section == "Job history":
     with st.expander("Add a job", icon=":material/add:"):
         n = st.session_state.get("position_round", 0)
         with st.form(f"add_position_{n}"):
@@ -145,7 +148,7 @@ with jobs_tab:
             })
         labels = {int(r.position_id): f"{r.title} at {r.employer}" for r in jobs.itertuples()}
         picked = st.selectbox("Edit a job", list(labels), format_func=labels.get, index=None,
-                              placeholder="Choose one…", key="pick_position")
+                              placeholder="Choose one…", key=round_key("pick_position"))
         if picked is not None:
             row = jobs[jobs["position_id"] == picked].iloc[0]
             with st.form(f"edit_position_{picked}"):
@@ -174,7 +177,7 @@ with jobs_tab:
                                          base_salary=e_base, bonus=e_bonus,
                                          other_comp=e_other, notes=e_notes)
                     done("Saved.")
-            if st.button("Delete job", key=f"delete_position_{picked}"):
+            if delete_button("job", f"position_{picked}"):
                 data.delete_position(picked)
-                st.session_state.pop("pick_position", None)
+                bump_round("pick_position")
                 done("Deleted.")

@@ -5,7 +5,7 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import empty, md, optional, setup
+from ui import delete_button, empty, md, optional, setup
 
 setup("Interviews", "What's coming up, and how past ones went")
 
@@ -96,7 +96,7 @@ for heading, frame in (("Upcoming", upcoming), ("Past", past)):
                     outcome_notes=e_outcome,
                     rating=RATINGS.index(e_rating) or None)
                 done("Interview saved.")
-            if st.button("Delete interview", key=f"delete_interview_{iv_id}"):
+            if delete_button("interview", f"interview_{iv_id}"):
                 data.delete_interview(iv_id)
                 done("Interview deleted.")
 
