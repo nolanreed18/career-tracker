@@ -44,6 +44,10 @@ only they can do (accounts, secrets, clicking merge).
   `leads.py add` over HTTPS), so the live database updates itself.
 - Add forms sit behind `ui.disclosure()` buttons (server-side open state), not
   `st.expander`, which snaps shut when a click lands mid-load.
+- Every page's first statement is `fresh.check()`: Community Cloud pulls new
+  code into the running app but keeps old copies of `app/` modules loaded, so
+  pages importing something new broke until a reboot. Keep it first; a new
+  page gets it too.
 - Pass plain Python values to psycopg, not numpy (`int(x)` on DataFrame ids).
   Put user text into `st.markdown` through `ui.md()`: `$` would become maths.
 - Forms reset by bumping a counter in their key; set a widget's session state
