@@ -529,6 +529,89 @@ def test_building_the_master_lands_on_the_master_section(monkeypatch):
     assert data.ai_usage_since(TODAY)[0] == 1
 
 
+def test_tailor_section_waits_for_a_master_and_an_open_application():
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Tailor").run()
+    assert any("No master resume yet" in h.value for h in at.get("html"))
+    import docx_fixture
+    data.save_resume_master(docx_fixture.SAMPLE, TODAY)
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Tailor").run()
+    assert any("No open applications" in h.value for h in at.get("html"))
+
+
+TAILORED = {
+    "fit_notes": "Strong on SQL; no Tableau.",
+    "roles": [{"employer": "Acme Energy", "title": "Business Analyst", "location": "Denver, CO",
+               "start": "Jan 2025", "end": "Present", "bullets": [
+                   {"text": "Built a SQL pipeline that saved 2 hours a day.",
+                    "original": "Built a pipeline that saved 2 hours a day.", "skills": ["SQL"]}]}],
+    "projects": [], "skill_groups": [{"name": "Programming Languages", "skills": "SQL, Python"}],
+    "keywords": [{"term": "SQL", "covered": True, "where": "the pipeline bullet"},
+                 {"term": "Tableau", "covered": False, "where": ""}],
+    "changes": ["Named SQL in the pipeline bullet: the posting leads with it."],
+    "cover_letter": "Dear Hiring Team,\n\nI built the pipeline.\n\nSincerely,\nSample Person",
+}
+
+
+def test_tailor_section_makes_a_version_with_both_downloads_and_saves_edits(monkeypatch):
+    import ai
+    import docx_fixture
+    import docx_io
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    source = data.add_resume_source("Resume.docx", "resume", "## Sample", docx_fixture.template(),
+                                    TODAY)
+    data.set_resume_template(source, TODAY)
+    data.save_resume_master(docx_fixture.SAMPLE, TODAY)
+    app_id = data.add_application(data.company_id_for("Acme Corp.", TODAY), "Analyst", "saved",
+                                  TODAY)
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Tailor").run()
+    assert widget(at.button, "Tailor with Claude").disabled          # no posting yet
+    widget(at.text_area, "Job posting").set_value("We need SQL and Tableau.")
+    click(at, "Save posting")
+    assert data.application(app_id)["posting"] == "We need SQL and Tableau."
+    assert not widget(at.button, "Tailor with Claude").disabled
+    calls = []
+    monkeypatch.setattr(ai, "tailor", lambda *args: calls.append(args) or (
+        TAILORED, ai.Usage("claude-opus-5-5", 6000, 8000)))
+    widget(at.text_input, "Steer Claude (optional)").set_value("lead with SQL")
+    click(at, "Tailor with Claude")
+    assert calls[0][1:] == ("We need SQL and Tableau.", "Acme Corp.", "Analyst", "lead with SQL")
+    assert any("Tailored for Acme Corp.: 1 bullet, 1 of 2 keywords covered. Cost $0.18." in s.value
+               for s in at.success)
+    assert [b.label for b in at.get("download_button")] == ["Download tailored resume",
+                                                            "Download cover letter"]
+    assert any(":green-badge[SQL] :orange-badge[Tableau]" in m.value for m in at.markdown)
+    assert any("1 bullet: 0 as on the master, 1 reworded" in c.value for c in at.caption)
+    assert data.ai_usage_since(TODAY)[0] == 1
+    version = data.tailored_versions(app_id).iloc[0]
+    assert (version["version"], version["notes"]) == (1, "lead with SQL")
+    export = docx_io.build(data.resume_template(), logic.tailored_export(
+        docx_fixture.SAMPLE, data.tailored(int(version["tailor_id"]))["content"]))
+    texts = [p.text for p in docx_io.outline(export)]
+    assert "Built a SQL pipeline that saved 2 hours a day." in texts
+    assert "Beta Chemicals" not in texts                              # not in the tailored set
+    widget(at.text_area, "Cover letter").set_value("Dear Hiring Team,\n\nEdited.")
+    click(at, "Save")
+    saved = data.tailored(int(version["tailor_id"]))["content"]
+    assert saved["cover_letter"] == "Dear Hiring Team,\n\nEdited."
+    assert saved["roles"][0]["bullets"][0]["original"] == "Built a pipeline that saved 2 hours a day."
+
+
+def test_the_posting_section_saves_the_job_posting():
+    app_id = seed()
+    at = new_app(PAGES[0])
+    at.session_state["open_application"] = app_id
+    at.run()
+    widget(at.radio, "Section").set_value("Posting").run()
+    assert widget(at.button, "Tailor the resume for this job").disabled
+    widget(at.text_area, "Job posting").set_value("  A long posting.  ")
+    click(at, "Save posting")
+    assert data.application(app_id)["posting"] == "A long posting."
+    assert not widget(at.button, "Tailor the resume for this job").disabled
+
+
 def test_resume_sources_are_listed_with_the_template_marked_and_can_be_removed():
     import docx_fixture
     source = data.add_resume_source("Resume.docx", "resume", "## Sample", docx_fixture.template(),

@@ -51,6 +51,7 @@ create table if not exists applications (
     next_action_on  date,
     contact_id      bigint references contacts on delete set null,
     notes           text,
+    posting         text,              -- the job posting's text, for tailoring
     created_on      date not null,
     check (salary_min is null or salary_max is null or salary_max >= salary_min)
 );
@@ -185,4 +186,19 @@ create table if not exists ai_usage (
 create table if not exists settings (
     key    text primary key,
     value  text not null
+);
+
+-- A resume tailored to one application, one row per version: the data
+-- (app/resume_schema.py: Tailored) with its cover letter, keyword coverage
+-- and the list of changes from the master; the owner's steer for that
+-- version; which model wrote it.
+create table if not exists tailored_resumes (
+    tailor_id       bigint generated always as identity primary key,
+    application_id  bigint not null references applications on delete cascade,
+    version         integer not null check (version >= 1),
+    content         jsonb not null,
+    notes           text,
+    model           text,
+    created_on      date not null,
+    unique (application_id, version)
 );

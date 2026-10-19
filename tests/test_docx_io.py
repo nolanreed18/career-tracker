@@ -90,3 +90,39 @@ def test_a_template_without_the_needed_examples_is_refused():
     doc.save(buffer)
     with pytest.raises(ValueError, match="lacks an example of"):
         docx_io.build(buffer.getvalue(), docx_fixture.SAMPLE)
+
+
+def test_headings_employers_and_long_lines_follow_the_templates_habits():
+    same_employer = {**docx_fixture.SAMPLE, "roles": [
+        docx_fixture.SAMPLE["roles"][0],
+        {**docx_fixture.SAMPLE["roles"][1], "employer": "Acme Energy", "title": "Analyst"}],
+        "skill_groups": [{"name": "Languages", "skills": ", ".join(
+            f"Tool{n}" for n in range(1, 20))}]}
+    paras = docx_io.outline(docx_io.build(docx_fixture.template(), same_employer))
+    texts = [p.text for p in paras]
+    assert texts.count("Acme Energy") == 1                   # one employer line for both roles
+    assert texts.index("Analyst – Houston, TXJun 2023 - Dec 2024") > texts.index(
+        "Built a pipeline that saved 2 hours a day.")                  # second role after the first
+    assert texts[texts.index("Experience") + 1] == "Acme Energy"          # no blank after
+    assert texts[texts.index("Experience") - 1] == ""                     # a blank before
+    skills = texts.index("Applicable Skills")
+    assert texts[skills - 1] == "" and texts[skills + 1] == "Languages"
+    assert texts[texts.index("Education") - 1] == ""                     # the column break
+    assert paras[texts.index("Education") - 1].column_break
+    lines = [t for t in texts if t.startswith("Tool")]               # the outline trims leads
+    assert len(lines) >= 3 and all(len(t) <= 45 for t in lines)        # wrapped by hand
+    assert " ".join(t.strip() for t in lines) == same_employer["skill_groups"][0]["skills"]
+
+
+def test_a_letter_keeps_the_header_in_one_column():
+    out = docx_io.letter(docx_fixture.template(), "Sample Person", "sample@example.com",
+                         ["Dear Hiring Team,", "I built things.", "Sincerely,\nSample Person"])
+    paras = docx_io.outline(out)
+    texts = [p.text for p in paras if p.text]
+    assert texts[0] == "Sample Person        sample@example.com"      # the spacer run kept
+    assert texts[1:] == ["Dear Hiring Team,", "I built things.", "Sincerely,\nSample Person"]
+    doc, raw = docx_io._paragraphs(out)
+    assert raw[-1].find(f"{qn('w:r')}/{qn('w:br')}") is not None          # a real line break
+    assert not any(p.column_break for p in paras) and not any(p.bullet for p in paras)
+    cols = doc.element.body.find(qn("w:sectPr")).find(qn("w:cols"))
+    assert cols.get(qn("w:num")) == "1" and len(cols) == 0

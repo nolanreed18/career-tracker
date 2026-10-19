@@ -16,7 +16,7 @@ import config
 import data
 import docx_io
 import logic
-from ui import badge, card, delete_button, empty, md, sections, setup
+from ui import badge, bump_round, card, delete_button, empty, md, round_key, sections, setup
 
 setup("Resume", "Your master resume as data: built from your files, tailored per job",
       wide=True)
@@ -31,7 +31,8 @@ def done(message: str) -> None:
 
 if goto := st.session_state.pop("resume_goto", None):   # an action that moves the eye
     st.session_state["section_resume"] = goto
-section = sections("resume", ["Master", "Build from files"])
+section = sections("resume", ["Master", "Tailor", "Build from files"])
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 # ---- master ---------------------------------------------------------------------
 
@@ -116,11 +117,9 @@ if section == "Master":
             except ValueError as problem:
                 st.warning(f"Couldn't lay out the Word file: {problem}")
             else:
-                name = "".join(ch for ch in content.get("name", "Resume") if ch.isalnum())
-                st.download_button("Download Word file", file,
-                                   file_name=f"{name or 'Resume'}_Resume_Master.docx",
-                                   mime="application/vnd.openxmlformats-officedocument."
-                                        "wordprocessingml.document", type="primary")
+                st.download_button(
+                    "Download Word file", file, mime=DOCX, type="primary",
+                    file_name=f"{logic.file_stem(content.get('name', ''), 'Resume', 'Master')}.docx")
         if content.get("conflicts"):
             with card("conflicts"):
                 st.markdown(f"{badge('orange', 'Check')} **The sources disagreed on these**")
@@ -182,7 +181,194 @@ if section == "Master":
             data.save_resume_master(logic.clean_resume(content), today)
             done("Added a project: fill it in and save.")
 
-# ---- build from files ---------------------------------------------------------------
+# ---- tailor -----------------------------------------------------------------------
+
+TAILORED_ROW_HEIGHT = 96            # two narrower text columns: room for five lines
+TAILORED_COLUMNS = {
+    "text": st.column_config.TextColumn("Bullet", width=440, default=""),
+    "original": st.column_config.TextColumn("From the master", width=320, default="",
+                                            disabled=True),
+    "skills": st.column_config.TextColumn("Skills", width=150, default="",
+                                          help="Comma-separated"),
+}
+
+
+def tailored_frame(bullets: list[dict]) -> pd.DataFrame:
+    return pd.DataFrame([{"text": b["text"], "original": b["original"],
+                          "skills": logic.skills_text(b["skills"])} for b in bullets],
+                        columns=list(TAILORED_COLUMNS))
+
+
+def tailored_from(frame: pd.DataFrame) -> list[dict]:
+    return [{"text": str(row.text),
+             "original": "" if logic.blank(row.original) else str(row.original),
+             "skills": [] if logic.blank(row.skills) else logic.skills_list(row.skills)}
+            for row in frame.itertuples(index=False) if not logic.blank(row.text)]
+
+
+def tailored_roles(tailored: dict, kind: str, tailor_id: int) -> list[dict]:
+    """The grids for a version's roles (or projects); the edited roles."""
+    edited = []
+    for n, role in enumerate(tailored.get(kind, [])):
+        when = f" · {role['start']} – {role['end']}" if role.get("start") else ""
+        title = f" — {role['title']}" if role.get("title") else ""
+        st.markdown(f"**{md(role['employer'])}**{md(title)}{md(when)}")
+        frame = st.data_editor(tailored_frame(role["bullets"]), column_config=TAILORED_COLUMNS,
+                               num_rows="dynamic", hide_index=True, width="stretch",
+                               key=f"tailored_{tailor_id}_{kind}{n}", row_height=TAILORED_ROW_HEIGHT)
+        edited.append({**role, "bullets": tailored_from(frame)})
+    return edited
+
+
+if section == "Tailor":
+    master = data.resume_master()
+    content = None if master is None else master["content"]
+    apps = data.applications()
+    open_apps = apps if apps.empty else apps[apps["status"].isin(config.OPEN_STATUSES)]
+    if not content or not content.get("roles"):
+        empty("description", "No master resume yet",
+              "Build it under Build from files first: every tailored resume starts from it.")
+    elif open_apps.empty:
+        empty("inbox", "No open applications",
+              "Add the job on Applications, or move a lead there, then tailor the master to it.")
+    else:
+        ids = [int(i) for i in open_apps["application_id"]]
+        labels = {int(r.application_id): f"{r.company} — {r.role}"
+                  for r in open_apps.itertuples()}
+        if (wanted := st.session_state.pop("tailor_application", None)) in ids:
+            st.session_state["tailor_pick"] = wanted            # sent here from Applications
+        if st.session_state.get("tailor_pick") not in ids:
+            st.session_state["tailor_pick"] = ids[0]
+        picked = st.selectbox("Application", ids, format_func=lambda i: labels[i],
+                              key="tailor_pick")
+        app = data.application(picked)
+        with st.form(f"posting_{picked}"):
+            posting = st.text_area("Job posting", value=app["posting"] or "", height=200,
+                                   help="Paste the whole posting: Claude tailors to its words.")
+            if st.form_submit_button("Save posting"):
+                data.update_application(picked, posting=posting)
+                done("Posting saved.")
+        ready = ai.ready() and bool(app["posting"])
+        steer = st.text_input("Steer Claude (optional)", key=f"steer_{picked}",
+                              placeholder="e.g. lead with the Power BI work; keep the intern role")
+        if st.button("Tailor with Claude", type="primary", disabled=not ready):
+            with st.spinner("Reading the posting and choosing bullets…"):
+                try:
+                    result, usage = ai.tailor(content, app["posting"], app["company"],
+                                              app["role"], steer)
+                except ai.AIError as problem:
+                    st.error(str(problem))
+                else:
+                    tailored = logic.clean_tailored(result)
+                    data.add_tailored(picked, tailored, steer, usage.model, today)
+                    data.log_ai_usage("tailor", usage.model, usage.input_tokens,
+                                      usage.output_tokens, usage.cost_usd, today)
+                    bump_round("tailor_version")
+                    counts = logic.tailored_counts(tailored)
+                    done(f"Tailored for {app['company']}: "
+                         f"{logic.plural(counts['bullets'], 'bullet')}, {counts['covered']} of "
+                         f"{counts['keywords']} keywords covered. Cost ${usage.cost_usd:.2f}.")
+        if not ai.ready():
+            st.caption("Needs the Claude key (see Build from files).")
+        elif not app["posting"]:
+            st.caption("Paste and save the job posting first.")
+        else:
+            st.caption("One Claude call picks and rewords the master's bullets for this "
+                       "posting, writes the cover letter and lists what it changed. About "
+                       "30 cents. Each click adds a version; earlier ones stay.")
+
+        versions = data.tailored_versions(picked)
+        if versions.empty:
+            st.caption("No tailored version yet.")
+        else:
+            version_ids = [int(i) for i in versions["tailor_id"]]
+            version_labels = {
+                int(r.tailor_id): f"Version {r.version} · {logic.when(r.created_on, today)}"
+                + ("" if logic.blank(r.notes) else f" · {r.notes}") for r in versions.itertuples()}
+            if len(version_ids) > 1:
+                tailor_id = st.selectbox("Version", version_ids, key=round_key("tailor_version"),
+                                         format_func=lambda i: version_labels[i])
+            else:
+                tailor_id = version_ids[0]
+            row = data.tailored(tailor_id)
+            tailored = row["content"]
+            counts = logic.tailored_counts(tailored)
+            unmatched = (f", {counts['unmatched']} without a master original"
+                         if counts["unmatched"] else "")
+            st.caption(f"{logic.plural(counts['bullets'], 'bullet')}: {counts['kept']} as on the "
+                       f"master, {counts['reworded']} reworded{unmatched} · {counts['covered']} "
+                       f"of {counts['keywords']} keywords covered · {row['model']}.")
+            template = data.resume_template()
+            name = content.get("name", "")
+            if template is None:
+                st.caption("Downloads need the master resume's Word file as the template "
+                           "(Build from files).")
+            else:
+                try:
+                    resume_file = docx_io.build(template,
+                                                logic.tailored_export(content, tailored))
+                    letter_file = docx_io.letter(
+                        template, name, logic.contact_line(content),
+                        [logic.long_date(today)]
+                        + logic.letter_paragraphs(tailored.get("cover_letter", "")))
+                except ValueError as problem:
+                    st.warning(f"Couldn't lay out the Word files: {problem}")
+                else:
+                    resume_col, letter_col = st.columns(2)
+                    resume_col.download_button(
+                        "Download tailored resume", resume_file, mime=DOCX, type="primary",
+                        file_name=f"{logic.file_stem(name, 'Resume', app['company'])}.docx",
+                        width="stretch")
+                    letter_col.download_button(
+                        "Download cover letter", letter_file, mime=DOCX, width="stretch",
+                        file_name=f"{logic.file_stem(name, 'CoverLetter', app['company'])}.docx")
+            if tailored.get("fit_notes"):
+                with card(f"fit-{tailor_id}"):
+                    st.markdown(f"{badge('blue', 'Fit')} {md(tailored['fit_notes'])}")
+            if tailored.get("keywords"):
+                st.markdown("**Keywords from the posting**  \n" + " ".join(
+                    badge("green" if k["covered"] else "orange", k["term"])
+                    for k in tailored["keywords"]))
+                st.caption("Green: shown on this resume. Orange: not shown; add it only if "
+                           "it's true of you.")
+            if tailored.get("changes"):
+                with card(f"changes-{tailor_id}"):
+                    st.markdown(f"{badge('gray', 'Changes')} **What changed from the master, "
+                                "and why**")
+                    for item in tailored["changes"]:
+                        st.markdown(f"- {md(item)}")
+            with st.form(f"tailored_{tailor_id}"):
+                st.markdown("**Experience**")
+                roles = tailored_roles(tailored, "roles", tailor_id)
+                projects = []
+                if tailored.get("projects"):
+                    st.markdown("**Personal projects**")
+                    projects = tailored_roles(tailored, "projects", tailor_id)
+                st.markdown("**Skills**")
+                skills = st.data_editor(
+                    pd.DataFrame(tailored.get("skill_groups", []), columns=["name", "skills"]),
+                    column_config={"name": "Group", "skills": st.column_config.TextColumn(
+                        "Skills", width="large")},
+                    num_rows="dynamic", hide_index=True, key=f"tailored_{tailor_id}_skills",
+                    width="stretch")
+                st.markdown("**Cover letter**")
+                letter_text = st.text_area("Cover letter", value=tailored.get("cover_letter", ""),
+                                           height=360, label_visibility="collapsed")
+                saved = st.form_submit_button("Save", type="primary")
+            if saved:
+                edited = {**tailored, "roles": roles, "projects": projects,
+                          "skill_groups": [r for r in skills.fillna("").to_dict("records")
+                                           if str(r.get("name", "")).strip()],
+                          "cover_letter": letter_text}
+                data.save_tailored(tailor_id, logic.clean_tailored(edited))
+                done("Saved.")
+            if delete_button("version", f"tailored_{tailor_id}"):
+                data.delete_tailored(tailor_id)
+                bump_round("tailor_version")
+                done("Removed that version.")
+
+
+# ---- build from files ---------------------------------------------------------
 
 KIND_LABELS = {"resume": "The master resume (Word)", "history": "Project history (Word)",
                "projects": "Projects spreadsheet (CSV)", "other": "Something else to read"}

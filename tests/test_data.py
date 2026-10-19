@@ -388,3 +388,24 @@ def test_claude_usage_adds_up_from_a_date():
     assert data.ai_usage_since(date(2026, 10, 1)) == (1, 0.184)
     assert data.ai_usage_since(date(2026, 9, 1)) == (2, 0.208)
     assert data.ai_usage_since(date(2027, 1, 1)) == (0, 0.0)
+
+
+def test_a_posting_and_tailored_versions_live_with_the_application():
+    acme = data.company_id_for("Acme", TODAY)
+    app_id = data.add_application(acme, "Analyst", "saved", TODAY)
+    data.update_application(app_id, posting="  We need SQL.  ")
+    assert data.application(app_id)["posting"] == "We need SQL."
+    first = data.add_tailored(app_id, {"roles": [], "cover_letter": "Dear"}, "  ", "m-1", TODAY)
+    second = data.add_tailored(app_id, {"roles": [1]}, "lead with SQL", "m-1", TODAY)
+    versions = data.tailored_versions(app_id)
+    assert versions["version"].tolist() == [2, 1]
+    assert versions["tailor_id"].tolist() == [second, first]
+    assert versions["notes"].iloc[0] == "lead with SQL" and versions["notes"].isna().tolist() == [
+        False, True]
+    assert data.tailored(first)["content"] == {"roles": [], "cover_letter": "Dear"}
+    data.save_tailored(first, {"roles": [], "cover_letter": "Dear Team"})
+    assert data.tailored(first)["content"]["cover_letter"] == "Dear Team"
+    data.delete_tailored(second)
+    assert data.tailored_versions(app_id)["version"].tolist() == [1]
+    data.delete_application(app_id)                       # takes its versions with it
+    assert data.tailored(first) is None

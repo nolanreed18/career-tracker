@@ -4,6 +4,7 @@ ANTHROPIC_API_KEY (.env locally, the app's secrets on Community Cloud) and
 is never printed. Pure apart from the API itself: no database, no Streamlit
 widgets (the key lookup mirrors db.py's secrets fallback)."""
 
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -37,6 +38,37 @@ Rules:
 - Education and skill groups come from the master resume as written.
 - Projects are personal or academic projects, each like a role with
   employer = the project's name and title "".
+"""
+
+
+TAILOR_SYSTEM = """You tailor a person's master resume to one job posting and write the
+cover letter. The master is given as data: roles with every bullet, printed
+(in_master true) or waiting in the pool, with the skills each proves.
+Rules:
+- Every bullet comes from the master, printed or pool: choose the ones that
+  best prove what the posting asks for, most relevant first within each
+  role. Put the master's text in original, word for word.
+- Reword only to mirror the posting's own terms and to tighten. Keep every
+  fact, number, tool and employer as the master states them; never add a
+  skill, tool, date or result the master lacks. A bullet left as it is has
+  text equal to original.
+- Keep each role's employer, title, location and dates exactly, and the
+  roles' order. Drop a role only when nothing in it serves the posting, and
+  never the current or most recent role.
+- One page, like the master: about as many bullets as the master prints.
+- skill_groups: the master's groups with the relevant skills first; keep
+  anything the posting mentions, add nothing the master lacks.
+- keywords: the posting's 10 to 20 requirements and terms a screener would
+  search for, each marked covered when the tailored resume shows it, with
+  where it shows.
+- changes: one line per bullet reworded, swapped in from the pool or
+  dropped, and per skills change, with the reason.
+- fit_notes: for the person only, three or four sentences: the strongest
+  matches and the honest gaps.
+- cover_letter: three or four short paragraphs from greeting ("Dear Hiring
+  Team" unless the posting names someone) to a sign-off with the person's
+  name; specific to this company and role; built only on facts from the
+  master; plain and confident, no clichés; under 300 words.
 """
 
 
@@ -115,6 +147,25 @@ def ping() -> str:
     return f"Connected: {model.display_name}"
 
 
+def _parse(system: str, prompt: str, shape) -> tuple[dict, Usage]:
+    """One structured-output call: the answer as a dict in the given pydantic
+    shape (validated by the SDK) and what it cost. Refusals and API errors
+    become AIError with a plain message."""
+    try:
+        response = client().messages.parse(
+            model=config.AI_MODEL, max_tokens=config.AI_MAX_TOKENS, system=system,
+            messages=[{"role": "user", "content": prompt}],
+            output_format=shape, output_config={"effort": "high"})
+    except anthropic.APIError as exc:
+        raise AIError(_explain(exc)) from None
+    if response.stop_reason == "refusal":
+        raise AIError("Claude declined this request.")
+    if response.parsed_output is None:
+        raise AIError("Claude's answer didn't fit the expected shape; try again.")
+    usage = Usage(response.model, response.usage.input_tokens, response.usage.output_tokens)
+    return response.parsed_output.model_dump(), usage
+
+
 def structure_resume(sources: dict[str, str]) -> tuple[dict, Usage]:
     """The master resume as data (resume_schema.Resume) from the uploaded
     files' text, keyed by kind ("resume" must be present), and what the call
@@ -125,16 +176,26 @@ def structure_resume(sources: dict[str, str]) -> tuple[dict, Usage]:
              for kind, text in sources.items()]
     prompt = ("Structure these documents into the resume schema. The one of kind "
               "\"resume\" is the master resume.\n\n" + "\n\n".join(parts))
-    try:
-        response = client().messages.parse(
-            model=config.AI_MODEL, max_tokens=config.AI_MAX_TOKENS, system=SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
-            output_format=resume_schema.Resume, output_config={"effort": "high"})
-    except anthropic.APIError as exc:
-        raise AIError(_explain(exc)) from None
-    if response.stop_reason == "refusal":
-        raise AIError("Claude declined this request.")
-    if response.parsed_output is None:
-        raise AIError("Claude's answer didn't fit the resume shape; try again.")
-    usage = Usage(response.model, response.usage.input_tokens, response.usage.output_tokens)
-    return response.parsed_output.model_dump(), usage
+    return _parse(SYSTEM, prompt, resume_schema.Resume)
+
+
+def master_for_prompt(master: dict) -> dict:
+    """The master as Claude needs it for tailoring: roles, projects, skill
+    groups and education; no contact details, no conflicts."""
+    return {key: master.get(key, []) for key in ("roles", "projects", "skill_groups",
+                                                 "education")}
+
+
+def tailor(master: dict, posting: str, company: str, role: str,
+           notes: str = "") -> tuple[dict, Usage]:
+    """The master tailored to one posting (resume_schema.Tailored as a dict:
+    chosen and reworded bullets, skills, keyword coverage, the list of
+    changes, the cover letter) and what the call cost. One call."""
+    if not posting.strip():
+        raise AIError("Paste the job posting first: Claude tailors to its words.")
+    prompt = (f"<master>\n{json.dumps(master_for_prompt(master), indent=1)}\n</master>\n\n"
+              f"<posting company=\"{company}\" role=\"{role}\">\n{posting.strip()}\n</posting>\n\n")
+    if notes.strip():
+        prompt += f"<notes from=\"the person\">\n{notes.strip()}\n</notes>\n\n"
+    prompt += "Tailor the master resume to this posting and write the cover letter."
+    return _parse(TAILOR_SYSTEM, prompt, resume_schema.Tailored)

@@ -38,6 +38,7 @@ TABLES = [
     ("resume_sources", "source_id"),
     ("resume_master", "profile_id"),
     ("ai_usage", "usage_id"),
+    ("tailored_resumes", "tailor_id"),
 ]
 
 

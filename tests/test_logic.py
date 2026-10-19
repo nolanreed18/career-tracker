@@ -418,3 +418,48 @@ def test_clean_resume_tidies_and_counts():
     assert not logic.prints({"bullets": [{"in_master": False}]}) and not logic.prints({})
     assert logic.skills_text(["A", "B"]) == "A, B" and logic.skills_list(" A, B ,") == ["A", "B"]
     assert logic.month_start(date(2026, 10, 19)) == date(2026, 10, 1)
+
+
+def test_a_tailored_resume_is_cleaned_counted_and_exported_in_the_masters_shape():
+    tailored = {
+        "fit_notes": " Strong on SQL. ", "roles": [
+            {"employer": " Acme ", "title": "Analyst", "location": "Denver", "start": "Jan 2025",
+             "end": "Present", "bullets": [
+                 {"text": "  Did x  for finance ", "original": "Did x", "skills": [" SQL ", ""]},
+                 {"text": "Did y", "original": "Did y", "skills": []},
+                 {"text": "   ", "original": "Did z", "skills": []},
+                 {"text": "New one", "original": "", "skills": []}]},
+            {"employer": "Beta", "title": "PM", "location": "", "start": "", "end": "",
+             "bullets": []}],
+        "projects": [], "skill_groups": [{"name": "Languages", "skills": "SQL, Python"},
+                                         {"name": " ", "skills": "x"}],
+        "keywords": [{"term": "SQL", "covered": True, "where": "Did x"},
+                     {"term": "Tableau", "covered": False, "where": ""},
+                     {"term": " ", "covered": False, "where": ""}],
+        "changes": [" Reworded Did x. ", ""], "cover_letter": " Dear Team,\n\nI did x. ",
+    }
+    cleaned = logic.clean_tailored(tailored)
+    assert [r["employer"] for r in cleaned["roles"]] == ["Acme"]      # Beta had no bullets
+    assert [b["text"] for b in cleaned["roles"][0]["bullets"]] == ["Did x for finance", "Did y",
+                                                                   "New one"]
+    assert cleaned["roles"][0]["bullets"][0]["skills"] == ["SQL"]
+    assert len(cleaned["skill_groups"]) == 1 and len(cleaned["keywords"]) == 2
+    assert cleaned["changes"] == ["Reworded Did x."] and cleaned["fit_notes"] == "Strong on SQL."
+    assert logic.tailored_counts(cleaned) == {"bullets": 3, "kept": 1, "reworded": 1,
+                                              "unmatched": 1, "keywords": 2, "covered": 1}
+    master = {"name": "Sample", "email": "s@example.com", "phone": "", "linkedin": "in/s",
+              "education": [{"school": "U", "when": "2020", "degree": "BS"}],
+              "roles": [{"employer": "Old"}], "skill_groups": [{"name": "Old", "skills": "x"}]}
+    export = logic.tailored_export(master, cleaned)
+    assert export["name"] == "Sample" and export["education"] == master["education"]
+    assert [r["employer"] for r in export["roles"]] == ["Acme"]
+    assert export["roles"][0]["bullets"][0] == {"text": "Did x for finance", "skills": ["SQL"],
+                                                "source": "tailored", "rank": 3,
+                                                "in_master": True}
+    assert export["skill_groups"] == [{"name": "Languages", "skills": "SQL, Python"}]
+    assert logic.clean_resume(export)["roles"][0]["bullets"][0]["in_master"]   # printable
+    assert logic.letter_paragraphs(cleaned["cover_letter"]) == ["Dear Team,", "I did x."]
+    assert logic.letter_paragraphs("Hi,\r\n\r\nOne  two\nthree.\n\n\nSincerely,\nSam\n") == [
+        "Hi,", "One two\nthree.", "Sincerely,\nSam"]                 # a line break kept
+    assert logic.file_stem("Nolan Hughes", "Resume", "Acme Corp.") == "NolanHughes_Resume_AcmeCorp"
+    assert logic.file_stem("", "") == "Resume"
