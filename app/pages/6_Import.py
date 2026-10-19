@@ -3,6 +3,10 @@
 import pandas as pd
 import streamlit as st
 
+import fresh
+
+fresh.check()                   # after a redeploy: no stale copies of the app's modules
+
 import data
 import logic
 from ui import md, setup, status_label

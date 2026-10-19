@@ -6,6 +6,10 @@ interview answers are made from.
 
 import streamlit as st
 
+import fresh
+
+fresh.check()                   # after a redeploy: no stale copies of the app's modules
+
 import config
 import data
 import logic
