@@ -7,6 +7,7 @@ import pytest
 
 import config
 import data
+import logic
 
 TODAY = date(2026, 10, 14)
 
@@ -170,7 +171,6 @@ def test_a_setting_is_saved_over_and_unset_means_the_default():
 # ---- job leads --------------------------------------------------------------
 
 def leads(*rows):
-    import logic
     return [logic.clean_lead({"source": "LinkedIn", "company": "Acme", **r})[0] for r in rows]
 
 
@@ -194,6 +194,29 @@ def test_a_job_seen_before_from_any_site_is_skipped():
     assert data.add_leads(again, TODAY) == (1, 2)
     assert data.job_leads("new")["title"].tolist() == ["Engineer", "Analyst", "Scientist"]
     assert len(data.known_lead_keys()) == 3
+
+
+def test_category_ratings_are_stored_with_the_lead():
+    lead, _ = logic.clean_lead({"source": "Dice", "title": "A", "company": "B",
+                                "fit": {"role": 8, "industry": 4}, "deal_breaker": True})
+    data.add_leads([lead], TODAY)
+    stored = data.job_leads().iloc[0]
+    assert float(stored["fit_score"]) == config.DEAL_BREAKER_CAP
+    assert stored["fit_detail"] == {"ratings": {"role": 8, "industry": 4}, "deal_breaker": True}
+
+
+def test_migrate_brings_an_older_job_leads_table_up_to_date(database):
+    with psycopg.connect(database, autocommit=True) as conn:        # the shape before 2026-10
+        conn.execute("alter table job_leads drop column fit_detail")
+        conn.execute("alter table job_leads alter column fit_score type smallint")
+    data.migrate()
+    data.migrate()                                                   # safe to run again
+    with psycopg.connect(database, autocommit=True) as conn:
+        columns = dict(conn.execute("""
+            select column_name, data_type from information_schema.columns
+            where table_name = 'job_leads' and column_name in ('fit_score', 'fit_detail')
+        """).fetchall())
+    assert columns == {"fit_score": "numeric", "fit_detail": "jsonb"}
 
 
 def test_a_dismissed_lead_stays_dismissed_when_seen_again():

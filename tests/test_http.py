@@ -76,7 +76,9 @@ def test_the_daily_review_works_over_https(neon, tmp_path, capsys):
     assert "added 0, skipped 2" in capsys.readouterr().out
     assert leads.main(["known"]) == 0
     assert capsys.readouterr().out.splitlines() == ["acme|analyst|", "beta|data engineer|"]
-    assert all("$" in q or "select" in q.lower() for q, _ in neon)
+    sent = [q for q, _ in neon]
+    assert all("$" in q or "select" in q.lower() or q in data.MIGRATIONS for q in sent)
+    assert all(statement in sent for statement in data.MIGRATIONS)   # one at a time, no DDL skipped
 
 
 def test_a_cloud_session_switches_leads_py_to_https(database, monkeypatch, capsys):

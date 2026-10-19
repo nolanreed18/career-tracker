@@ -397,17 +397,58 @@ def clean_lead(row: dict) -> tuple[dict | None, str | None]:
         parsed = pd.to_datetime(posted, errors="coerce")
         posted = None if pd.isna(parsed) else parsed.date()
     lead["posted_on"] = posted
-    score = value(row.get("fit_score"))
-    if score is not None:
-        try:
-            score = int(round(float(score)))
-        except (TypeError, ValueError):
-            return None, f"fit_score isn't a number: {row}"
-        if not 1 <= score <= 10:
-            return None, f"fit_score must be 1-10: {row}"
-    lead["fit_score"] = score
+    ratings = row.get("fit")
+    if ratings:
+        if not isinstance(ratings, dict):
+            return None, f"fit must be an object of category ratings: {row}"
+        unknown = set(ratings) - set(config.FIT_CATEGORIES)
+        if unknown:
+            return None, f"unknown fit categories {sorted(unknown)}: {row}"
+        cleaned = {}
+        for category, rating in ratings.items():
+            try:
+                rating = float(rating)
+            except (TypeError, ValueError):
+                return None, f"fit rating for {category} isn't a number: {row}"
+            if not 1 <= rating <= 10:
+                return None, f"fit rating for {category} must be 1-10: {row}"
+            cleaned[category] = int(round(rating))
+        deal_breaker = str(row.get("deal_breaker", "")).strip().lower() in ("true", "yes", "1")
+        lead["fit_score"] = fit_total(cleaned, deal_breaker)
+        lead["fit_detail"] = {"ratings": cleaned, "deal_breaker": deal_breaker}
+    else:
+        score = value(row.get("fit_score"))
+        if score is not None:
+            try:
+                score = round(float(score), 1)
+            except (TypeError, ValueError):
+                return None, f"fit_score isn't a number: {row}"
+            if not 1 <= score <= 10:
+                return None, f"fit_score must be 1-10: {row}"
+        lead["fit_score"] = score
+        lead["fit_detail"] = None
     lead["dedupe_key"] = lead_key(lead["company"], lead["title"], lead["location"])
     return lead, None
+
+
+def fit_total(ratings: dict, deal_breaker: bool = False) -> float | None:
+    """The score from category ratings (1-10 each): their weighted average
+    (config.FIT_CATEGORIES), to one decimal, capped at DEAL_BREAKER_CAP when a
+    deal-breaker applies. Categories not rated are left out of the average.
+    None when nothing is rated."""
+    weights = {k: config.FIT_CATEGORIES[k][1] for k in ratings if k in config.FIT_CATEGORIES}
+    if not weights:
+        return None
+    total = sum(ratings[k] * w for k, w in weights.items()) / sum(weights.values())
+    if deal_breaker:
+        total = min(total, config.DEAL_BREAKER_CAP)
+    return round(total, 1)
+
+
+def fit_text(score) -> str:
+    """'9' or '8.3': a score without a needless '.0'."""
+    score = value(score)
+    return "" if score is None else f"{float(score):g}"
 
 
 def fit_tier(score) -> str | None:
@@ -416,6 +457,7 @@ def fit_tier(score) -> str | None:
     score = value(score)
     if score is None:
         return None
+    score = float(score)
     return ("strong" if score >= config.STRONG_FIT
             else "maybe" if score >= config.MAYBE_FIT else "weak")
 

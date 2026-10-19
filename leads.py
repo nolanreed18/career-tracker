@@ -1,14 +1,18 @@
 """The daily job-alert review's way into the database.
 
     python leads.py profile          what you're looking for, as JSON
+    python leads.py rubric           the scoring categories, weights and thresholds, as JSON
     python leads.py known            every stored lead's dedupe key, one per line
     python leads.py add leads.json   add scored leads; prints how many were new
 
 leads.json is a list of objects with source, title and company (required),
 and any of location, work_mode, salary (text like "$120k-$140k") or
-salary_min / salary_max, job_url, posted_on (YYYY-MM-DD), fit_score (1-10)
-and fit_reason. The same job seen before, from any site, is skipped. Nothing
-is added unless every row is valid.
+salary_min / salary_max, job_url, posted_on (YYYY-MM-DD), fit_reason, and
+the scoring: fit, an object rating each rubric category 1-10 (e.g.
+{"role": 9, "industry": 6, ...}), plus deal_breaker (true/false). The score
+is worked out from those. A plain fit_score (1-10) is also accepted. The
+same job seen before, from any site, is skipped. Nothing is added unless
+every row is valid.
 """
 
 import json
@@ -18,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "app"))
 
+import config  # noqa: E402
 import data  # noqa: E402
 import logic  # noqa: E402
 
@@ -29,6 +34,16 @@ def main(argv: list[str]) -> int:
     if command == "profile":
         profile = data.job_profile()
         print(json.dumps(profile or {}, default=str, indent=2))
+        return 0
+    if command == "rubric":
+        print(json.dumps({
+            "categories": [{"key": key, "label": label, "weight": weight, "what": what}
+                           for key, (label, weight, what) in config.FIT_CATEGORIES.items()],
+            "score": "weighted average of the ratings, to one decimal",
+            "deal_breaker_cap": config.DEAL_BREAKER_CAP,
+            "strong_fit": config.STRONG_FIT,
+            "maybe_fit": config.MAYBE_FIT,
+        }, indent=2))
         return 0
     if command == "known":
         for key in sorted(data.known_lead_keys()):
@@ -49,6 +64,7 @@ def main(argv: list[str]) -> int:
         if problems:
             print("nothing added:\n" + "\n".join(problems), file=sys.stderr)
             return 1
+        data.migrate()                     # the live tables may predate a column
         added, skipped = data.add_leads(leads, data.today())
         print(f"added {added}, skipped {skipped} already seen")
         return 0

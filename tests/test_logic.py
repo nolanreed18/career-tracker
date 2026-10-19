@@ -3,6 +3,7 @@
 from datetime import date, time
 
 import pandas as pd
+import pytest
 
 import config
 import logic
@@ -243,6 +244,38 @@ def test_a_lead_without_a_company_or_with_a_bad_score_is_refused():
                              "fit_score": "great"})[0] is None
     lead, _ = logic.clean_lead({"source": "Dice", "title": "A", "company": "B"})
     assert lead["fit_score"] is None and lead["salary_min"] is None
+
+
+def test_fit_total_is_the_weighted_average_to_one_decimal_capped_by_a_deal_breaker():
+    assert sum(w for _, w, _ in config.FIT_CATEGORIES.values()) == pytest.approx(1)
+    tens = {k: 10 for k in config.FIT_CATEGORIES}
+    assert logic.fit_total(tens) == 10
+    assert logic.fit_total({"role": 9, "industry": 6, "location": 10, "pay": 8, "level": 7,
+                            "extras": 6}) == 8.1
+    assert logic.fit_total({"role": 8, "pay": 4}) == 6.8          # missing ones left out
+    assert logic.fit_total(tens, deal_breaker=True) == config.DEAL_BREAKER_CAP
+    assert logic.fit_total({"role": 2}, deal_breaker=True) == 2
+    assert logic.fit_total({}) is None
+    assert logic.fit_text(9) == "9" and logic.fit_text(8.3) == "8.3" and logic.fit_text(None) == ""
+
+
+def test_clean_lead_scores_from_category_ratings():
+    row = {"source": "Dice", "title": "A", "company": "B",
+           "fit": {"role": 9, "industry": 6, "location": 10, "pay": 8, "level": 7, "extras": 6},
+           "deal_breaker": False}
+    lead, problem = logic.clean_lead(row)
+    assert problem is None and lead["fit_score"] == 8.1
+    assert lead["fit_detail"] == {"ratings": row["fit"], "deal_breaker": False}
+    capped, _ = logic.clean_lead({**row, "deal_breaker": "true"})
+    assert capped["fit_score"] == config.DEAL_BREAKER_CAP
+    assert capped["fit_detail"]["deal_breaker"] is True
+    base = {"source": "Dice", "title": "A", "company": "B"}
+    assert logic.clean_lead({**base, "fit": {"vibes": 9}})[0] is None
+    assert logic.clean_lead({**base, "fit": {"role": 11}})[0] is None
+    assert logic.clean_lead({**base, "fit": {"role": "great"}})[0] is None
+    assert logic.clean_lead({**base, "fit": [9]})[0] is None
+    plain, _ = logic.clean_lead({**base, "fit_score": "7.5"})     # the old way still works
+    assert plain["fit_score"] == 7.5 and plain["fit_detail"] is None
 
 
 def test_fit_tiers():

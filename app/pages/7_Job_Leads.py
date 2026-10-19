@@ -6,12 +6,10 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import card, empty, fit_badge, md, sections, setup
+from ui import card, empty, fit_badge, fit_breakdown, md, sections, setup
 
 setup("Job Leads", "From your alert emails, scored for fit every morning")
 
-if message := st.session_state.pop("flash", None):
-    st.success(message)
 
 today = data.today()
 
@@ -67,6 +65,8 @@ if section == "Inbox":
                     title = f"[{title}]({url.replace(')', '%29').replace(' ', '%20')})"
                 st.markdown(f"{fit + ' · ' if fit else ''}**{title}** — {md(lead.company)}")
                 st.caption(md(describe(lead)))
+                if breakdown := fit_breakdown(lead.fit_detail):
+                    st.caption(breakdown)
                 if logic.value(lead.fit_reason):
                     st.markdown(md(lead.fit_reason))
                 move_col, dismiss_col = st.columns(2, wrap=False)
@@ -89,13 +89,14 @@ if section == "Dismissed":
         empty("delete_sweep", "Nothing dismissed", "Leads you dismiss wait here in case you change your mind.")
     for lead in dismissed.itertuples():
         lead_id = int(lead.lead_id)
-        text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
-        fit = fit_badge(lead.fit_score)
-        text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}** — "
-                          f"{md(lead.company)}  \n{md(describe(lead))}")
-        if button_col.button("Restore", key=f"restore_{lead_id}"):
-            data.set_lead_status(lead_id, "new")
-            done(f"Restored {lead.title} — {lead.company}.")
+        with card(f"dismissed-{lead_id}"):
+            text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
+            fit = fit_badge(lead.fit_score)
+            text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}** — "
+                              f"{md(lead.company)}  \n{md(describe(lead))}")
+            if button_col.button("Restore", key=f"restore_{lead_id}", width="stretch"):
+                data.set_lead_status(lead_id, "new")
+                done(f"Restored {lead.title} — {lead.company}.")
 
 # ---- profile ----------------------------------------------------------------
 
@@ -136,3 +137,13 @@ if section == "What I'm looking for":
             work_modes=", ".join(work_modes), min_salary=min_salary, must_haves=must_haves,
             nice_to_haves=nice_to_haves, deal_breakers=deal_breakers, about_me=about_me)
         done("Saved. The next daily review will use it.")
+
+    with card("scoring"):
+        st.markdown("**How scoring works**")
+        st.markdown("The daily review rates each job 1–10 on every category below, against "
+                    "what's written above; the score is the weighted average, to one decimal.")
+        st.markdown("\n".join(f"- **{label}** ({weight:.0%}): {what}"
+                              for label, weight, what in config.FIT_CATEGORIES.values()))
+        st.caption(f"Any deal-breaker caps the score at {config.DEAL_BREAKER_CAP:g}. "
+                   f"{config.STRONG_FIT}+ is a strong fit, {config.MAYBE_FIT}+ is worth a look. "
+                   "The weights live in app/config.py.")

@@ -12,6 +12,7 @@ exists" -- so a brand-new database gets its tables the first time the app
 opens, with nothing to run by hand.
 """
 
+import json
 import sys
 import threading
 import time
@@ -29,6 +30,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import db  # noqa: E402
+import logic  # noqa: E402
 
 PING_AFTER_IDLE_S = 20
 
@@ -48,12 +50,29 @@ def today() -> date:
 
 # ---- connection -------------------------------------------------------------
 
+# Changes to tables that already existed on the live database, each safe to
+# run again (schema.sql only creates what's missing). _connection() runs them
+# after schema.sql; leads.py runs them over HTTPS, one statement at a time.
+MIGRATIONS = [
+    # 2026-10: fit scores to one decimal, with the category ratings behind them.
+    "alter table job_leads add column if not exists fit_detail jsonb",
+    """do $$ begin
+        if (select data_type from information_schema.columns
+            where table_name = 'job_leads' and column_name = 'fit_score') <> 'numeric' then
+            alter table job_leads alter column fit_score type numeric(3,1);
+        end if;
+    end $$""",
+]
+
+
 def _connection() -> psycopg.Connection:
     global _conn, _last_used, _schema_ready
     if _conn is None or _conn.closed:
         _conn = db.connect(autocommit=True)
         if not _schema_ready:
             _conn.execute((ROOT / "schema.sql").read_text(encoding="utf-8"))
+            for statement in MIGRATIONS:
+                _conn.execute(statement)
             _schema_ready = True
     elif time.monotonic() - _last_used >= PING_AFTER_IDLE_S:
         try:
@@ -111,6 +130,14 @@ def _transaction():
         conn = _connection()
         with conn.transaction(), conn.cursor() as cur:
             yield cur
+
+
+def migrate() -> None:
+    """Bring an existing database's tables up to date (MIGRATIONS), for the
+    HTTPS path, which never runs schema.sql."""
+    with _cursor() as cur:
+        for statement in MIGRATIONS:
+            cur.execute(statement)
 
 
 def _read(query: str, params=None) -> pd.DataFrame:
@@ -507,12 +534,16 @@ def add_leads(leads: list[dict], on: date) -> tuple[int, int]:
     with _transaction() as cur:
         for row in leads:
             row = {k: _clean(v) for k, v in row.items()}
+            if isinstance(row.get("fit_detail"), dict):
+                row["fit_detail"] = json.dumps(row["fit_detail"])   # sent as text, cast below
             columns = [*row, "found_on", "status"]
+            values = [sql.SQL("{}::jsonb").format(sql.Placeholder(c)) if c == "fit_detail"
+                      else sql.Placeholder(c) for c in columns]
             cur.execute(sql.SQL("""
                 insert into job_leads ({}) values ({})
                 on conflict (dedupe_key) do nothing
             """).format(sql.SQL(", ").join(map(sql.Identifier, columns)),
-                        sql.SQL(", ").join(map(sql.Placeholder, columns))),
+                        sql.SQL(", ").join(values)),
                 {**row, "found_on": on, "status": "new"})
             added += cur.rowcount
     return added, len(leads) - added
@@ -537,7 +568,7 @@ def move_lead_to_applications(lead_id: int, on: date) -> int:
         row = lead(lead_id)
         notes = None
         if row["fit_score"] is not None:
-            notes = f"Fit {row['fit_score']}/10" + (
+            notes = f"Fit {logic.fit_text(row['fit_score'])}/10" + (
                 f": {row['fit_reason']}" if row["fit_reason"] else "")
         application_id = add_application(
             company_id_for(row["company"], on), row["title"], "saved", on,

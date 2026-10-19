@@ -72,7 +72,8 @@ def seed() -> int:
         {"source": "LinkedIn", "title": "Analytics Engineer", "company": "Gamma",
          "salary": "$120k-$140k", "fit_score": 9, "fit_reason": "Strong dbt and SQL match",
          "job_url": "https://example.com/1"},
-        {"source": "Dice", "title": "BI Developer", "company": "Delta", "fit_score": 4},
+        {"source": "Dice", "title": "BI Developer", "company": "Delta",
+         "fit": {"role": 5, "industry": 3, "location": 8, "pay": 5, "level": 6, "extras": 4}},
     )], TODAY)
     return quiet
 
@@ -100,6 +101,8 @@ def test_home_lists_what_needs_attention_most_urgent_first():
 
 def test_adding_an_application_makes_the_company_and_opens_it():
     at = run(PAGES[0])
+    assert not at.text_input                      # the form waits behind its button
+    click(at, "Add an application")
     widget(at.text_input, "…or a new company").set_value("Gamma")
     widget(at.text_input, "Role").set_value("Engineer")
     widget(at.number_input, "Salary from ($/yr)").set_value(120000)
@@ -113,10 +116,12 @@ def test_adding_an_application_makes_the_company_and_opens_it():
 
 def test_an_application_needs_a_company_and_a_role():
     at = run(PAGES[0])
+    click(at, "Add an application")
     widget(at.text_input, "Role").set_value("Engineer")
     click(at, "Add application")
     assert at.error[0].value == "Pick a company or type a new one."
     assert data.applications().empty
+    assert widget(at.button, "Close")             # the form stayed open with its error
 
 
 def test_logging_an_update_records_history_and_clears_the_step():
@@ -174,6 +179,7 @@ def test_sections_stay_put_after_an_action():
     seed()
     at = run(PAGES[2])
     widget(at.radio, "Section").set_value("Contacts").run()
+    click(at, "Add a contact")
     widget(at.text_input, "Name").set_value("Ana")
     click(at, "Add contact")
     assert at.success[0].value == "Added Ana."
@@ -312,6 +318,17 @@ def test_leads_are_listed_best_fit_first_and_home_points_to_them():
     assert "BI Developer" in titles[1]
     home = run(HOME)
     assert any("2 new job leads to review, 1 strong" in m.value for m in home.markdown)
+
+
+def test_a_lead_shows_its_category_ratings_and_the_rules_are_explained():
+    seed()
+    at = run(LEADS)
+    assert any("Role 5 · Industry 3 · Location 8" in c.value for c in at.caption)
+    titles = [m.value for m in at.markdown if "BI Developer" in m.value]
+    assert ":blue-badge[5.1/10]" in titles[0]
+    widget(at.radio, "Section").set_value("What I'm looking for").run()
+    assert any("How scoring works" in m.value for m in at.markdown)
+    assert any("Role match** (35%)" in m.value for m in at.markdown)
 
 
 def test_dismissing_a_lead_moves_it_to_dismissed_and_restore_brings_it_back():
