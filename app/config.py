@@ -78,9 +78,9 @@ PAY_SOURCES = ["listed", "estimated"]
 # How the daily review looks for pay when the alert doesn't give it, shown
 # under "How scoring works" and printed by `leads.py rubric`.
 PAY_RESEARCH = (
-    "When the alert gives no pay, the review searches the web for the posting's own "
-    "range or a recent range for that title at that company (or that title in that "
-    "area), and stores it as an estimate, saying where it came from. Jobs that are a "
+    "When the alert gives no pay, the review opens the posting for its own range, or "
+    "searches the web for a recent range for that title at that company (or that "
+    "title in that area) and stores it as an estimate, saying where it came from. Jobs that are a "
     "poor fit on role or location are left unresearched. Estimates and missing pay "
     "are marked with a yellow warning, so a listed range is never confused with a guess."
 )
