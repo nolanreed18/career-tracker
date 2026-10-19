@@ -18,7 +18,8 @@ import docx_io
 import logic
 from ui import badge, card, delete_button, empty, md, sections, setup
 
-setup("Resume", "Your master resume as data: built from your files, tailored per job")
+setup("Resume", "Your master resume as data: built from your files, tailored per job",
+      wide=True)
 
 today = data.today()
 
@@ -28,19 +29,25 @@ def done(message: str) -> None:
     st.rerun()
 
 
+if goto := st.session_state.pop("resume_goto", None):   # an action that moves the eye
+    st.session_state["section_resume"] = goto
 section = sections("resume", ["Master", "Build from files"])
 
 # ---- master ---------------------------------------------------------------------
 
-BULLET_COLUMNS = {
-    "text": st.column_config.TextColumn("Bullet", width="large", required=True),
-    "skills": st.column_config.TextColumn("Skills", help="Comma-separated"),
-    "in_master": st.column_config.CheckboxColumn("On master", help="Printed on the master "
-                                                 "resume; unticked bullets wait in the pool"),
-    "rank": st.column_config.NumberColumn("Rank", min_value=1, max_value=config.BULLET_RANK_MAX,
-                                          step=1, help="1 filler … 5 quantified, big scope"),
-    "source": st.column_config.TextColumn("Source", disabled=True),
+BULLET_COLUMNS = {                  # a new row starts ticked, rank 3, from "manual"
+    "in_master": st.column_config.CheckboxColumn("On master", width=100, default=True,
+                                                 help="Printed on the master resume; "
+                                                 "unticked bullets wait in the pool"),
+    "rank": st.column_config.NumberColumn("Rank", width=60, min_value=1,
+                                          max_value=config.BULLET_RANK_MAX, step=1, default=3,
+                                          help="1 filler … 5 quantified, big scope"),
+    "text": st.column_config.TextColumn("Bullet", width=480, default=""),
+    "skills": st.column_config.TextColumn("Skills", width=160, default="",
+                                          help="Comma-separated"),
+    "source": st.column_config.TextColumn("Source", width=80, default="manual", disabled=True),
 }
+BULLET_ROW_HEIGHT = 80              # tall enough for a bullet to wrap onto four lines
 
 
 def bullets_frame(bullets: list[dict]) -> pd.DataFrame:
@@ -55,10 +62,11 @@ def bullets_from(frame: pd.DataFrame) -> list[dict]:
     for row in frame.itertuples(index=False):
         if logic.blank(row.text):
             continue
-        rows.append({"text": str(row.text), "skills": logic.skills_list(row.skills),
-                     "in_master": bool(row.in_master) if not logic.blank(row.in_master) else True,
-                     "rank": int(row.rank) if not logic.blank(row.rank) else 3,
-                     "source": str(row.source) if not logic.blank(row.source) else "manual"})
+        rows.append({"text": str(row.text),
+                     "skills": [] if logic.blank(row.skills) else logic.skills_list(row.skills),
+                     "in_master": False if logic.blank(row.in_master) else bool(row.in_master),
+                     "rank": 3 if logic.blank(row.rank) else int(row.rank),
+                     "source": "manual" if logic.blank(row.source) else str(row.source)})
     return rows
 
 
@@ -78,7 +86,7 @@ def role_editor(role: dict, key: str, project: bool) -> dict:
         end = end_col.text_input("To", role["end"], key=f"{key}_end")
     frame = st.data_editor(bullets_frame(role["bullets"]), column_config=BULLET_COLUMNS,
                            num_rows="dynamic", hide_index=True, key=f"{key}_bullets",
-                           width="stretch")
+                           width="stretch", row_height=BULLET_ROW_HEIGHT)
     return {"employer": name, "title": title, "location": location, "start": start, "end": end,
             "bullets": bullets_from(frame)}
 
@@ -91,11 +99,13 @@ if section == "Master":
               "Upload your resume under Build from files and let Claude turn it into data.")
     else:
         counts = logic.resume_counts(content)
-        st.caption(f"{logic.plural(counts['roles'], 'role')}, "
-                   f"{logic.plural(counts['projects'], 'project')}, "
-                   f"{counts['master_bullets']} bullets on the master and "
-                   f"{counts['pool_bullets']} more in the pool. Last saved "
-                   f"{master['updated_on']:%b %d, %Y}.")
+        st.caption(f"{counts['master_roles']} of {logic.plural(counts['roles'], 'role')} and "
+                   f"{counts['master_projects']} of "
+                   f"{logic.plural(counts['projects'], 'project')} print on the master, with "
+                   f"{counts['master_bullets']} bullets; {counts['pool_bullets']} more wait in "
+                   f"the pool. Last saved {master['updated_on']:%b %d, %Y}.",
+                   help="A role or project prints when at least one of its bullets is ticked "
+                        "On master; the rest stay in the data for tailoring.")
         template = data.resume_template()
         if template is None:
             st.caption("Export needs the master resume's Word file: choose it as the template "
@@ -116,7 +126,8 @@ if section == "Master":
                 st.markdown(f"{badge('orange', 'Check')} **The sources disagreed on these**")
                 for item in content["conflicts"]:
                     st.markdown(f"- {md(item)}")
-                st.caption("Fix the right value below, then clear this list by saving.")
+                st.caption("Fix the right value below; the list stays until you tick "
+                           "“Clear the conflicts list” and save.")
 
         with st.form("resume_master"):
             st.markdown("**Contact**")
@@ -144,7 +155,8 @@ if section == "Master":
             st.markdown("**Personal projects**")
             projects = [role_editor(project, f"project{n}", project=True)
                         for n, project in enumerate(content.get("projects", []))]
-            keep_conflicts = st.checkbox("Keep the conflicts list", value=False)
+            clear_conflicts = st.checkbox("Clear the conflicts list: I've checked them",
+                                          value=False, disabled=not content.get("conflicts"))
             saved = st.form_submit_button("Save", type="primary")
         if saved:
             edited = {
@@ -154,7 +166,7 @@ if section == "Master":
                               if str(r.get("school", "")).strip()],
                 "skill_groups": [r for r in skills.fillna("").to_dict("records")
                                  if str(r.get("name", "")).strip()],
-                "conflicts": content.get("conflicts", []) if keep_conflicts else [],
+                "conflicts": [] if clear_conflicts else content.get("conflicts", []),
             }
             data.save_resume_master(logic.clean_resume(edited), today)
             done("Saved.")
@@ -180,7 +192,7 @@ if section == "Build from files":
     with status_col:
         if ai.ready():
             st.markdown(f"{badge('green', 'Key found')} Claude: `{config.AI_MODEL}`")
-            if st.button("Test connection", help="A free call that spends no credit"):
+            if st.button("Test connection (free)"):
                 try:
                     st.success(ai.ping())
                 except ai.AIError as problem:
@@ -268,6 +280,7 @@ if section == "Build from files":
                 data.log_ai_usage("structure resume", usage.model, usage.input_tokens,
                                   usage.output_tokens, usage.cost_usd, today)
                 counts = logic.resume_counts(content)
+                st.session_state["resume_goto"] = "Master"
                 done(f"Built the master: {logic.plural(counts['roles'], 'role')}, "
                      f"{counts['master_bullets']} bullets on it, {counts['pool_bullets']} in "
                      f"the pool, {logic.plural(len(content.get('conflicts', [])), 'conflict')} "

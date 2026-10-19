@@ -489,8 +489,8 @@ def test_resume_page_shows_the_master_and_exports_it_in_the_templates_layout():
     data.save_resume_master({**docx_fixture.SAMPLE, "conflicts": ["GPA: 3.88 in the history, "
                                                                   "3.90 on the resume"]}, TODAY)
     at = run(RESUME)
-    assert any("2 roles, 1 project, 3 bullets on the master and 1 more in the pool" in c.value
-               for c in at.caption)
+    assert any("2 of 2 roles and 1 of 1 project print on the master, with 3 bullets; 1 more "
+               "wait in the pool" in c.value for c in at.caption)
     assert any("GPA: 3.88" in m.value for m in at.markdown)
     assert widget(at.text_input, "Name").value == "Sample Person"
     assert [w.value for w in at.text_input if w.label == "Employer"] == ["Acme Energy",
@@ -503,9 +503,30 @@ def test_resume_page_shows_the_master_and_exports_it_in_the_templates_layout():
     widget(at.text_input, "Name").set_value("Sample P. Person").run()
     click(at, "Save")
     master = data.resume_master()
-    assert master["content"]["name"] == "Sample P. Person" and master["content"]["conflicts"] == []
+    assert master["content"]["name"] == "Sample P. Person"
+    assert master["content"]["conflicts"] == ["GPA: 3.88 in the history, 3.90 on the resume"]
+    widget(at.checkbox, "Clear the conflicts list: I've checked them").check().run()
+    click(at, "Save")
+    assert data.resume_master()["content"]["conflicts"] == []
     click(at, "Add a role")
     assert len(data.resume_master()["content"]["roles"]) == 3
+
+
+def test_building_the_master_lands_on_the_master_section(monkeypatch):
+    import ai
+    import docx_fixture
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    data.add_resume_source("Resume.docx", "resume", "## Sample", docx_fixture.template(), TODAY)
+    monkeypatch.setattr(ai, "structure_resume",
+                        lambda texts: (docx_fixture.SAMPLE, ai.Usage("claude-opus-5-5", 6000, 8000)))
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Build from files").run()
+    click(at, "Build the master with Claude")
+    assert widget(at.radio, "Section").value == "Master"
+    assert any("Built the master: 2 roles, 3 bullets on it, 1 in the pool, 0 conflicts to check. "
+               "Cost $0.18." in s.value for s in at.success)
+    assert data.resume_master()["content"]["name"] == "Sample Person"
+    assert data.ai_usage_since(TODAY)[0] == 1
 
 
 def test_resume_sources_are_listed_with_the_template_marked_and_can_be_removed():

@@ -52,7 +52,8 @@ database, hosted free on Streamlit Community Cloud.
   files into a pool, skills tagged, and any disagreements between files
   listed for you to settle. The **Master** section is where you edit it
   (roles, bullets, which bullets print, education, skills, projects) and
-  download it as a Word file in your own layout. Every Claude call is a
+  download it as a Word file in your own layout; a role or project prints
+  only when at least one of its bullets is ticked **On master**. Every Claude call is a
   button you click, costs about 30 cents, and is counted on the page.
 
 Settings you might want to change (the 14-day follow-up, the 7-day interview

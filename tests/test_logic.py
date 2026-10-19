@@ -412,7 +412,9 @@ def test_clean_resume_tidies_and_counts():
     assert bullet == [{"text": "Did x", "skills": ["SQL"], "source": "manual",
                        "rank": config.BULLET_RANK_MAX, "in_master": True}]
     assert cleaned["education"] == [] and len(cleaned["skill_groups"]) == 1
-    assert logic.resume_counts(cleaned) == {"roles": 1, "projects": 0, "master_bullets": 1,
+    assert logic.resume_counts(cleaned) == {"roles": 1, "projects": 0, "master_roles": 1,
+                                            "master_projects": 0, "master_bullets": 1,
                                             "pool_bullets": 0}
+    assert not logic.prints({"bullets": [{"in_master": False}]}) and not logic.prints({})
     assert logic.skills_text(["A", "B"]) == "A, B" and logic.skills_list(" A, B ,") == ["A", "B"]
     assert logic.month_start(date(2026, 10, 19)) == date(2026, 10, 1)

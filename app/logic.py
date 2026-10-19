@@ -646,17 +646,26 @@ def clean_resume(content: dict) -> dict:
     return resume.model_dump()
 
 
+def prints(role: dict) -> bool:
+    """Whether a role or project goes on the printed master: it does when at
+    least one of its bullets is ticked in_master."""
+    return any(b.get("in_master") for b in role.get("bullets", []))
+
+
 def resume_counts(content: dict) -> dict:
-    """How much the master holds: roles, projects, bullets on the master and
-    bullets waiting in the pool."""
+    """How much the master holds: roles and projects (and how many of them
+    print), bullets on the master and bullets waiting in the pool."""
     on, pool = 0, 0
-    for role in list(content.get("roles", [])) + list(content.get("projects", [])):
+    roles, projects = list(content.get("roles", [])), list(content.get("projects", []))
+    for role in roles + projects:
         for bullet in role.get("bullets", []):
             if bullet.get("in_master"):
                 on += 1
             else:
                 pool += 1
-    return {"roles": len(content.get("roles", [])), "projects": len(content.get("projects", [])),
+    return {"roles": len(roles), "projects": len(projects),
+            "master_roles": sum(prints(r) for r in roles),
+            "master_projects": sum(prints(p) for p in projects),
             "master_bullets": on, "pool_bullets": pool}
 
 

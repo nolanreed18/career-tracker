@@ -23,9 +23,15 @@ Rules:
   result and the scale when the source gives them, under 40 words.
   Merge the same project from several sources into one bullet, keeping
   the fullest numbers.
+- Work that a master bullet already covers gets no pool bullet, however
+  differently another document words it: the pool holds only work the
+  master leaves out, or a distinct extra result. No two bullets in the
+  whole answer describe the same work.
 - Never invent a fact, a number, a tool or an employer. If two sources
   disagree (a date, a GPA, a figure), keep the master resume's version and
   list the disagreement in conflicts, naming both values.
+- Dates are "Mon YYYY" (Jan 2024) or "Present". When a source is vague
+  ("late 2024"), use the nearest month and name the guess in conflicts.
 - skills lists the tools and skills the bullet shows (short names).
 - rank: 5 = quantified result and wide scope, 3 = solid, 1 = filler.
 - Education and skill groups come from the master resume as written.
