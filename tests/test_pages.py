@@ -163,6 +163,15 @@ def test_a_company_in_use_is_not_deleted():
     assert "Acme" in data.companies()["name"].tolist()
 
 
+def test_tables_show_blanks_not_none_for_missing_values():
+    seed()
+    data.add_application(data.company_id_for("Acme", TODAY), "Saved one", "saved", TODAY)
+    companies = run(PAGES[2]).dataframe[0].value
+    assert companies["industry"].tolist() == ["", ""]           # not None, not "None"
+    apps = run(PAGES[0]).dataframe[0].value
+    assert apps["applied_on"].isna().sum() == 1                  # the one still Saved
+
+
 def test_a_deleted_company_leaves_the_dropdown():
     seed()
     data.add_company("Solo", TODAY)

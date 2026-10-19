@@ -172,6 +172,18 @@ def by_source(apps: pd.DataFrame, events: pd.DataFrame) -> pd.DataFrame:
 
 # ---- formatting -------------------------------------------------------------
 
+def for_display(frame: pd.DataFrame, dates: tuple[str, ...] = ()) -> pd.DataFrame:
+    """A copy for st.dataframe: missing text shows as blank rather than "None",
+    and the named date columns become real dates (blank when missing)."""
+    out = frame.copy()
+    for column in out.columns:
+        if column in dates:
+            out[column] = pd.to_datetime(out[column], errors="coerce")
+        elif out[column].dtype == object or pd.api.types.is_string_dtype(out[column]):
+            out[column] = out[column].fillna("")
+    return out
+
+
 def plural(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 

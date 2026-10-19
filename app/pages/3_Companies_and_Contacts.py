@@ -70,8 +70,8 @@ if section == "Companies":
               "They're added for you with each application, or add one above.")
     else:
         st.dataframe(
-            companies[["name", "industry", "location", "applications"]], hide_index=True,
-            width="stretch",
+            logic.for_display(companies[["name", "industry", "location", "applications"]]),
+            hide_index=True, width="stretch",
             column_config={"name": "Company", "industry": "Industry", "location": "Location",
                            "applications": "Applications"})
         picked = st.selectbox("Edit a company", company_names, index=None,
@@ -146,7 +146,8 @@ if section == "Contacts":
         empty("group", "No contacts yet", "Recruiters, hiring managers and referrals go here.")
     else:
         st.dataframe(
-            contacts[["name", "company", "title", "kind", "last_contacted_on"]],
+            logic.for_display(contacts[["name", "company", "title", "kind", "last_contacted_on"]],
+                              dates=("last_contacted_on",)),
             hide_index=True, width="stretch",
             column_config={
                 "name": "Name", "company": "Company", "title": "Title",

@@ -49,8 +49,10 @@ st.caption(md("Matched columns: " + ", ".join(f"{header} → {field}"
 preview = pd.DataFrame(rows)
 preview["status"] = preview["status"].map(status_label)
 preview["salary"] = [logic.salary_range(r["salary_min"], r["salary_max"]) for r in rows]
-st.dataframe(preview[["company", "role", "status", "applied_on", "location", "source", "salary"]],
-             hide_index=True, width="stretch")
+st.dataframe(logic.for_display(
+    preview[["company", "role", "status", "applied_on", "location", "source", "salary"]],
+    dates=("applied_on",)), hide_index=True, width="stretch",
+    column_config={"applied_on": st.column_config.DateColumn("Applied", format="MMM D, YYYY")})
 
 if st.button(f"Import {logic.plural(len(rows), 'application')}", type="primary"):
     added, skipped = data.import_applications(rows, data.today())

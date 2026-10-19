@@ -278,6 +278,16 @@ def test_clean_lead_scores_from_category_ratings():
     assert plain["fit_score"] == 7.5 and plain["fit_detail"] is None
 
 
+def test_for_display_blanks_missing_text_and_keeps_dates():
+    frame = pd.DataFrame({"name": ["Acme", "Beta"], "industry": [None, "Energy"],
+                          "applied_on": [date(2026, 10, 1), None], "n": [1.0, None]})
+    shown = logic.for_display(frame, dates=("applied_on",))
+    assert shown["industry"].tolist() == ["", "Energy"]
+    assert shown["applied_on"].dt.date.tolist()[0] == date(2026, 10, 1)
+    assert pd.isna(shown["applied_on"].iloc[1]) and pd.isna(shown["n"].iloc[1])
+    assert pd.isna(frame["industry"].iloc[0])                     # the original is untouched
+
+
 def test_fit_tiers():
     assert logic.fit_tier(config.STRONG_FIT) == "strong"
     assert logic.fit_tier(config.MAYBE_FIT) == "maybe"

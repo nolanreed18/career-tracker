@@ -148,10 +148,10 @@ if section == "Job history":
               "have something to be compared against.")
     else:
         st.dataframe(
-            jobs.assign(ended_on=jobs["ended_on"].map(lambda d: "now" if logic.blank(d)
-                                                      else f"{d:%b %Y}"),
-                        started_on=jobs["started_on"].map(lambda d: f"{d:%b %Y}"))[
-                ["employer", "title", "started_on", "ended_on", "base_salary", "bonus"]],
+            logic.for_display(jobs.assign(
+                ended_on=jobs["ended_on"].map(lambda d: "now" if logic.blank(d) else f"{d:%b %Y}"),
+                started_on=jobs["started_on"].map(lambda d: f"{d:%b %Y}"))[
+                ["employer", "title", "started_on", "ended_on", "base_salary", "bonus"]]),
             hide_index=True, width="stretch",
             column_config={
                 "employer": "Employer", "title": "Title", "started_on": "From",
