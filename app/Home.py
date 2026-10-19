@@ -58,7 +58,7 @@ st.caption(f"Applications with no update for {config.FOLLOW_UP_DAYS} days are fl
 
 add_col, win_col = st.columns(2)
 if add_col.button("Add application", type="primary", width="stretch"):
-    st.session_state["add_application_open"] = True
+    st.session_state["open_add_application"] = True
     st.switch_page("pages/1_Applications.py")
 if win_col.button("Log a win", width="stretch"):
     st.switch_page("pages/4_Career_Log.py")

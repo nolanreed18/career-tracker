@@ -33,12 +33,17 @@ only they can do (accounts, secrets, clicking merge).
   every delete goes through `ui.delete_button()` (tick box first); a "pick
   one" dropdown whose options can change takes `ui.round_key()` and
   `ui.bump_round()` after a delete, or it keeps showing the old choice.
-- Knobs in `app/config.py`. **Status / kind lists are repeated in `schema.sql`
-  CHECKs**: change both (tests fail if they drift). Add a table → add it to
-  `backup.TABLES` and the `TABLES` list in `conftest.py`.
+- Knobs in `app/config.py`, including `FIT_CATEGORIES` (the lead-scoring
+  categories and weights; `logic.fit_total` does the maths, the review rates).
+  **Status / kind lists are repeated in `schema.sql` CHECKs**: change both
+  (tests fail if they drift). Add a table → add it to `backup.TABLES` and the
+  `TABLES` list in `conftest.py`.
 - `schema.sql` must stay re-runnable (`if not exists`): `data.py` runs it on the
-  first connection of each process. Changing an existing
-  table needs a migration script for the live database; tell the owner to run it.
+  first connection of each process. Changing an existing table → also add an
+  idempotent statement to `data.MIGRATIONS` (run after schema.sql, and by
+  `leads.py add` over HTTPS), so the live database updates itself.
+- Add forms sit behind `ui.disclosure()` buttons (server-side open state), not
+  `st.expander`, which snaps shut when a click lands mid-load.
 - Pass plain Python values to psycopg, not numpy (`int(x)` on DataFrame ids).
   Put user text into `st.markdown` through `ui.md()`: `$` would become maths.
 - Forms reset by bumping a counter in their key; set a widget's session state

@@ -5,12 +5,10 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import delete_button, empty, md, optional, setup
+from ui import delete_button, disclosure, empty, md, optional, setup
 
 setup("Interviews", "What's coming up, and how past ones went")
 
-if message := st.session_state.pop("flash", None):
-    st.success(message)
 
 today = data.today()
 FORMATS = ["phone", "video", "onsite", "take-home"]
@@ -28,7 +26,7 @@ def done(message: str) -> None:
 
 apps = data.applications()
 open_apps = apps[apps["status"].isin(config.OPEN_STATUSES)] if not apps.empty else apps
-with st.expander("Add an interview", icon=":material/add:"):
+if disclosure("Add an interview", "add_interview"):
     if open_apps.empty:
         st.caption("Add an application first; interviews belong to one.")
     else:

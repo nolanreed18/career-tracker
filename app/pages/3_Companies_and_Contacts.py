@@ -5,12 +5,21 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import bump_round, delete_button, empty, index_of, md, optional, round_key, sections, setup
+from ui import (
+    bump_round,
+    delete_button,
+    disclosure,
+    empty,
+    index_of,
+    md,
+    optional,
+    round_key,
+    sections,
+    setup,
+)
 
 setup("Companies & Contacts", "Who you're looking at, and who you know there")
 
-if message := st.session_state.pop("flash", None):
-    st.success(message)
 
 today = data.today()
 
@@ -32,7 +41,7 @@ section = sections("companies", ["Companies", "Contacts"])
 # ---- companies --------------------------------------------------------------
 
 if section == "Companies":
-    with st.expander("Add a company", icon=":material/add:"):
+    if disclosure("Add a company", "add_company"):
         n = st.session_state.get("company_round", 0)
         with st.form(f"add_company_{n}"):
             name = st.text_input("Name")
@@ -105,7 +114,7 @@ if section == "Contacts":
     kinds = optional(config.CONTACT_KINDS)
     company_choices = optional(company_names)
 
-    with st.expander("Add a contact", icon=":material/add:"):
+    if disclosure("Add a contact", "add_contact"):
         n = st.session_state.get("contact_round", 0)
         with st.form(f"add_contact_{n}"):
             name = st.text_input("Name")

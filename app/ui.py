@@ -52,6 +52,9 @@ def setup(title: str, subtitle: str | None = None) -> None:
     st.title(title)
     if subtitle:
         st.html(theme.subtitle(subtitle))
+    if message := st.session_state.pop("flash", None):   # what the last action did
+        st.success(message)
+        st.toast(message)                                # also where the eye is
 
 
 # ---- the look ---------------------------------------------------------------
@@ -106,6 +109,19 @@ def sign_out() -> None:
 def card(key: str):
     """A bordered container styled as a card (the stylesheet finds the key)."""
     return st.container(border=True, key=f"card-{key}")
+
+
+def disclosure(label: str, key: str) -> bool:
+    """A button that opens and closes a form below it: True while open. The
+    state lives on the server, so a click that lands while the page is still
+    loading can't snap it shut (an st.expander forgets it was open then)."""
+    flag = f"open_{key}"
+    is_open = bool(st.session_state.get(flag, False))
+    if st.button("Close" if is_open else label, key=f"toggle_{key}",
+                 icon=":material/close:" if is_open else ":material/add:", width="stretch"):
+        st.session_state[flag] = not is_open
+        st.rerun()
+    return is_open
 
 
 def sections(key: str, names: list[str]) -> str:
@@ -249,7 +265,20 @@ def fit_badge(score) -> str:
     """':green-badge[8/10]' for a strong fit, blue for a maybe, grey for a
     weak one, '' when unscored."""
     tier = logic.fit_tier(score)
-    return "" if tier is None else badge(FIT_COLORS[tier], f"{int(logic.value(score))}/10")
+    return "" if tier is None else badge(FIT_COLORS[tier], f"{logic.fit_text(score)}/10")
+
+
+def fit_breakdown(detail) -> str:
+    """'Role 9 · Industry 6 · …' from a lead's fit_detail, with a red badge
+    when a deal-breaker capped the score; '' when there is no breakdown."""
+    detail = logic.value(detail)
+    if not isinstance(detail, dict) or not detail.get("ratings"):
+        return ""
+    ratings = detail["ratings"]
+    parts = [f"{label.split(' ')[0]} {ratings[key]}"
+             for key, (label, _, _) in config.FIT_CATEGORIES.items() if key in ratings]
+    text = " · ".join(parts)
+    return f"{badge('red', 'Deal-breaker')} {text}" if detail.get("deal_breaker") else text
 
 
 def kind_badge(kind: str) -> str:

@@ -9,12 +9,21 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import bump_round, card, delete_button, empty, kind_badge, md, round_key, sections, setup
+from ui import (
+    bump_round,
+    card,
+    delete_button,
+    disclosure,
+    empty,
+    kind_badge,
+    md,
+    round_key,
+    sections,
+    setup,
+)
 
 setup("Career Log", "Wins, skills and feedback, written down in time")
 
-if message := st.session_state.pop("flash", None):
-    st.success(message)
 
 today = data.today()
 KIND_ICONS = {"win": "🏆", "skill": "🛠️", "certification": "📜", "feedback": "💬",
@@ -105,7 +114,7 @@ if section == "Log":
 # ---- job history ------------------------------------------------------------
 
 if section == "Job history":
-    with st.expander("Add a job", icon=":material/add:"):
+    if disclosure("Add a job", "add_position"):
         n = st.session_state.get("position_round", 0)
         with st.form(f"add_position_{n}"):
             employer = st.text_input("Employer")

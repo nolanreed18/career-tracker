@@ -137,7 +137,8 @@ create table if not exists job_leads (
     job_url         text,
     posted_on       date,
     found_on        date not null,
-    fit_score       smallint check (fit_score between 1 and 10),
+    fit_score       numeric(3,1) check (fit_score between 1 and 10),
+    fit_detail      jsonb,             -- {"ratings": {category: 1-10}, "deal_breaker": bool}
     fit_reason      text,
     status          text not null check (status in ('new', 'moved', 'dismissed')),
     application_id  bigint references applications on delete set null,

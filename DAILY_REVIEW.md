@@ -48,34 +48,34 @@ the inbox, never in this public repository.
    Within this run, keep one copy of a job seen on several sites (prefer the
    link from the company or LinkedIn).
 
-4. **Read what's wanted and what's known:**
+4. **Read what's wanted, how to score, and what's known:**
 
    ```
    python3 leads.py profile
+   python3 leads.py rubric
    python3 leads.py known
    ```
 
-   `known` lists the jobs already stored as `company|title|location`
-   (lower-case, punctuation dropped). Skip jobs already there.
+   `profile` is what the owner is looking for. `rubric` lists the scoring
+   categories with their weights and what each one means. `known` lists the
+   jobs already stored as `company|title|location` (lower-case, punctuation
+   dropped). Skip jobs already there.
 
-5. **Score each new job 1–10** against the profile, with a one-sentence
-   reason (under 25 words) naming the best match and the biggest gap:
-   - **9–10**: the target role, hands-on building, preferred industry (oil &
-     gas, chemicals, refining, midstream, energy), Denver area or remote, pay
-     at or above the floor. The profile's "ideal example" is a 10.
-   - **7–8**: strong role match with one gap (other industry, Colorado
-     Springs, pay unknown).
-   - **4–6**: related role or several gaps.
-   - **1–3**: wrong role, entry level, outside Colorado and not remote, or
-     any deal-breaker (contract / contract-to-hire, heavy travel, pure Excel
-     reporting, pay well under the floor).
-   Say so in the reason when a requirement looks like a stretch (e.g. "asks
-   for 5+ years oil & gas operations").
+5. **Rate each new job on every rubric category, 1–10**, against the
+   profile only (never your own idea of a good job): 10 means the profile's
+   ideal for that category, 5 means middling or unknown, 1 means the
+   opposite of what it asks for. Then set `deal_breaker` to true if any of
+   the profile's deal-breakers applies (the score is then capped, whatever
+   the ratings say). Write a one-sentence `fit_reason` (under 25 words)
+   naming the strongest category and the weakest, and say so when a
+   requirement looks like a stretch. The score itself is worked out from
+   the ratings by `leads.py add`: a weighted average, to one decimal.
 
 6. **Save them.** Write a JSON list to the scratchpad, one object per job:
    `source`, `title`, `company` (required), and `location`, `work_mode`,
-   `salary`, `job_url`, `posted_on` (YYYY-MM-DD), `fit_score`, `fit_reason`.
-   Then:
+   `salary`, `job_url`, `posted_on` (YYYY-MM-DD), `fit` (an object with a
+   1–10 rating for every rubric category, keyed as `rubric` lists them),
+   `deal_breaker` (true/false) and `fit_reason`. Then:
 
    ```
    python3 leads.py add <that file>
@@ -87,8 +87,9 @@ the inbox, never in this public repository.
 7. **Email the owner one digest**, from the connected Gmail to that same
    job-search address:
    - Subject: `Job leads <Mon D>: N new, S strong`
-   - Strong fits (7+) first, best first: score, title — company, location,
-     pay, the reason, and the link. Then a one-line count of the rest.
+   - Strong fits (7+) first, best first: score (one decimal), title —
+     company, location, pay, the reason, and the link. Then a one-line
+     count of the rest.
    - End with the app link the scheduled task's prompt gives (Job Leads
      page).
    - No new jobs: send a two-line "nothing new today" note instead.

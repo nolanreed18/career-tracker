@@ -9,6 +9,7 @@ from ui import (
     STATUS_HELP,
     bump_round,
     delete_button,
+    disclosure,
     empty,
     index_of,
     md,
@@ -22,8 +23,6 @@ from ui import (
 
 setup("Applications", "Add one, find one, keep it up to date")
 
-if message := st.session_state.pop("flash", None):
-    st.success(message)
 
 today = data.today()
 companies = data.companies()
@@ -46,8 +45,7 @@ def done(message: str, form_counter: str | None = None) -> None:
 # ---- add --------------------------------------------------------------------
 
 add_round = st.session_state.get("add_round", 0)
-with st.expander("Add an application", icon=":material/add:",
-                 expanded=st.session_state.get("add_application_open", False)):
+if disclosure("Add an application", "add_application"):
     with st.form(f"add_application_{add_round}"):
         company = st.selectbox("Company", optional(company_names),
                                help="Pick one you've used before, or type a new one below.")
@@ -86,7 +84,7 @@ with st.expander("Add an application", icon=":material/add:",
                 job_url=job_url, location=location, work_mode=work_mode or None,
                 source=source, salary_min=salary_min, salary_max=salary_max,
                 next_action=next_action, next_action_on=next_action_on, notes=notes)
-            st.session_state.pop("add_application_open", None)
+            st.session_state["open_add_application"] = False
             st.session_state[round_key("pick_application")] = new_id
             done(f"Added {role.strip()} at {name}.", "add_round")
 
@@ -125,7 +123,7 @@ else:
         hide_index=True, width="stretch",
         column_config={
             "company": "Company", "status": "Status",
-            "role": st.column_config.TextColumn("Role", width="medium"),
+            "role": st.column_config.TextColumn("Role", width="large"),
             "applied_on": st.column_config.DateColumn("Applied", format="MMM D"),
             "next_action_on": st.column_config.DateColumn("Next step", format="MMM D"),
             "last_update_on": st.column_config.DateColumn("Updated", format="MMM D"),
