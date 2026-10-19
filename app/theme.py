@@ -65,6 +65,7 @@ PALETTES = {
         "dataframeBorderColor": "#e2e8f0",
         "dataframeHeaderBackgroundColor": "#f1f5f9",
         "violetColor": "#8b5cf6",
+        "yellowColor": "#ca8a04",
         "sidebar.backgroundColor": "#f1f5f9",
         "sidebar.secondaryBackgroundColor": "#ffffff",
     },
@@ -80,6 +81,7 @@ PALETTES = {
         "dataframeBorderColor": "#1e293b",
         "dataframeHeaderBackgroundColor": "#0f172a",
         "violetColor": "#c084fc",
+        "yellowColor": "#facc15",
         "sidebar.backgroundColor": "#0d121e",
         "sidebar.secondaryBackgroundColor": "#111827",
     },
@@ -92,12 +94,18 @@ TOKENS = {
         "card": "#ffffff", "card-hover": "#f1f5f9", "border": "#e2e8f0",
         "border-strong": "#94a3b8", "blue": "#2563eb", "cyan": "#0e7490",
         "table-head": "#f1f5f9",
+        # The selected pill: a soft wash of the gradient is enough on white.
+        "selected": "linear-gradient(135deg, rgba(37, 99, 235, 0.28), rgba(6, 182, 212, 0.18))",
+        "selected-border": "rgba(6, 182, 212, 0.6)",
     },
     DARK: {
         "text": "#f8fafc", "text2": "#94a3b8", "muted": "#64748b",
         "card": "#111827", "card-hover": "#1c263d", "border": "#1e293b",
         "border-strong": "#475569", "blue": "#3b82f6", "cyan": "#22d3ee",
         "table-head": "#0f172a",
+        # On a dark card the wash vanishes: a stronger fill and a bright edge.
+        "selected": "linear-gradient(135deg, rgba(37, 99, 235, 0.65), rgba(6, 182, 212, 0.45))",
+        "selected-border": "rgba(34, 211, 238, 0.9)",
     },
 }
 
@@ -211,8 +219,8 @@ def stylesheet(mode: str) -> str:
 [data-testid="stRadioOption"] p {{ font-size: 0.8rem; }}
 [data-testid="stRadioOption"]:hover {{ background: var(--ct-card-hover); color: var(--ct-text); }}
 [data-testid="stRadioOption"][data-selected="true"],
-[data-testid="stRadioOption"]:has(input:checked) {{ background: {GRADIENT_SOFT};
-    border-color: rgba(6, 182, 212, 0.6); color: var(--ct-text);
+[data-testid="stRadioOption"]:has(input:checked) {{ background: var(--ct-selected);
+    border-color: var(--ct-selected-border); color: var(--ct-text);
     box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.15); }}
 
 /* Sub-pages (ui.sections): bigger pills, a hairline under the row. */

@@ -63,7 +63,7 @@ def lead_card(lead) -> None:
         if url := logic.job_link(lead.job_url):       # the title opens the posting
             title = f"[{title}]({url.replace(')', '%29').replace(' ', '%20')})"
         head = " · ".join(part for part in (new, fit) if part)
-        st.markdown(f"{head + ' · ' if head else ''}**{title}** — {md(lead.company)}")
+        st.markdown(f"{head + ' · ' if head else ''}**{title}**\u00a0—\u00a0{md(lead.company)}")
         st.caption(f"{describe(lead)} · {pay_line(lead)}")
         if breakdown := fit_breakdown(lead.fit_detail):
             st.caption(breakdown)
@@ -109,11 +109,17 @@ if section == "Inbox":
                    + (f"; {len(stale)} stale under Stale." if len(stale) else "."))
         SHOW = {"today": "New today", "maybe": f"Worth a look ({config.MAYBE_FIT}+, any day)",
                 "strong": f"Strong only ({config.STRONG_FIT}+)", "all": "All"}
+        # The radio forgets its choice while another section is open; keep it ourselves.
+        kept = st.session_state.get("leads_show_kept", "today" if fresh.any() else "maybe")
         show = st.radio("Show", list(SHOW), horizontal=True, format_func=SHOW.get,
-                        index=0 if fresh.any() else 1, key="leads_show",
+                        index=list(SHOW).index(kept), key="leads_show",
                         label_visibility="collapsed")
+        st.session_state["leads_show_kept"] = show
         if show == "today":
             leads = leads[fresh & ~weak]                   # weak ones wait under All
+            if hidden := int((fresh & weak).sum()):
+                st.caption(f"{logic.plural(hidden, 'weak lead')} from today "
+                           f"{'is' if hidden == 1 else 'are'} under All.")
         elif show == "strong":
             leads = leads[strong]
         elif show == "maybe":
@@ -151,10 +157,9 @@ if section == "Dismissed":
             if logic.value(lead.dismiss_reason):
                 why = badge("gray", lead.dismiss_reason)
                 if logic.value(lead.dismissed_on):
-                    why += f" dismissed {logic.when(lead.dismissed_on, today)} · "
-                else:
-                    why += " · "
-            text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}** — "
+                    why += f" dismissed {logic.when(lead.dismissed_on, today)}"
+                why += "  \n"
+            text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}**\u00a0—\u00a0"
                               f"{md(lead.company)}  \n{why}{describe(lead)} · {pay_line(lead)}")
             if button_col.button("Restore", key=f"restore_{lead_id}", width="stretch"):
                 data.set_lead_status(lead_id, "new")
