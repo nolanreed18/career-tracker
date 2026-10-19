@@ -251,11 +251,61 @@ def test_migrate_rescores_leads_rated_on_pay_before_it_was_known(database):
 def test_a_dismissed_lead_stays_dismissed_when_seen_again():
     data.add_leads(leads({"title": "Analyst"}), TODAY)
     lead_id = int(data.job_leads()["lead_id"][0])
-    data.set_lead_status(lead_id, "dismissed")
+    data.set_lead_status(lead_id, "dismissed", "wrong role", TODAY)
     assert data.add_leads(leads({"title": "Analyst"}), TODAY) == (0, 1)
     assert data.job_leads("new").empty
+    gone = data.lead(lead_id)
+    assert (gone["dismiss_reason"], gone["dismissed_on"]) == ("wrong role", TODAY)
     data.set_lead_status(lead_id, "new")
     assert len(data.job_leads("new")) == 1
+    back = data.lead(lead_id)
+    assert back["dismiss_reason"] is None and back["dismissed_on"] is None
+
+
+def test_every_dismiss_reason_is_allowed_by_the_schema_and_nothing_else():
+    data.add_leads(leads({"title": "Analyst"}), TODAY)
+    lead_id = int(data.job_leads()["lead_id"][0])
+    for reason in config.DISMISS_REASONS:
+        data.set_lead_status(lead_id, "dismissed", reason, TODAY)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        data.set_lead_status(lead_id, "dismissed", "meh", TODAY)
+
+
+def test_recent_dismissals_and_strong_leads_still_waiting():
+    data.add_leads(leads({"title": "Old strong", "fit_score": 8}), date(2026, 9, 1))  # stale
+    data.add_leads(leads({"title": "Waiting", "fit_score": 7.5}), date(2026, 10, 12))
+    data.add_leads(leads({"title": "Weak", "fit_score": 5}), date(2026, 10, 12))
+    data.add_leads(leads({"title": "Today", "fit_score": 9}), TODAY)
+    data.add_leads(leads({"title": "Gone", "fit_score": 9}), date(2026, 10, 13))
+    stored = data.job_leads().set_index("title")
+    data.set_lead_status(int(stored.loc["Gone", "lead_id"]), "dismissed", "company",
+                         date(2026, 10, 13))
+    data.set_lead_status(int(stored.loc["Weak", "lead_id"]), "dismissed", "pay",
+                         date(2026, 9, 1))
+    assert data.strong_leads_waiting(TODAY)["title"].tolist() == ["Waiting"]
+    recent = data.dismissed_recently(date(2026, 10, 1))
+    assert recent["title"].tolist() == ["Gone"] and recent["dismiss_reason"][0] == "company"
+
+
+def test_migrate_rekeys_leads_stored_with_a_location(database):
+    data.add_leads(leads({"title": "Analyst", "location": "Omaha, NE"})
+                   + leads({"title": "Engineer"}), TODAY)
+    with psycopg.connect(database, autocommit=True) as conn:    # keys as stored before 2026-10
+        conn.execute("update job_leads set dedupe_key = 'acme|analyst|omaha ne' "
+                     "where title = 'Analyst'")
+        conn.execute("update job_leads set dedupe_key = 'acme|engineer|' where title = 'Engineer'")
+        conn.execute("""
+            insert into job_leads (source, title, company, location, found_on, status, dedupe_key)
+            values ('Dice', 'Analyst', 'Acme', 'Nashville, TN', %s, 'new',
+                    'acme|analyst|nashville tn')
+        """, (TODAY,))
+    data.migrate()
+    data.migrate()
+    keys = data.known_lead_keys()
+    assert len(keys) == 3 and {"acme|analyst", "acme|engineer"} <= keys
+    twin = (keys - {"acme|analyst", "acme|engineer"}).pop()
+    assert twin.startswith("acme|analyst|")                           # the twin, kept apart
+    assert data.add_leads(leads({"title": "Analyst", "location": "Denver, CO"}), TODAY) == (0, 1)
 
 
 def test_moving_a_lead_makes_a_saved_application_with_the_fit_in_its_notes():

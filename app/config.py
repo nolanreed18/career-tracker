@@ -41,6 +41,18 @@ CAREER_KINDS = ["win", "skill", "certification", "feedback", "learning"]
 # Job leads from alert emails. "moved" means it became an application.
 LEAD_STATUSES = ["new", "moved", "dismissed"]
 
+# Why a lead was dismissed. The daily review reads the recent ones as a hint
+# of what the owner doesn't want.
+DISMISS_REASONS = ["wrong role", "location", "pay", "company", "already applied", "other"]
+
+# A lead still in the inbox this many days after it arrived is stale: shown
+# under its own view, out of the way (a posting that old is usually gone).
+LEAD_STALE_DAYS = 14
+
+# How far back the daily review looks at dismissals, and how many it reads.
+DISMISSAL_DAYS = 30
+DISMISSAL_LIMIT = 30
+
 # The sites job alerts come from (DAILY_REVIEW.md reads their emails).
 LEAD_SOURCES = ["LinkedIn", "Indeed", "Glassdoor", "Built In", "Dice", "Wellfound",
                 "Welcome to the Jungle"]

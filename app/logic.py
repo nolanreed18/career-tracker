@@ -372,12 +372,60 @@ def map_import(frame: pd.DataFrame) -> tuple[list[dict], list[str]]:
 
 # ---- job leads --------------------------------------------------------------
 
-def lead_key(company, title, location=None) -> str:
-    """The same job from different sites gets the same key: company, title and
-    location, lower-cased, with punctuation and extra spaces dropped."""
-    def words(text) -> str:
-        return " ".join(re.findall(r"[a-z0-9]+", str(text or "").lower()))
-    return "|".join(words(part) for part in (company, title, location))
+def words(text) -> str:
+    """Text lower-cased with punctuation and extra spaces dropped, for
+    matching names however a site writes them."""
+    return " ".join(re.findall(r"[a-z0-9]+", str(text or "").lower()))
+
+
+def lead_key(company, title) -> str:
+    """The same job from different sites gets the same key: company and
+    title, lower-cased, with punctuation and extra spaces dropped. The
+    location is left out on purpose: sites word it differently ("Denver, CO",
+    "Denver Metropolitan Area"), and one lead per job is enough."""
+    return f"{words(company)}|{words(title)}"
+
+
+def is_stale(found_on, today: date, days: int = config.LEAD_STALE_DAYS) -> bool:
+    """A lead that arrived more than `days` ago (a posting that old is
+    usually gone)."""
+    found_on = value(found_on)
+    return found_on is not None and (today - found_on).days > days
+
+
+def split_stale(leads: pd.DataFrame, today: date) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(fresh, stale) halves of a leads frame."""
+    if leads.empty:
+        return leads, leads
+    stale = leads["found_on"].map(lambda d: is_stale(d, today))
+    return leads[~stale], leads[stale]
+
+
+def skip_list(text) -> list[str]:
+    """The profile's companies to skip, one per line or comma, normalised."""
+    if blank(text):
+        return []
+    return [w for w in (words(part) for part in re.split(r"[\n,;]+", str(text))) if w]
+
+
+def skips_company(company, skip: list[str]) -> bool:
+    """Whether a lead's company is on the skip list: the same words, or a
+    skip entry contained in the name ("robert half" matches "Robert Half
+    Technology")."""
+    name = words(company)
+    return any(entry == name or f" {entry} " in f" {name} " for entry in skip)
+
+
+def dismissal_notes(dismissed: pd.DataFrame) -> list[dict]:
+    """Recent dismissals as plain records for the daily review: title,
+    company, location, reason and date."""
+    notes = []
+    for row in dismissed.itertuples(index=False):
+        notes.append({"title": row.title, "company": row.company,
+                      "location": value(row.location), "reason": value(row.dismiss_reason),
+                      "dismissed_on": (None if blank(row.dismissed_on)
+                                       else str(row.dismissed_on))})
+    return notes
 
 
 def clean_lead(row: dict) -> tuple[dict | None, str | None]:
@@ -454,7 +502,7 @@ def clean_lead(row: dict) -> tuple[dict | None, str | None]:
                 return None, f"fit_score must be 1-10: {row}"
         lead["fit_score"] = score
         lead["fit_detail"] = None
-    lead["dedupe_key"] = lead_key(lead["company"], lead["title"], lead["location"])
+    lead["dedupe_key"] = lead_key(lead["company"], lead["title"])
     return lead, None
 
 

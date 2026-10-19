@@ -1,6 +1,7 @@
 """leads.py as the daily job-alert review runs it."""
 
 import json
+from datetime import timedelta
 
 import pytest
 
@@ -15,13 +16,22 @@ def _db(database):
     return database
 
 
-def test_profile_prints_what_youre_looking_for(capsys):
+def test_profile_prints_what_youre_looking_for_and_recent_dismissals(capsys):
     assert leads.main(["profile"]) == 0
-    assert json.loads(capsys.readouterr().out) == {}
-    data.save_job_profile(data.today(), target_roles="Data Analyst", min_salary=95000)
+    assert json.loads(capsys.readouterr().out) == {"dismissed_recently": []}
+    data.save_job_profile(data.today(), target_roles="Data Analyst", min_salary=95000,
+                          skip_companies="Robert Half")
+    data.add_leads([logic.clean_lead({"source": "Dice", "title": "Clerk", "company": "Acme",
+                                      "location": "Omaha, NE"})[0]], data.today())
+    data.set_lead_status(int(data.job_leads()["lead_id"][0]), "dismissed", "location",
+                         data.today())
     assert leads.main(["profile"]) == 0
     profile = json.loads(capsys.readouterr().out)
     assert profile["target_roles"] == "Data Analyst" and profile["min_salary"] == 95000
+    assert profile["skip_companies"] == "Robert Half"
+    assert profile["dismissed_recently"] == [{
+        "title": "Clerk", "company": "Acme", "location": "Omaha, NE", "reason": "location",
+        "dismissed_on": data.today().isoformat()}]
 
 
 def test_rubric_prints_the_scoring_categories(capsys):
@@ -53,7 +63,21 @@ def test_add_stores_new_leads_and_skips_ones_already_seen(tmp_path, capsys):
     assert leads.main(["add", str(file)]) == 0
     assert "added 0, skipped 2" in capsys.readouterr().out
     assert leads.main(["known"]) == 0
-    assert capsys.readouterr().out.splitlines() == ["acme|analyst|", "beta|data engineer|"]
+    assert capsys.readouterr().out.splitlines() == ["acme|analyst", "beta|data engineer"]
+
+
+def test_jobs_from_companies_to_skip_are_dropped(tmp_path, capsys):
+    data.save_job_profile(data.today(), target_roles="Analyst",
+                          skip_companies="Robert Half\nTEKsystems")
+    file = tmp_path / "leads.json"
+    file.write_text(json.dumps([
+        {"source": "Dice", "title": "Analyst", "company": "Robert Half Technology"},
+        {"source": "Dice", "title": "Analyst", "company": "Acme"},
+    ]))
+    assert leads.main(["add", str(file)]) == 0
+    assert "added 1, skipped 0 already seen, dropped 1 from companies to skip" in (
+        capsys.readouterr().out)
+    assert data.job_leads()["company"].tolist() == ["Acme"]
 
 
 def test_one_bad_row_means_nothing_is_added(tmp_path, capsys):
@@ -90,6 +114,9 @@ def test_digest_renders_todays_leads_and_what_needs_doing(tmp_path, capsys):
     acme = data.company_id_for("Acme", today)
     data.add_application(acme, "Data Analyst", "applied", today, next_action="Chase recruiter",
                          next_action_on=today)
+    data.add_leads([logic.clean_lead({                     # a strong lead from two days ago
+        "source": "Dice", "title": "BI Developer", "company": "Delta", "fit_score": 8.5})[0]],
+        today - timedelta(days=2))
     run = tmp_path / "run.json"
     run.write_text(json.dumps({"app_url": "https://tracker.example.app/", "emails_read": 3,
                                "sources": {"LinkedIn": 3}, "already_known": 1}))
@@ -100,6 +127,8 @@ def test_digest_renders_todays_leads_and_what_needs_doing(tmp_path, capsys):
     assert "Analytics Engineer" in out["html"] and "Pay not listed" in out["html"]
     assert "https://tracker.example.app/Job_Leads" in out["html"]
     assert "Chase recruiter: due today" in out["html"]
+    assert "Still waiting · 1 strong lead from earlier this week" in out["html"]
+    assert "BI Developer" in out["html"] and "Still waiting in your inbox" in out["text"]
     assert "Read 3 alert emails" in out["html"] and "1 already in the tracker" in out["html"]
     assert "Analytics Engineer — Gamma" in out["text"]
     assert "https://example.com/j/1" in out["text"]

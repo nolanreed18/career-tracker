@@ -119,6 +119,7 @@ create table if not exists job_profile (
     nice_to_haves  text,
     deal_breakers  text,
     about_me       text,              -- experience and skills, resume-style
+    skip_companies text,              -- one per line: the review drops their jobs
     updated_on     date not null
 );
 
@@ -143,8 +144,11 @@ create table if not exists job_leads (
     fit_detail      jsonb,             -- {"ratings": {category: 1-10}, "deal_breaker": bool}
     fit_reason      text,
     status          text not null check (status in ('new', 'moved', 'dismissed')),
+    dismiss_reason  text check (dismiss_reason in ('wrong role', 'location', 'pay', 'company',
+                                                   'already applied', 'other')),
+    dismissed_on    date,
     application_id  bigint references applications on delete set null,
-    dedupe_key      text not null,
+    dedupe_key      text not null,             -- company|title (logic.lead_key)
     check (salary_min is null or salary_max is null or salary_max >= salary_min)
 );
 create unique index if not exists job_leads_dedupe on job_leads (dedupe_key);

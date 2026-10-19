@@ -17,7 +17,7 @@ import sys
 import threading
 import time
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import config  # noqa: E402
 import db  # noqa: E402
 import logic  # noqa: E402
 
@@ -68,6 +69,12 @@ MIGRATIONS = [
     "alter table job_leads add column if not exists pay_note text",
     "update job_leads set pay_source = 'listed' where pay_source is null "
     "and (salary_min is not null or salary_max is not null)",
+    # 2026-10: why and when a lead was dismissed; companies the review skips.
+    "alter table job_leads add column if not exists dismiss_reason text "
+    "check (dismiss_reason in ('wrong role', 'location', 'pay', 'company', "
+    "'already applied', 'other'))",
+    "alter table job_leads add column if not exists dismissed_on date",
+    "alter table job_profile add column if not exists skip_companies text",
 ]
 
 
@@ -82,6 +89,7 @@ def _connection() -> psycopg.Connection:
             _schema_ready = True
             with _conn.cursor() as cur:
                 _rescore_leads_without_pay(cur)
+                _rekey_leads(cur)
     elif time.monotonic() - _last_used >= PING_AFTER_IDLE_S:
         try:
             _conn.execute("select 1")
@@ -147,6 +155,28 @@ def migrate() -> None:
         for statement in MIGRATIONS:
             cur.execute(statement)
         _rescore_leads_without_pay(cur)
+        _rekey_leads(cur)
+
+
+def _rekey_leads(cur) -> None:
+    """Dedupe keys made with the location (before 2026-10) become
+    company|title, so the same job from another site, with the place worded
+    differently, is caught. Two old rows that collapse to one key keep the
+    first; the other gets its id appended, so it stays but no longer stands
+    for the job. Safe to run again: afterwards no key has a location part."""
+    cur.execute("select lead_id, company, title from job_leads "
+                "where dedupe_key like '%|%|%' order by lead_id")
+    rows = cur.fetchall()
+    if not rows:
+        return
+    cur.execute("select dedupe_key from job_leads")
+    taken = {row[0] for row in cur.fetchall()}
+    for lead_id, company, title in rows:
+        key = logic.lead_key(company, title)
+        if key in taken:
+            key = f"{key}|{lead_id}"
+        taken.add(key)
+        cur.execute("update job_leads set dedupe_key = %s where lead_id = %s", (key, lead_id))
 
 
 def _rescore_leads_without_pay(cur) -> None:
@@ -508,7 +538,7 @@ def delete_position(position_id: int) -> None:
 # ---- job search profile -----------------------------------------------------
 
 PROFILE_FIELDS = {"target_roles", "locations", "work_modes", "min_salary", "must_haves",
-                  "nice_to_haves", "deal_breakers", "about_me"}
+                  "nice_to_haves", "deal_breakers", "about_me", "skip_companies"}
 
 
 def job_profile() -> dict | None:
@@ -590,10 +620,37 @@ def known_lead_keys() -> set[str]:
         return {row[0] for row in cur.fetchall()}
 
 
-def set_lead_status(lead_id: int, status: str) -> None:
-    """Dismiss a lead, or bring a dismissed one back as new."""
+def set_lead_status(lead_id: int, status: str, reason: str | None = None,
+                    on: date | None = None) -> None:
+    """Dismiss a lead (with why, and when), or bring a dismissed one back as
+    new, which clears both."""
+    if status != "dismissed":
+        reason, on = None, None
     with _cursor() as cur:
-        cur.execute("update job_leads set status = %s where lead_id = %s", (status, lead_id))
+        cur.execute("""
+            update job_leads set status = %s, dismiss_reason = %s, dismissed_on = %s
+            where lead_id = %s
+        """, (status, reason, on, lead_id))
+
+
+def dismissed_recently(since: date, limit: int = config.DISMISSAL_LIMIT) -> pd.DataFrame:
+    """Leads dismissed on or after `since`, latest first: what the daily
+    review reads as a hint of what the owner doesn't want."""
+    return _read("""
+        select title, company, location, dismiss_reason, dismissed_on from job_leads
+        where status = 'dismissed' and dismissed_on >= %s
+        order by dismissed_on desc, lead_id desc limit %s
+    """, (since, limit))
+
+
+def strong_leads_waiting(today: date) -> pd.DataFrame:
+    """Strong leads from earlier days still sitting new in the inbox (not yet
+    stale), best first: the digest's reminder."""
+    return _read("""
+        select * from job_leads
+        where status = 'new' and found_on < %s and found_on > %s and fit_score >= %s
+        order by fit_score desc, found_on desc, lead_id
+    """, (today, today - timedelta(days=config.LEAD_STALE_DAYS), config.STRONG_FIT))
 
 
 def move_lead_to_applications(lead_id: int, on: date) -> int:
