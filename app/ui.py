@@ -87,7 +87,7 @@ def appearance() -> None:
 
 def _account() -> None:
     if email := _google_email():
-        st.caption(email)
+        st.html(theme.note(email))
     st.button("Sign out", on_click=sign_out, width="stretch")
 
 
@@ -156,6 +156,7 @@ def require_password() -> None:
     if st.session_state.get(SIGNED_IN):
         return
     st.html(theme.stylesheet(theme.current() or theme.DEFAULT))
+    st.html(theme.LOCKED)
     google = _google_ready()
     if google and (email := _google_email()):
         if email in _allowed_emails():

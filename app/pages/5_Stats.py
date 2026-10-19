@@ -5,7 +5,7 @@ import streamlit as st
 import config
 import data
 import logic
-from ui import empty, setup, status_label
+from ui import empty, setup
 
 setup("Stats", "How the search is going, in numbers")
 
@@ -29,9 +29,9 @@ st.caption(f"Applied counts everything past Saved; {responded} of {sent} reached
 
 st.subheader("Pipeline")
 pipe = logic.pipeline(apps)
-pipe["status"] = pipe["status"].map(status_label)
+pipe["status"] = pipe["status"].map(str.capitalize)
 st.bar_chart(pipe, x="status", y="applications", x_label="", y_label="Applications",
-             sort=False, horizontal=True)
+             sort=False, horizontal=True, height=320)
 st.caption(f"{open_count} open.")
 
 st.subheader("Applications per week")

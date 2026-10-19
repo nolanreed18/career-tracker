@@ -101,7 +101,7 @@ if search.strip():
                 | view["role"].str.contains(term, case=False, regex=False)]
 
 if view.empty:
-    st.caption("Nothing matches.")
+    empty("filter_alt", "Nothing matches", "Try Closed or All, or clear the search.")
 else:
     st.dataframe(
         view.assign(status=view["status"].map(status_label))[
