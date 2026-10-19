@@ -63,7 +63,7 @@ def lead_card(lead) -> None:
         if url := logic.job_link(lead.job_url):       # the title opens the posting
             title = f"[{title}]({url.replace(')', '%29').replace(' ', '%20')})"
         head = " · ".join(part for part in (new, fit) if part)
-        st.markdown(f"{head + ' · ' if head else ''}**{title}**\u00a0— {md(lead.company)}")
+        st.markdown(f"{head + ' · ' if head else ''}**{title}**\u00a0—\u00a0{md(lead.company)}")
         st.caption(f"{describe(lead)} · {pay_line(lead)}")
         if breakdown := fit_breakdown(lead.fit_detail):
             st.caption(breakdown)
@@ -159,7 +159,7 @@ if section == "Dismissed":
                 if logic.value(lead.dismissed_on):
                     why += f" dismissed {logic.when(lead.dismissed_on, today)}"
                 why += "  \n"
-            text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}**\u00a0— "
+            text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}**\u00a0—\u00a0"
                               f"{md(lead.company)}  \n{why}{describe(lead)} · {pay_line(lead)}")
             if button_col.button("Restore", key=f"restore_{lead_id}", width="stretch"):
                 data.set_lead_status(lead_id, "new")
