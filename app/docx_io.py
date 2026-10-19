@@ -14,14 +14,17 @@ import re
 from dataclasses import dataclass
 
 from docx import Document
+from docx.enum.text import WD_TAB_ALIGNMENT
 from docx.oxml.ns import qn
+from docx.shared import Twips
+from docx.text.paragraph import Paragraph
 
 import logic
 
 DATE_RANGE = re.compile(r"\b(?:19|20)\d{2}\b.*?(?:-|–|—).*?(?:\b(?:19|20)\d{2}\b|present)", re.I)
 DEFAULT_COLUMN_TWIPS = 6840          # the left column's width when the template doesn't say
-DEFAULT_RIGHT_COLUMN_TWIPS = 4392    # and the right column's
-TWIPS_PER_CHAR = 88                  # about one character of 10pt text, for hand-wrapped lines
+DEFAULT_TEXT_WIDTH_TWIPS = 10620     # margin to margin, when the template doesn't say
+TWIPS_PER_SPACE = 50                 # a typed space of 10-11pt text, as a paragraph indent
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,8 @@ def _text(p) -> str:
             parts.append(node.text or "")
         elif node.tag == qn("w:br") and node.get(qn("w:type")) != "column":
             parts.append("\n")
+        elif node.tag == qn("w:tab") and node.getparent().tag == qn("w:r"):
+            parts.append("\t")
     return "".join(parts)
 
 
@@ -177,10 +182,13 @@ def _prototype(example, bold: bool | None):
     return with_text[0] if with_text else runs[0]
 
 
-def _clone(example, pieces: list[tuple[str, bool | None]]):
+def _clone(example, pieces: list[tuple[str, bool | None]], lead: str = ""):
     """A copy of a template paragraph carrying new text: each (text, bold)
     piece becomes a run modelled on a run of the example with that weight,
-    so an employer stays bold and a date stays regular."""
+    so an employer stays bold and a date stays regular. Where the template
+    indented the line with typed spaces (lead), the copy gets a paragraph
+    indent of the same width instead, so wrapped lines align and nobody
+    has to count spaces when editing."""
     p = copy.deepcopy(example)
     for run in p.findall(qn("w:r")):
         p.remove(run)
@@ -188,6 +196,8 @@ def _clone(example, pieces: list[tuple[str, bool | None]]):
         run = copy.deepcopy(_prototype(example, bold))
         _set_run_text(run, value)
         p.append(run)
+    if lead:
+        Paragraph(p, None).paragraph_format.left_indent = Twips(len(lead) * TWIPS_PER_SPACE)
     return p
 
 
@@ -203,10 +213,11 @@ def _column_width(body) -> int:
     return int(col.get(qn("w:w"))) if col is not None and col.get(qn("w:w")) else DEFAULT_COLUMN_TWIPS
 
 
-def _header(header, name: str, contact: str):
+def _header(header, name: str, contact: str, width: int):
     """The template's name-and-contact line carrying a new name and contact:
-    the name run, the run of spaces the template pushes the contact right
-    with (kept as it is), then one run modelled on the contact's."""
+    the name run, then one run modelled on the contact's, pushed to the
+    right margin by a tab stop (the template typed spaces; a tab stop
+    lands at the margin whatever the name's length)."""
     runs = header.findall(qn("w:r"))
     with_text = [r for r in runs if _text(r).strip()]
     new = copy.deepcopy(header)
@@ -216,33 +227,25 @@ def _header(header, name: str, contact: str):
     _set_run_text(name_run, name)
     new.append(name_run)
     if contact:
-        after_name = runs[runs.index(with_text[0]) + 1:] if with_text else []
-        spacer = next((r for r in after_name if _text(r) and not _text(r).strip()), None)
         model = next((r for r in with_text if "@" in _text(r)), with_text[-1] if with_text else name_run)
         contact_run = copy.deepcopy(model)
-        _set_run_text(contact_run, contact if spacer is not None else "    " + contact)
-        if spacer is not None:
-            new.append(copy.deepcopy(spacer))
+        _set_run_text(contact_run, "\t" + contact)
         new.append(contact_run)
+        Paragraph(new, None).paragraph_format.tab_stops.add_tab_stop(
+            Twips(width), WD_TAB_ALIGNMENT.RIGHT)
     return new
 
 
-def _wrapped(ex, lead: str, text: str, chars: int) -> list:
-    """A plain line as the template writes long ones: broken by hand into
-    lines of about `chars` characters, each with the lead."""
-    import textwrap
-    lines = textwrap.wrap(text, width=max(20, chars - len(lead))) or [""]
-    return [_clone(ex["plain_line"], [(lead + line, False)]) for line in lines]
-
-
-def _right_column_chars(body) -> int:
-    """How many characters the right column fits on a line (the template's
-    skills lines are wrapped by hand to about that)."""
-    sect = body.find(qn("w:sectPr"))
-    cols = [] if sect is None else sect.findall(f"{qn('w:cols')}/{qn('w:col')}")
-    width = int(cols[1].get(qn("w:w"))) if len(cols) >= 2 and cols[1].get(qn("w:w")) \
-        else DEFAULT_RIGHT_COLUMN_TWIPS
-    return max(30, width // TWIPS_PER_CHAR)
+def _text_width(*sections) -> int:
+    """Margin to margin, from the first section that says its page size."""
+    for sect in sections:
+        size = None if sect is None else sect.find(qn("w:pgSz"))
+        margins = None if sect is None else sect.find(qn("w:pgMar"))
+        if size is not None and margins is not None and size.get(qn("w:w")):
+            left = margins.get(qn("w:left")) or margins.get(qn("w:start")) or "0"
+            right = margins.get(qn("w:right")) or margins.get(qn("w:end")) or "0"
+            return int(size.get(qn("w:w"))) - int(left) - int(right)
+    return DEFAULT_TEXT_WIDTH_TWIPS
 
 
 def build(template: bytes, content: dict) -> bytes:
@@ -256,13 +259,13 @@ def build(template: bytes, content: dict) -> bytes:
     column = _column_width(body)
     end = body.find(qn("w:sectPr"))
 
+    width = _text_width(ex["header"].find(f"{qn('w:pPr')}/{qn('w:sectPr')}"), end)
     body.replace(ex["header"], _header(ex["header"], content.get("name", ""),
-                                       logic.contact_line(content)))
+                                       logic.contact_line(content), width))
     for p in paras[1:]:
         body.remove(p)
 
     out = []
-    chars = _right_column_chars(body)
 
     def section(title: str, spacer_before: bool = True) -> None:
         if spacer_before:
@@ -275,11 +278,11 @@ def build(template: bytes, content: dict) -> bytes:
         if not logic.prints(role):             # nothing ticked: the role stays off the page
             continue
         if role["employer"] != last_employer:  # one employer line for roles there in a row
-            out.append(_clone(ex["employer"], [(lead["employer"] + role["employer"], True)]))
+            out.append(_clone(ex["employer"], [(role["employer"], True)], lead["employer"]))
             last_employer = role["employer"]
         where = " – ".join(v for v in (role.get("title"), role.get("location")) if v)
         when = " - ".join(v for v in (role.get("start"), role.get("end")) if v)
-        line = _clone(ex["title"], [(lead["title"] + where + ("\t" + when if when else ""), False)])
+        line = _clone(ex["title"], [(where + ("\t" + when if when else ""), False)], lead["title"])
         _set_right_tab(line, column)
         out.append(line)
         for bullet in role.get("bullets", []):
@@ -290,19 +293,19 @@ def build(template: bytes, content: dict) -> bytes:
     section("Education", spacer_before=False)
     for edu in content.get("education", []):
         when = f"| {edu['when']}" if edu.get("when") else ""
-        out.append(_clone(ex["school_line"], [(lead["bold_line"] + edu["school"] + " ", True),
-                                              (when, False)]))
+        out.append(_clone(ex["school_line"], [(edu["school"] + " ", True), (when, False)],
+                          lead["bold_line"]))
         if edu.get("degree"):
-            out.extend(_wrapped(ex, lead["plain_line"], edu["degree"], chars))
+            out.append(_clone(ex["plain_line"], [(edu["degree"], False)], lead["plain_line"]))
     section("Applicable Skills")
     for group in content.get("skill_groups", []):
-        out.append(_clone(ex["bold_line"], [(lead["bold_line"] + group["name"], True)]))
-        out.extend(_wrapped(ex, lead["plain_line"], group["skills"], chars))
+        out.append(_clone(ex["bold_line"], [(group["name"], True)], lead["bold_line"]))
+        out.append(_clone(ex["plain_line"], [(group["skills"], False)], lead["plain_line"]))
     projects = [p for p in content.get("projects", []) if logic.prints(p)]
     if projects:
         section("Personal Projects")
         for project in projects:
-            out.append(_clone(ex["bold_line"], [(lead["bold_line"] + project["employer"], True)]))
+            out.append(_clone(ex["bold_line"], [(project["employer"], True)], lead["bold_line"]))
             for bullet in project.get("bullets", []):
                 if bullet.get("in_master"):
                     out.append(_clone(ex["project_bullet"], [(bullet["text"], None)]))
@@ -321,7 +324,8 @@ def letter(template: bytes, name: str, contact: str, paragraphs: list[str]) -> b
     body = doc.element.body
     ex = _examples(paras)
     end = body.find(qn("w:sectPr"))
-    body.replace(ex["header"], _header(ex["header"], name, contact))
+    width = _text_width(ex["header"].find(f"{qn('w:pPr')}/{qn('w:sectPr')}"), end)
+    body.replace(ex["header"], _header(ex["header"], name, contact, width))
     for p in paras[1:]:
         body.remove(p)
     cols = end.find(qn("w:cols"))
