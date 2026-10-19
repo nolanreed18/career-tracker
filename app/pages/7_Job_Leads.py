@@ -44,18 +44,27 @@ with inbox_tab:
         st.info("No new leads. Jobs from your alert emails show up here after the daily "
                 "review, best fit first.")
     else:
-        strong = int((leads["fit_score"].fillna(0) >= config.STRONG_FIT).sum())
-        st.caption(f"{logic.plural(len(leads), 'new lead')}, {strong} strong "
-                   f"(fit {config.STRONG_FIT}+).")
-        only_strong = st.toggle("Strong fits only", key="leads_only_strong")
-        if only_strong:
-            leads = leads[leads["fit_score"].fillna(0) >= config.STRONG_FIT]
+        strong = leads["fit_score"].fillna(0) >= config.STRONG_FIT
+        weak = leads["fit_score"].map(logic.is_weak)
+        st.caption(f"{logic.plural(len(leads), 'new lead')}: {int(strong.sum())} strong "
+                   f"(fit {config.STRONG_FIT}+), {int(weak.sum())} weak (under "
+                   f"{config.MAYBE_FIT}).")
+        SHOW = {"maybe": f"Worth a look ({config.MAYBE_FIT}+)",
+                "strong": f"Strong only ({config.STRONG_FIT}+)", "all": "All"}
+        show = st.radio("Show", list(SHOW), horizontal=True, format_func=SHOW.get,
+                        key="leads_show", label_visibility="collapsed")
+        if show == "strong":
+            leads = leads[strong]
+        elif show == "maybe":
+            leads = leads[~weak]
+        if leads.empty:
+            st.info("Nothing in this view. Choose **All** to see every lead.")
         for lead in leads.itertuples():
             lead_id = int(lead.lead_id)
             with st.container(border=True):
                 fit = logic.fit_label(lead.fit_score)
                 title = md(lead.title)
-                if url := logic.value(lead.job_url):          # the title opens the posting
+                if url := logic.job_link(lead.job_url):       # the title opens the posting
                     title = f"[{title}]({url.replace(')', '%29').replace(' ', '%20')})"
                 st.markdown(f"{fit + ' · ' if fit else ''}**{title}** — {md(lead.company)}")
                 st.caption(md(describe(lead)))

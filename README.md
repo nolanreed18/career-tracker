@@ -24,8 +24,9 @@ database, hosted free on Streamlit Community Cloud.
 - **Import**: bring in applications from a spreadsheet saved as CSV. Headers
   are matched loosely, and importing the same file twice adds nothing.
 - **Job Leads**: jobs from your job-alert emails, each scored 1–10 for fit
-  with a one-line reason, best first. **Add** makes one a Saved application;
-  **Dismiss** hides it (the same job won't come back from another site). The
+  with a one-line reason, best first. Weak matches (under 4) are hidden until
+  you choose **All**; they stay stored so the same job never comes back.
+  **Add** makes one a Saved application; **Dismiss** hides it. The
   **What I'm looking for** tab holds the roles, places, pay floor, must-haves
   and deal-breakers the scores are based on. Home shows how many new leads are
   waiting.

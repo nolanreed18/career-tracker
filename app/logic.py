@@ -382,7 +382,7 @@ def clean_lead(row: dict) -> tuple[dict | None, str | None]:
         "company": str(company).strip(),
         "location": value(row.get("location")),
         "work_mode": parse_work_mode(row.get("work_mode")),
-        "job_url": value(row.get("job_url")),
+        "job_url": job_link(row.get("job_url")),
         "fit_reason": value(row.get("fit_reason")),
     }
     low, high = value(row.get("salary_min")), value(row.get("salary_max"))
@@ -411,8 +411,32 @@ def clean_lead(row: dict) -> tuple[dict | None, str | None]:
 
 
 def fit_label(score) -> str:
-    """'🟢 8/10' for a strong fit, '🟡 5/10' otherwise, '' when unscored."""
+    """'🟢 8/10' for a strong fit, '🟡 5/10' for a maybe, '⚪ 2/10' for a weak
+    one, '' when unscored."""
     score = value(score)
     if score is None:
         return ""
-    return f"{'🟢' if score >= config.STRONG_FIT else '🟡' if score >= 4 else '⚪'} {int(score)}/10"
+    icon = "🟢" if score >= config.STRONG_FIT else "🟡" if score >= config.MAYBE_FIT else "⚪"
+    return f"{icon} {int(score)}/10"
+
+
+def is_weak(score) -> bool:
+    """A scored lead below MAYBE_FIT. Unscored ones aren't weak, just unknown."""
+    score = value(score)
+    return score is not None and score < config.MAYBE_FIT
+
+
+_GLASSDOOR_GUESS = re.compile(r"^https?://(?:www\.)?glassdoor\.com/job-listing/?\?jl=(\d+)$")
+
+
+def job_link(url) -> str | None:
+    """The posting link to open. A Glassdoor link rebuilt from a listing ID
+    (what the first daily review stored) is turned into the form Glassdoor
+    serves; anything else is kept as it is."""
+    url = value(url)
+    if url is None:
+        return None
+    url = str(url).strip()
+    if match := _GLASSDOOR_GUESS.match(url):
+        return f"https://www.glassdoor.com/partner/jobListing.htm?jobListingId={match.group(1)}"
+    return url
