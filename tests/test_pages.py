@@ -333,7 +333,7 @@ def test_leads_are_listed_best_fit_first_and_home_points_to_them():
 def test_a_lead_shows_its_category_ratings_and_the_rules_are_explained():
     seed()
     at = run(LEADS)
-    assert any("Role 5 · Industry 3 · Location 8" in c.value for c in at.caption)
+    assert any("Role\u00a05 · Industry\u00a03 · Location\u00a08" in c.value for c in at.caption)
     titles = [m.value for m in at.markdown if "BI Developer" in m.value]
     assert ":blue-badge[5.1/10]" in titles[0]
     widget(at.radio, "Section").set_value("What I'm looking for").run()
@@ -351,9 +351,10 @@ def test_a_lead_shows_listed_pay_plainly_and_a_warning_when_pay_is_missing_or_es
         "fit": {"role": 6, "pay": 8}})[0]], TODAY)
     at = run(LEADS)
     captions = [c.value for c in at.caption]
-    assert any("Analytics Engineer" not in c and "\\$120,000–\\$140,000" in c for c in captions)
+    assert any("Analytics Engineer" not in c and "\\$120,000\u2060–\u2060\\$140,000" in c
+               for c in captions)
     assert any(":yellow-badge[:material/warning: Pay not listed]" in c for c in captions)
-    assert any(":yellow-badge[:material/warning: \\~\\$130,000–\\$150,000 (estimate)] · "
+    assert any(":yellow-badge[:material/warning: \\~\\$130,000\u2060–\u2060\\$150,000 (estimate)] · "
                "Levels.fyi range, Data Engineer, Denver" in c for c in captions)
 
 

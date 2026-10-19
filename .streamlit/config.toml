@@ -28,6 +28,7 @@ orangeColor = "#f59e0b"
 redColor = "#f43f5e"
 grayColor = "#64748b"
 violetColor = "#8b5cf6"
+yellowColor = "#ca8a04"
 
 [theme.sidebar]
 backgroundColor = "#f1f5f9"

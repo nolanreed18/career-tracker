@@ -273,9 +273,10 @@ def pay_badge(salary_min, salary_max, pay_source) -> str:
     yellow warning badge with the range when the daily review estimated it,
     and a yellow warning badge saying so when it's not known at all."""
     state, text = logic.pay_state(salary_min, salary_max, pay_source)
+    text = md(text).replace("–", "\u2060–\u2060")          # a range stays on one line
     if state == "listed":
-        return md(text)
-    return badge("yellow", f":material/warning: {md(text)}"
+        return text
+    return badge("yellow", f":material/warning: {text}"
                  + (" (estimate)" if state == "estimated" else ""))
 
 
@@ -286,7 +287,7 @@ def fit_breakdown(detail) -> str:
     if not isinstance(detail, dict) or not detail.get("ratings"):
         return ""
     ratings = detail["ratings"]
-    parts = [f"{label.split(' ')[0]} {ratings[key]}"
+    parts = [f"{label.split(' ')[0]}\u00a0{ratings[key]}"           # no break before the number
              for key, (label, _, _) in config.FIT_CATEGORIES.items() if key in ratings]
     text = " · ".join(parts)
     return f"{badge('red', 'Deal-breaker')} {text}" if detail.get("deal_breaker") else text
