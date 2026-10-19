@@ -73,7 +73,7 @@ def seed() -> int:
          "salary": "$120k-$140k", "fit_score": 9, "fit_reason": "Strong dbt and SQL match",
          "job_url": "https://example.com/1"},
         {"source": "Dice", "title": "BI Developer", "company": "Delta",
-         "fit": {"role": 5, "industry": 3, "location": 8, "pay": 5, "level": 6, "extras": 4}},
+         "fit": {"role": 5, "industry": 3, "location": 8, "level": 6, "extras": 4}},
     )], TODAY)
     return quiet
 
@@ -338,6 +338,22 @@ def test_a_lead_shows_its_category_ratings_and_the_rules_are_explained():
     widget(at.radio, "Section").set_value("What I'm looking for").run()
     assert any("How scoring works" in m.value for m in at.markdown)
     assert any("Role match** (35%)" in m.value for m in at.markdown)
+    assert any("**Pay.**" in m.value and "estimate" in m.value for m in at.markdown)
+
+
+def test_a_lead_shows_listed_pay_plainly_and_a_warning_when_pay_is_missing_or_estimated():
+    seed()
+    data.add_leads([logic.clean_lead({
+        "source": "Indeed", "title": "Data Engineer", "company": "Epsilon",
+        "salary": "$130k-$150k", "pay_source": "estimated",
+        "pay_note": "Levels.fyi range, Data Engineer, Denver",
+        "fit": {"role": 6, "pay": 8}})[0]], TODAY)
+    at = run(LEADS)
+    captions = [c.value for c in at.caption]
+    assert any("Analytics Engineer" not in c and "\\$120,000–\\$140,000" in c for c in captions)
+    assert any(":yellow-badge[:material/warning: Pay not listed]" in c for c in captions)
+    assert any(":yellow-badge[:material/warning: \\~\\$130,000–\\$150,000 (estimate)] · "
+               "Levels.fyi range, Data Engineer, Denver" in c for c in captions)
 
 
 def test_dismissing_a_lead_moves_it_to_dismissed_and_restore_brings_it_back():

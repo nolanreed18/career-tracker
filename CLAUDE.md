@@ -18,6 +18,10 @@ only they can do (accounts, secrets, clicking merge).
   reaches the database only through `leads.py`, over Neon's HTTPS endpoint
   (`db.HttpCursor`, switched on when `CLAUDE_CODE_REMOTE` is set). Keep its
   queries to what `HttpCursor` supports: one statement each, no transactions.
+  Its digest email is `app/digest.py` (pure, like `logic.py`), printed by
+  `leads.py digest`; the run pastes it into Gmail, so keep it under 100 KB
+  (Gmail clips) and email-safe (tables, the class stylesheet, no web fonts).
+  A new `leads.py` command also goes in `.claude/settings.json`.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no
@@ -28,13 +32,17 @@ only they can do (accounts, secrets, clicking merge).
   must equal the light palette (`tests/test_theme.py` checks). Pages use
   `ui.card()`, `ui.empty()` and the badge helpers rather than emoji or raw
   HTML; colour means something (blue = in progress, green = good, orange =
-  attention, red = overdue/closed, grey = neutral). Sub-pages are
+  attention, red = overdue/closed, grey = neutral, yellow = unverified: an
+  estimate or missing pay, via `ui.pay_badge()`). Sub-pages are
   `ui.sections()` pills, never `st.tabs` (tabs forget their place on rerun);
   every delete goes through `ui.delete_button()` (tick box first); a "pick
   one" dropdown whose options can change takes `ui.round_key()` and
   `ui.bump_round()` after a delete, or it keeps showing the old choice.
 - Knobs in `app/config.py`, including `FIT_CATEGORIES` (the lead-scoring
-  categories and weights; `logic.fit_total` does the maths, the review rates).
+  categories and weights; `logic.fit_total` does the maths, the review rates)
+  and the pay rules (`PAY_SOURCES`, `PAY_RESEARCH`): pay is rated only when a
+  lead has a salary, listed or estimated; `logic.clean_lead` refuses a pay
+  rating without one, and unknown pay stays out of the score.
   **Status / kind lists are repeated in `schema.sql` CHECKs**: change both
   (tests fail if they drift). Add a table → add it to `backup.TABLES` and the
   `TABLES` list in `conftest.py`.

@@ -23,10 +23,11 @@ def neon(database, monkeypatch):
         sent.append((query, params))
         with psycopg.connect(database, autocommit=True) as conn, conn.cursor() as cur:
             cur.execute(_as_psycopg(query), params)
-            names = [c.name for c in cur.description or []]
+            columns = cur.description or []
+            names = [c.name for c in columns]
             rows = [dict(zip(names, r)) for r in cur.fetchall()] if names else []
-            reply = {"fields": [{"name": n} for n in names], "rows": rows,
-                     "rowCount": cur.rowcount}
+            reply = {"fields": [{"name": c.name, "dataTypeID": c.type_code} for c in columns],
+                     "rows": rows, "rowCount": cur.rowcount}
         return json.loads(json.dumps(reply, default=str))   # what crosses the wire
 
     monkeypatch.setattr(db, "http_query", http_query)

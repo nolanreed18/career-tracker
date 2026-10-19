@@ -208,15 +208,44 @@ def test_category_ratings_are_stored_with_the_lead():
 def test_migrate_brings_an_older_job_leads_table_up_to_date(database):
     with psycopg.connect(database, autocommit=True) as conn:        # the shape before 2026-10
         conn.execute("alter table job_leads drop column fit_detail")
+        conn.execute("alter table job_leads drop column pay_source")
+        conn.execute("alter table job_leads drop column pay_note")
         conn.execute("alter table job_leads alter column fit_score type smallint")
     data.migrate()
     data.migrate()                                                   # safe to run again
     with psycopg.connect(database, autocommit=True) as conn:
         columns = dict(conn.execute("""
             select column_name, data_type from information_schema.columns
-            where table_name = 'job_leads' and column_name in ('fit_score', 'fit_detail')
+            where table_name = 'job_leads'
+              and column_name in ('fit_score', 'fit_detail', 'pay_source', 'pay_note')
         """).fetchall())
-    assert columns == {"fit_score": "numeric", "fit_detail": "jsonb"}
+    assert columns == {"fit_score": "numeric", "fit_detail": "jsonb", "pay_source": "text",
+                       "pay_note": "text"}
+
+
+def test_migrate_rescores_leads_rated_on_pay_before_it_was_known(database):
+    data.add_leads([
+        logic.clean_lead({"source": "Dice", "title": "A", "company": "B", "salary": "$100k",
+                          "fit": {"role": 8, "pay": 4}})[0],
+        logic.clean_lead({"source": "Dice", "title": "C", "company": "D",
+                          "fit": {"role": 8, "industry": 4}})[0],
+    ], TODAY)
+    with psycopg.connect(database, autocommit=True) as conn:     # as the first review stored them
+        conn.execute("update job_leads set pay_source = null where title = 'A'")
+        conn.execute("""
+            update job_leads set fit_score = 5.9, fit_detail = '{"ratings": {"role": 8,
+                "industry": 4, "pay": 5}, "deal_breaker": false}' where title = 'C'
+        """)
+    data.migrate()
+    stored = data.job_leads().set_index("title")
+    assert stored.loc["A", "pay_source"] == "listed"           # it had a salary all along
+    assert float(stored.loc["A", "fit_score"]) == 6.8 and "pay" in stored.loc["A", "fit_detail"]["ratings"]
+    assert float(stored.loc["C", "fit_score"]) == 6.5 and logic.blank(stored.loc["C", "pay_source"])
+    assert stored.loc["C", "fit_detail"] == {"ratings": {"role": 8, "industry": 4},
+                                             "deal_breaker": False}
+    data.reset_connection()                                      # the app's own start-up path
+    data._schema_ready = False
+    assert float(data.job_leads().set_index("title").loc["C", "fit_score"]) == 6.5
 
 
 def test_a_dismissed_lead_stays_dismissed_when_seen_again():
@@ -244,6 +273,23 @@ def test_moving_a_lead_makes_a_saved_application_with_the_fit_in_its_notes():
     assert (moved["status"], moved["application_id"]) == ("moved", app_id)
     data.delete_application(app_id)                 # the lead stays, unlinked
     assert data.lead(lead_id)["application_id"] is None
+
+
+def test_an_estimated_pay_is_noted_on_the_application_a_lead_becomes():
+    data.add_leads(leads({"title": "Analyst", "salary": "$90k-$110k", "pay_source": "estimated",
+                          "pay_note": "Glassdoor, Denver", "fit": {"role": 7, "pay": 6}}), TODAY)
+    app = data.application(data.move_lead_to_applications(int(data.job_leads()["lead_id"][0]),
+                                                          TODAY))
+    assert app["notes"] == "Fit 6.7/10\nPay is the daily review's estimate (Glassdoor, Denver)."
+
+
+def test_leads_found_are_one_days_new_leads_best_first():
+    data.add_leads(leads({"title": "Old"}), date(2026, 10, 13))
+    data.add_leads(leads({"title": "Weak", "fit_score": 3}) + leads({"title": "Good", "fit_score": 8})
+                   + leads({"title": "Gone"}), TODAY)
+    data.set_lead_status(int(data.job_leads()[data.job_leads()["title"] == "Gone"]["lead_id"]
+                             .iloc[0]), "dismissed")
+    assert data.leads_found(TODAY)["title"].tolist() == ["Good", "Weak"]
 
 
 def test_every_lead_status_is_allowed_by_the_schema_and_nothing_else():

@@ -134,6 +134,8 @@ create table if not exists job_leads (
     work_mode       text check (work_mode in ('onsite', 'hybrid', 'remote')),
     salary_min      integer check (salary_min >= 0),
     salary_max      integer check (salary_max >= 0),
+    pay_source      text check (pay_source in ('listed', 'estimated')),  -- null: pay unknown
+    pay_note        text,              -- where an estimate came from
     job_url         text,
     posted_on       date,
     found_on        date not null,

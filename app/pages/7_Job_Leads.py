@@ -10,7 +10,7 @@ fresh.check()                   # after a redeploy: no stale copies of the app's
 import config
 import data
 import logic
-from ui import card, empty, fit_badge, fit_breakdown, md, sections, setup
+from ui import card, empty, fit_badge, fit_breakdown, md, pay_badge, sections, setup
 
 setup("Job Leads", "From your alert emails, scored for fit every morning")
 
@@ -24,12 +24,20 @@ def done(message: str) -> None:
 
 
 def describe(lead) -> str:
+    """'LinkedIn · Denver, CO · hybrid · found yesterday', markdown-safe."""
     location, mode = logic.value(lead.location), logic.value(lead.work_mode)
     if mode and location and mode in location.lower():
         mode = None                                 # "Remote (US) · remote"
-    parts = [lead.source, location, mode, logic.salary_range(lead.salary_min, lead.salary_max)]
-    found = f"found {logic.when(lead.found_on, today)}"
-    return " · ".join(str(p) for p in parts if p) + f" · {found}"
+    parts = [lead.source, location, mode, f"found {logic.when(lead.found_on, today)}"]
+    return md(" · ".join(str(p) for p in parts if p))
+
+
+def pay_line(lead) -> str:
+    """The pay badge, with where an estimate came from."""
+    line = pay_badge(lead.salary_min, lead.salary_max, lead.pay_source)
+    if logic.value(lead.pay_source) == "estimated" and logic.value(lead.pay_note):
+        line += f" · {md(lead.pay_note)}"
+    return line
 
 
 section = sections("leads", ["Inbox", "Dismissed", "What I'm looking for"])
@@ -68,7 +76,7 @@ if section == "Inbox":
                 if url := logic.job_link(lead.job_url):       # the title opens the posting
                     title = f"[{title}]({url.replace(')', '%29').replace(' ', '%20')})"
                 st.markdown(f"{fit + ' · ' if fit else ''}**{title}** — {md(lead.company)}")
-                st.caption(md(describe(lead)))
+                st.caption(f"{describe(lead)} · {pay_line(lead)}")
                 if breakdown := fit_breakdown(lead.fit_detail):
                     st.caption(breakdown)
                 if logic.value(lead.fit_reason):
@@ -97,7 +105,7 @@ if section == "Dismissed":
             text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
             fit = fit_badge(lead.fit_score)
             text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}** — "
-                              f"{md(lead.company)}  \n{md(describe(lead))}")
+                              f"{md(lead.company)}  \n{describe(lead)} · {pay_line(lead)}")
             if button_col.button("Restore", key=f"restore_{lead_id}", width="stretch"):
                 data.set_lead_status(lead_id, "new")
                 done(f"Restored {lead.title} — {lead.company}.")
@@ -151,3 +159,7 @@ if section == "What I'm looking for":
         st.caption(f"Any deal-breaker caps the score at {config.DEAL_BREAKER_CAP:g}. "
                    f"{config.STRONG_FIT}+ is a strong fit, {config.MAYBE_FIT}+ is worth a look. "
                    "The weights live in app/config.py.")
+        st.markdown(f"**Pay.** {config.PAY_RESEARCH}")
+        st.caption(f"{pay_badge(120000, 140000, 'estimated')} means the review's estimate; "
+                   f"{pay_badge(None, None, None)} means nothing was found, and the score "
+                   "ignores pay.")

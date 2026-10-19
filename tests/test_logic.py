@@ -260,7 +260,7 @@ def test_fit_total_is_the_weighted_average_to_one_decimal_capped_by_a_deal_break
 
 
 def test_clean_lead_scores_from_category_ratings():
-    row = {"source": "Dice", "title": "A", "company": "B",
+    row = {"source": "Dice", "title": "A", "company": "B", "salary": "$150k",
            "fit": {"role": 9, "industry": 6, "location": 10, "pay": 8, "level": 7, "extras": 6},
            "deal_breaker": False}
     lead, problem = logic.clean_lead(row)
@@ -313,3 +313,34 @@ def test_a_rebuilt_glassdoor_link_becomes_the_form_glassdoor_serves():
     lead, _ = logic.clean_lead({"source": "Glassdoor", "title": "A", "company": "B",
                                 "job_url": "https://www.glassdoor.com/job-listing?jl=5"})
     assert lead["job_url"].endswith("jobListingId=5")       # fixed on the way in, too
+
+
+def test_pay_is_rated_only_against_a_salary_and_estimates_say_where_from():
+    base = {"source": "Dice", "title": "A", "company": "B"}
+    listed, _ = logic.clean_lead({**base, "salary": "$120k-$140k", "fit": {"role": 8, "pay": 7}})
+    assert listed["pay_source"] == "listed" and listed["pay_note"] is None
+    estimate, _ = logic.clean_lead({**base, "salary": "$120k-$140k", "pay_source": "Estimated",
+                                    "pay_note": " Glassdoor, Denver ", "fit": {"pay": 7}})
+    assert (estimate["pay_source"], estimate["pay_note"]) == ("estimated", "Glassdoor, Denver")
+    unknown, _ = logic.clean_lead({**base, "fit": {"role": 8, "level": 6}})
+    assert unknown["pay_source"] is None and unknown["fit_score"] == 7.6
+    lead, problem = logic.clean_lead({**base, "fit": {"role": 8, "pay": 5}})
+    assert lead is None and "leave pay out" in problem
+    assert logic.clean_lead({**base, "salary": "$100k", "pay_source": "guessed"})[0] is None
+    assert logic.clean_lead({**base, "salary": "$100k", "pay_source": "estimated"})[0] is None
+    assert logic.clean_lead({**base, "pay_source": "listed"})[0] is None
+
+
+def test_pay_state_tells_listed_estimated_and_unknown_apart():
+    assert logic.pay_state(120000, 140000, "listed") == ("listed", "$120,000–$140,000")
+    assert logic.pay_state(120000, None, "estimated") == ("estimated", "~$120,000+")
+    assert logic.pay_state(None, None, None) == ("unknown", "Pay not listed")
+    assert logic.pay_state(None, float("nan"), "listed") == ("unknown", "Pay not listed")
+
+
+def test_without_pay_rescores_a_lead_rated_before_its_pay_was_known():
+    detail = {"ratings": {"role": 8, "industry": 4, "pay": 5}, "deal_breaker": False}
+    assert logic.without_pay(detail) == (6.5, {"ratings": {"role": 8, "industry": 4},
+                                               "deal_breaker": False})
+    assert logic.without_pay({"ratings": {"pay": 5}})[0] is None
+    assert logic.without_pay({"ratings": {"role": 9, "pay": 2}, "deal_breaker": True})[0] == 3

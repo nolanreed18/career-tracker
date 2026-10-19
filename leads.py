@@ -5,15 +5,24 @@
                                      categories, weights and thresholds, as JSON
     python leads.py known            every stored lead's dedupe key, one per line
     python leads.py add leads.json   add scored leads; prints how many were new
+    python leads.py digest run.json  the digest email for today's leads, as JSON
+                                     {"subject", "html", "text"}
 
 leads.json is a list of objects with source, title and company (required),
 and any of location, work_mode, salary (text like "$120k-$140k") or
-salary_min / salary_max, job_url, posted_on (YYYY-MM-DD), fit_reason, and
-the scoring: fit, an object rating each rubric category 1-10 (e.g.
-{"role": 9, "industry": 6, ...}), plus deal_breaker (true/false). The score
-is worked out from those. A plain fit_score (1-10) is also accepted. The
-same job seen before, from any site, is skipped. Nothing is added unless
-every row is valid.
+salary_min / salary_max, pay_source ("listed" or "estimated"; an estimate
+needs a pay_note saying where it came from), job_url, posted_on
+(YYYY-MM-DD), fit_reason, and the scoring: fit, an object rating each rubric
+category 1-10 (e.g. {"role": 9, "industry": 6, ...}), plus deal_breaker
+(true/false). The score is worked out from those; rate pay only when a
+salary is given. A plain fit_score (1-10) is also accepted. The same job
+seen before, from any site, is skipped. Nothing is added unless every row
+is valid.
+
+run.json gives the digest what the database doesn't know: app_url (the
+app's address; required), and optionally emails_read, sources ({"LinkedIn":
+4, ...}), already_known, duplicates, and problem (what went wrong, if
+anything).
 """
 
 import json
@@ -25,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "app"))
 
 import config  # noqa: E402
 import data  # noqa: E402
+import digest  # noqa: E402
 import logic  # noqa: E402
 
 
@@ -41,7 +51,11 @@ def main(argv: list[str]) -> int:
             "today": data.today().isoformat(),      # the owner's date; the session clock is UTC
             "categories": [{"key": key, "label": label, "weight": weight, "what": what}
                            for key, (label, weight, what) in config.FIT_CATEGORIES.items()],
-            "score": "weighted average of the ratings, to one decimal",
+            "score": "weighted average of the ratings, to one decimal; a category not "
+                     "rated is left out",
+            "pay": {"sources": config.PAY_SOURCES, "research": config.PAY_RESEARCH,
+                    "rule": "rate pay only when a salary is given (listed, or your "
+                            "estimate with a pay_note); otherwise leave pay out of fit"},
             "deal_breaker_cap": config.DEAL_BREAKER_CAP,
             "strong_fit": config.STRONG_FIT,
             "maybe_fit": config.MAYBE_FIT,
@@ -69,6 +83,17 @@ def main(argv: list[str]) -> int:
         data.migrate()                     # the live tables may predate a column
         added, skipped = data.add_leads(leads, data.today())
         print(f"added {added}, skipped {skipped} already seen")
+        return 0
+    if command == "digest" and len(argv) == 2:
+        notes = json.loads(Path(argv[1]).read_text(encoding="utf-8"))
+        if not isinstance(notes, dict) or not notes.get("app_url"):
+            print("run.json must be a JSON object with app_url", file=sys.stderr)
+            return 1
+        today = data.today()
+        leads = data.leads_found(today).to_dict("records")
+        attention = logic.needs_attention(data.applications(), data.interviews(), today)
+        print(json.dumps(digest.render(today, leads, attention, notes["app_url"], notes),
+                         indent=2))
         return 0
     print(__doc__, file=sys.stderr)
     return 2

@@ -58,7 +58,9 @@ FIT_CATEGORIES = {
     "location": ("Location and work mode", 0.15,
                  "The places and work modes the profile allows; its preferred area highest."),
     "pay": ("Pay", 0.15,
-            "Against the profile's salary floor: well above is 10, at it 7, unknown 5, under it low."),
+            "Against the profile's salary floor: well above is 10, at it 7, under it low; a "
+            "researched estimate is rated the same way. Not rated when pay is unknown, so "
+            "the score then rests on the other categories."),
     "level": ("Level", 0.10,
               "The level the profile asks for; entry level or executive score low."),
     "extras": ("Extras", 0.05,
@@ -67,6 +69,21 @@ FIT_CATEGORIES = {
 
 # Any deal-breaker from the profile caps the score here, whatever the rest says.
 DEAL_BREAKER_CAP = 3.0
+
+# Where a lead's pay came from: "listed" in the alert or the posting, or
+# "estimated" by the daily review from what it found online (pay_note says
+# from what). A lead with no pay at all has neither, and no pay rating.
+PAY_SOURCES = ["listed", "estimated"]
+
+# How the daily review looks for pay when the alert doesn't give it, shown
+# under "How scoring works" and printed by `leads.py rubric`.
+PAY_RESEARCH = (
+    "When the alert gives no pay, the review searches the web for the posting's own "
+    "range or a recent range for that title at that company (or that title in that "
+    "area), and stores it as an estimate, saying where it came from. Jobs that are a "
+    "poor fit on role or location are left unresearched. Estimates and missing pay "
+    "are marked with a yellow warning, so a listed range is never confused with a guess."
+)
 
 # Fit scores (1-10) at or above this are a strong match: highlighted in the
 # app and listed first in the daily email.

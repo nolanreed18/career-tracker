@@ -268,6 +268,17 @@ def fit_badge(score) -> str:
     return "" if tier is None else badge(FIT_COLORS[tier], f"{logic.fit_text(score)}/10")
 
 
+def pay_badge(salary_min, salary_max, pay_source) -> str:
+    """The pay as markdown: the range as plain text when it was listed, a
+    yellow warning badge with the range when the daily review estimated it,
+    and a yellow warning badge saying so when it's not known at all."""
+    state, text = logic.pay_state(salary_min, salary_max, pay_source)
+    if state == "listed":
+        return md(text)
+    return badge("yellow", f":material/warning: {md(text)}"
+                 + (" (estimate)" if state == "estimated" else ""))
+
+
 def fit_breakdown(detail) -> str:
     """'Role 9 · Industry 6 · …' from a lead's fit_detail, with a red badge
     when a deal-breaker capped the score; '' when there is no breakdown."""
