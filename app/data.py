@@ -62,6 +62,12 @@ MIGRATIONS = [
             alter table job_leads alter column fit_score type numeric(3,1);
         end if;
     end $$""",
+    # 2026-10: where a lead's pay came from; unknown pay is left out of the score.
+    "alter table job_leads add column if not exists pay_source text "
+    "check (pay_source in ('listed', 'estimated'))",
+    "alter table job_leads add column if not exists pay_note text",
+    "update job_leads set pay_source = 'listed' where pay_source is null "
+    "and (salary_min is not null or salary_max is not null)",
 ]
 
 
@@ -74,6 +80,8 @@ def _connection() -> psycopg.Connection:
             for statement in MIGRATIONS:
                 _conn.execute(statement)
             _schema_ready = True
+            with _conn.cursor() as cur:
+                _rescore_leads_without_pay(cur)
     elif time.monotonic() - _last_used >= PING_AFTER_IDLE_S:
         try:
             _conn.execute("select 1")
@@ -138,6 +146,24 @@ def migrate() -> None:
     with _cursor() as cur:
         for statement in MIGRATIONS:
             cur.execute(statement)
+        _rescore_leads_without_pay(cur)
+
+
+def _rescore_leads_without_pay(cur) -> None:
+    """Leads rated on pay before pay was known are scored again without it
+    (2026-10: unknown pay used to count as a 5). Safe to run again: afterwards
+    no lead without pay carries a pay rating."""
+    cur.execute("""
+        select lead_id, fit_detail from job_leads
+        where salary_min is null and salary_max is null and fit_detail ? 'ratings'
+          and fit_detail -> 'ratings' ? 'pay'
+    """)
+    for lead_id, detail in cur.fetchall():
+        if isinstance(detail, str):
+            detail = json.loads(detail)
+        score, detail = logic.without_pay(detail)
+        cur.execute("update job_leads set fit_score = %s, fit_detail = %s::jsonb "
+                    "where lead_id = %s", (score, json.dumps(detail), lead_id))
 
 
 def _read(query: str, params=None) -> pd.DataFrame:
@@ -524,6 +550,15 @@ def lead(lead_id: int) -> dict | None:
     return _one("select * from job_leads where lead_id = %s", (lead_id,))
 
 
+def leads_found(on: date) -> pd.DataFrame:
+    """The leads one daily review added (found that day, still new), best
+    fit first: what its digest reports."""
+    return _read("""
+        select * from job_leads where found_on = %s and status = 'new'
+        order by fit_score desc nulls last, lead_id
+    """, (on,))
+
+
 def add_leads(leads: list[dict], on: date) -> tuple[int, int]:
     """Add cleaned leads (logic.clean_lead), all or none; (added, skipped).
 
@@ -570,6 +605,10 @@ def move_lead_to_applications(lead_id: int, on: date) -> int:
         if row["fit_score"] is not None:
             notes = f"Fit {logic.fit_text(row['fit_score'])}/10" + (
                 f": {row['fit_reason']}" if row["fit_reason"] else "")
+        if row["pay_source"] == "estimated":
+            estimate = "Pay is the daily review's estimate" + (
+                f" ({row['pay_note']})." if row["pay_note"] else ".")
+            notes = f"{notes}\n{estimate}" if notes else estimate
         application_id = add_application(
             company_id_for(row["company"], on), row["title"], "saved", on,
             job_url=row["job_url"], location=row["location"], work_mode=row["work_mode"],

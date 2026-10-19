@@ -5,6 +5,8 @@ this file. A running Streamlit app with no .env -- Community Cloud -- falls
 back to st.secrets. Neither path ever prints the value.
 """
 
+import datetime
+import decimal
 import json
 import os
 import re
@@ -137,6 +139,31 @@ class _Column:
         self.name = name
 
 
+# Neon's JSON carries dates, times and numerics as text, and says each
+# column's Postgres type (its OID) in "fields": turn them back into what a
+# psycopg cursor would give, so logic.py's date arithmetic works over HTTPS.
+_PARSERS = {
+    20: int, 21: int, 23: int,                                  # int8, int2, int4
+    700: float, 701: float,                                     # float4, float8
+    1700: decimal.Decimal,                                      # numeric
+    1082: datetime.date.fromisoformat,                          # date
+    1083: datetime.time.fromisoformat,                          # time
+    1114: datetime.datetime.fromisoformat,                      # timestamp
+    1184: datetime.datetime.fromisoformat,                      # timestamptz
+}
+
+
+def typed(value, type_oid):
+    """A cell from Neon's reply as its Python type, when it came as text."""
+    parser = _PARSERS.get(type_oid)
+    if parser is None or value is None or not isinstance(value, str):
+        return value
+    try:
+        return parser(value)
+    except (TypeError, ValueError):
+        return value
+
+
 class HttpCursor:
     """Just enough of a psycopg cursor for data.py, over Neon's HTTPS
     endpoint. Each statement stands alone: there are no transactions."""
@@ -154,11 +181,13 @@ class HttpCursor:
         values = [v if v is None or isinstance(v, (bool, int, float)) else str(v)
                   for v in values]
         reply = http_query(text, values)
-        names = [field["name"] for field in reply.get("fields", [])]
+        fields = reply.get("fields", [])
+        names = [field["name"] for field in fields]
+        types = {field["name"]: field.get("dataTypeID") for field in fields}
         self.description = [_Column(n) for n in names]
         self.rowcount = reply.get("rowCount", -1)
-        self.rows = [dict(row) if self.dict_rows else tuple(row[n] for n in names)
-                     for row in reply.get("rows", [])]
+        rows = [{n: typed(row[n], types[n]) for n in names} for row in reply.get("rows", [])]
+        self.rows = rows if self.dict_rows else [tuple(row[n] for n in names) for row in rows]
         return self
 
     def fetchone(self):

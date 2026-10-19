@@ -404,6 +404,18 @@ def clean_lead(row: dict) -> tuple[dict | None, str | None]:
     if low is not None and high is not None and high < low:
         low, high = high, low
     lead["salary_min"], lead["salary_max"] = low, high
+    source_of_pay, note = value(row.get("pay_source")), value(row.get("pay_note"))
+    if low is None and high is None:
+        if source_of_pay is not None:
+            return None, f"pay_source given but no salary: {row}"
+    else:
+        source_of_pay = str(source_of_pay or "listed").strip().lower()
+        if source_of_pay not in config.PAY_SOURCES:
+            return None, f"pay_source must be one of {config.PAY_SOURCES}: {row}"
+        if source_of_pay == "estimated" and note is None:
+            return None, f"an estimated salary needs a pay_note saying where it came from: {row}"
+    lead["pay_source"] = source_of_pay
+    lead["pay_note"] = None if note is None else str(note).strip()
     posted = value(row.get("posted_on"))
     if posted is not None:
         parsed = pd.to_datetime(posted, errors="coerce")
@@ -416,6 +428,9 @@ def clean_lead(row: dict) -> tuple[dict | None, str | None]:
         unknown = set(ratings) - set(config.FIT_CATEGORIES)
         if unknown:
             return None, f"unknown fit categories {sorted(unknown)}: {row}"
+        if "pay" in ratings and lead["pay_source"] is None:
+            return None, ("pay was rated but no salary is given: leave pay out of fit when "
+                          f"it's unknown, or give the salary (and pay_source): {row}")
         cleaned = {}
         for category, rating in ratings.items():
             try:
@@ -455,6 +470,26 @@ def fit_total(ratings: dict, deal_breaker: bool = False) -> float | None:
     if deal_breaker:
         total = min(total, config.DEAL_BREAKER_CAP)
     return round(total, 1)
+
+
+def without_pay(detail: dict) -> tuple[float | None, dict]:
+    """A lead's (fit_score, fit_detail) with the pay rating dropped: for
+    leads rated on pay before it was known."""
+    ratings = {k: v for k, v in (detail.get("ratings") or {}).items() if k != "pay"}
+    deal_breaker = bool(detail.get("deal_breaker"))
+    return fit_total(ratings, deal_breaker), {**detail, "ratings": ratings,
+                                             "deal_breaker": deal_breaker}
+
+
+def pay_state(salary_min, salary_max, pay_source) -> tuple[str, str]:
+    """('listed', '$120,000–$140,000'), ('estimated', '~$120,000–$140,000') or
+    ('unknown', 'Pay not listed'): how sure a lead's pay is, and the text."""
+    text = salary_range(salary_min, salary_max)
+    if not text:
+        return "unknown", "Pay not listed"
+    if value(pay_source) == "estimated":
+        return "estimated", f"~{text}"
+    return "listed", text
 
 
 def fit_text(score) -> str:

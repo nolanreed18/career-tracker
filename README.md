@@ -27,9 +27,13 @@ database, hosted free on Streamlit Community Cloud.
   first. The daily review rates every job 1–10 on six categories (role,
   industry, location, pay, level, extras) against what you're looking for;
   the score is the weighted average, to one decimal, and any deal-breaker
-  caps it at 3. Each lead shows its ratings, and **How scoring works** on the
-  What I'm looking for section lists the categories and weights (they live
-  in `app/config.py`). Weak matches (under 4) are hidden until you choose
+  caps it at 3. Pay is rated only when the job has a pay range: the one the
+  alert listed, or an estimate the review found online (shown with a yellow
+  warning and where it came from). When it found nothing, the lead says
+  **Pay not listed** and the score rests on the other categories. Each lead
+  shows its ratings, and **How scoring works** on the What I'm looking for
+  section lists the categories, weights and pay rules (they live in
+  `app/config.py`). Weak matches (under 4) are hidden until you choose
   **All**; they stay stored so the same job never comes back.
   **Add** makes one a Saved application; **Dismiss** hides it. The
   **What I'm looking for** tab holds the roles, places, pay floor, must-haves
@@ -135,15 +139,23 @@ and it's safe to run again: it never deletes anything.
 
 Job sites email alerts to the job-search Gmail. Every morning a scheduled
 Claude task follows [`DAILY_REVIEW.md`](DAILY_REVIEW.md): it reads the new
-alert emails, scores each job 1–10 against **Job Leads → What I'm looking
-for**, adds the new ones to the Job Leads page, emails a short digest of the
-best, and files the alert emails under the `job-alerts-reviewed` label.
+alert emails, looks up pay for the jobs whose alert gave none, scores each
+job 1–10 against **Job Leads → What I'm looking for**, adds the new ones to
+the Job Leads page, emails the digest, and files the alert emails under the
+`job-alerts-reviewed` label.
+
+The digest (`app/digest.py`, rendered by `leads.py digest`) is one email in
+the app's colours: the day's counts, the top pick, every lead with its
+score, pay, ratings and posting link, what Home says needs doing today, and
+buttons into the app.
 
 It runs in a Claude cloud session, which reaches the database through
 Neon's HTTPS endpoint (`db.HttpCursor`) because it can't open a normal
 Postgres connection. The cloud environment needs `*.neon.tech` in its
 allowed domains and `DATABASE_URL` as an environment variable, and
-`.claude/settings.json` allows exactly the three `leads.py` commands it runs.
+`.claude/settings.json` allows exactly the `leads.py` commands it runs. The
+pay lookup uses the session's web search; job sites themselves can't be
+opened unless the environment's network access allows them.
 
 ## Backups
 
@@ -185,5 +197,6 @@ up automatically (`.claude/hooks/session-start.sh`).
 | `schema.sql`, `apply_schema.py` | The tables (created automatically when the app first connects), and a script to create them by hand. |
 | `db.py` | Finds `DATABASE_URL` (in `.env`, or Streamlit secrets when online). |
 | `backup.py` | Dumps every table to CSV. |
-| `leads.py` | How the daily job-alert review reads your profile and adds leads. |
+| `app/digest.py` | The daily digest email, built from the day's leads. |
+| `leads.py` | How the daily job-alert review reads your profile, adds leads and builds the digest. |
 | `CLAUDE.md` | Rules for Claude when it works on this project. |

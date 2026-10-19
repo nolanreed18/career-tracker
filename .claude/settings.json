@@ -16,7 +16,8 @@
       "Bash(python3 leads.py profile)",
       "Bash(python3 leads.py rubric)",
       "Bash(python3 leads.py known)",
-      "Bash(python3 leads.py add *)"
+      "Bash(python3 leads.py add *)",
+      "Bash(python3 leads.py digest *)"
     ]
   }
 }
