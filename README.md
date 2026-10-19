@@ -33,12 +33,16 @@ database, hosted free on Streamlit Community Cloud.
   **Pay not listed** and the score rests on the other categories. Each lead
   shows its ratings, and **How scoring works** on the What I'm looking for
   section lists the categories, weights and pay rules (they live in
-  `app/config.py`). Weak matches (under 4) are hidden until you choose
-  **All**; they stay stored so the same job never comes back.
-  **Add** makes one a Saved application; **Dismiss** hides it. The
-  **What I'm looking for** tab holds the roles, places, pay floor, must-haves
-  and deal-breakers the scores are based on. Home shows how many new leads are
-  waiting.
+  `app/config.py`). Today's arrivals carry a **New** badge and the **New
+  today** view shows just them; weak matches (under 4) are hidden until you
+  choose **All**; a lead nobody touches for 14 days moves to **Stale**. All of
+  them stay stored, so the same job (company and title) never comes back
+  from any site. **Add** makes one a Saved application; **Dismiss…** asks
+  why (wrong role, location, pay, company, already applied, other) and the
+  daily review reads the last month of reasons as a hint. The **What I'm
+  looking for** tab holds the roles, places, pay floor, must-haves,
+  deal-breakers and **companies to skip** the scores are based on. Home
+  shows how many new leads are waiting.
 
 Settings you might want to change (the 14-day follow-up, the 7-day interview
 window, the status list) are in `app/config.py`.
@@ -145,9 +149,10 @@ the Job Leads page, emails the digest, and files the alert emails under the
 `job-alerts-reviewed` label.
 
 The digest (`app/digest.py`, rendered by `leads.py digest`) is one email in
-the app's colours: the day's counts, the top pick, every lead with its
-score, pay, ratings and posting link, what Home says needs doing today, and
-buttons into the app.
+the app's colours: the day's counts, the top pick, a reminder of strong
+leads from earlier days still waiting, every lead with its score, pay,
+ratings and posting link, what Home says needs doing today, and buttons
+into the app.
 
 It runs in a Claude cloud session, which reaches the database through
 Neon's HTTPS endpoint (`db.HttpCursor`) because it can't open a normal

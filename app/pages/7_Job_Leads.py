@@ -10,7 +10,19 @@ fresh.check()                   # after a redeploy: no stale copies of the app's
 import config
 import data
 import logic
-from ui import card, empty, fit_badge, fit_breakdown, md, pay_badge, sections, setup
+from ui import (
+    badge,
+    bump_round,
+    card,
+    empty,
+    fit_badge,
+    fit_breakdown,
+    md,
+    pay_badge,
+    round_key,
+    sections,
+    setup,
+)
 
 setup("Job Leads", "From your alert emails, scored for fit every morning")
 
@@ -40,58 +52,89 @@ def pay_line(lead) -> str:
     return line
 
 
-section = sections("leads", ["Inbox", "Dismissed", "What I'm looking for"])
+def lead_card(lead) -> None:
+    """One lead: score, title (opens the posting), where, pay, ratings and
+    reason, then Add and a "Dismiss…" pick that asks why."""
+    lead_id = int(lead.lead_id)
+    with card(f"lead-{lead_id}"):
+        fit = fit_badge(lead.fit_score)
+        new = badge("blue", "New") if lead.found_on == today else ""
+        title = md(lead.title)
+        if url := logic.job_link(lead.job_url):       # the title opens the posting
+            title = f"[{title}]({url.replace(')', '%29').replace(' ', '%20')})"
+        head = " · ".join(part for part in (new, fit) if part)
+        st.markdown(f"{head + ' · ' if head else ''}**{title}** — {md(lead.company)}")
+        st.caption(f"{describe(lead)} · {pay_line(lead)}")
+        if breakdown := fit_breakdown(lead.fit_detail):
+            st.caption(breakdown)
+        if logic.value(lead.fit_reason):
+            st.markdown(md(lead.fit_reason))
+        move_col, dismiss_col = st.columns(2, wrap=False)
+        if move_col.button("Add", key=f"move_{lead_id}", type="primary", width="stretch",
+                           help="Add to Applications as Saved, with this fit note"):
+            application_id = data.move_lead_to_applications(lead_id, today)
+            st.session_state["flash"] = "Added to Applications as Saved."
+            st.session_state["open_application"] = application_id
+            st.switch_page("pages/1_Applications.py")
+        reason = dismiss_col.selectbox(
+            "Dismiss", config.DISMISS_REASONS, index=None, placeholder="Dismiss…",
+            key=f"dismiss_{lead_id}_{round_key('leads')}", label_visibility="collapsed",
+            help="Dismiss this lead, and say why: the daily review reads recent reasons")
+        if reason:
+            data.set_lead_status(lead_id, "dismissed", reason, today)
+            bump_round("leads")
+            done(f"Dismissed {lead.title} — {lead.company} ({reason}).")
+
+
+section = sections("leads", ["Inbox", "Stale", "Dismissed", "What I'm looking for"])
 
 # ---- inbox ------------------------------------------------------------------
 
 if section == "Inbox":
-    leads = data.job_leads("new")
+    leads, stale = logic.split_stale(data.job_leads("new"), today)
     if data.job_profile() is None:
         st.warning("Fill in **What I'm looking for** so the daily review can score jobs "
                    "for fit.")
     if leads.empty:
         empty("inbox", "No new leads",
-              "Jobs from your alert emails show up here after the daily review, best fit first.")
+              "Jobs from your alert emails show up here after the daily review, best fit first."
+              + (f" {logic.plural(len(stale), 'older lead')} under Stale." if len(stale) else ""))
     else:
         strong = leads["fit_score"].fillna(0) >= config.STRONG_FIT
         weak = leads["fit_score"].map(logic.is_weak)
-        st.caption(f"{logic.plural(len(leads), 'new lead')}: {int(strong.sum())} strong "
-                   f"(fit {config.STRONG_FIT}+), {int(weak.sum())} weak (under "
-                   f"{config.MAYBE_FIT}).")
-        SHOW = {"maybe": f"Worth a look ({config.MAYBE_FIT}+)",
+        fresh = leads["found_on"] == today
+        st.caption(f"{logic.plural(len(leads), 'new lead')}: {int(fresh.sum())} today, "
+                   f"{int(strong.sum())} strong (fit {config.STRONG_FIT}+), {int(weak.sum())} "
+                   f"weak (under {config.MAYBE_FIT})"
+                   + (f"; {len(stale)} stale under Stale." if len(stale) else "."))
+        SHOW = {"today": "New today", "maybe": f"Worth a look ({config.MAYBE_FIT}+, any day)",
                 "strong": f"Strong only ({config.STRONG_FIT}+)", "all": "All"}
         show = st.radio("Show", list(SHOW), horizontal=True, format_func=SHOW.get,
-                        key="leads_show", label_visibility="collapsed")
-        if show == "strong":
+                        index=0 if fresh.any() else 1, key="leads_show",
+                        label_visibility="collapsed")
+        if show == "today":
+            leads = leads[fresh & ~weak]                   # weak ones wait under All
+        elif show == "strong":
             leads = leads[strong]
         elif show == "maybe":
             leads = leads[~weak]
         if leads.empty:
             empty("filter_alt", "Nothing in this view", "Choose All to see every lead.")
         for lead in leads.itertuples():
-            lead_id = int(lead.lead_id)
-            with card(f"lead-{lead_id}"):
-                fit = fit_badge(lead.fit_score)
-                title = md(lead.title)
-                if url := logic.job_link(lead.job_url):       # the title opens the posting
-                    title = f"[{title}]({url.replace(')', '%29').replace(' ', '%20')})"
-                st.markdown(f"{fit + ' · ' if fit else ''}**{title}** — {md(lead.company)}")
-                st.caption(f"{describe(lead)} · {pay_line(lead)}")
-                if breakdown := fit_breakdown(lead.fit_detail):
-                    st.caption(breakdown)
-                if logic.value(lead.fit_reason):
-                    st.markdown(md(lead.fit_reason))
-                move_col, dismiss_col = st.columns(2, wrap=False)
-                if move_col.button("Add", key=f"move_{lead_id}", type="primary",
-                                   width="stretch",
-                                   help="Add to Applications as Saved, with this fit note"):
-                    application_id = data.move_lead_to_applications(lead_id, today)
-                    st.session_state["flash"] = "Added to Applications as Saved."
-                    st.session_state["open_application"] = application_id
-                    st.switch_page("pages/1_Applications.py")
-                if dismiss_col.button("Dismiss", key=f"dismiss_{lead_id}", width="stretch"):
-                    data.set_lead_status(lead_id, "dismissed")
-                    done(f"Dismissed {lead.title} — {lead.company}.")
+            lead_card(lead)
+
+# ---- stale ------------------------------------------------------------------
+
+if section == "Stale":
+    _, stale = logic.split_stale(data.job_leads("new"), today)
+    st.caption(f"Leads that arrived more than {config.LEAD_STALE_DAYS} days ago and were never "
+               "added or dismissed. Postings this old are often closed; they stay here so the "
+               "same job never comes back as new.")
+    if stale.empty:
+        empty("history", "Nothing stale", "Leads drop in here after "
+              f"{config.LEAD_STALE_DAYS} days in the inbox.")
+    for lead in stale.itertuples():
+        lead_card(lead)
 
 # ---- dismissed --------------------------------------------------------------
 
@@ -104,10 +147,18 @@ if section == "Dismissed":
         with card(f"dismissed-{lead_id}"):
             text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
             fit = fit_badge(lead.fit_score)
+            why = ""
+            if logic.value(lead.dismiss_reason):
+                why = badge("gray", lead.dismiss_reason)
+                if logic.value(lead.dismissed_on):
+                    why += f" dismissed {logic.when(lead.dismissed_on, today)} · "
+                else:
+                    why += " · "
             text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}** — "
-                              f"{md(lead.company)}  \n{describe(lead)} · {pay_line(lead)}")
+                              f"{md(lead.company)}  \n{why}{describe(lead)} · {pay_line(lead)}")
             if button_col.button("Restore", key=f"restore_{lead_id}", width="stretch"):
                 data.set_lead_status(lead_id, "new")
+                bump_round("leads")
                 done(f"Restored {lead.title} — {lead.company}.")
 
 # ---- profile ----------------------------------------------------------------
@@ -138,6 +189,12 @@ if section == "What I'm looking for":
         deal_breakers = st.text_area("Deal-breakers", value=profile.get("deal_breakers") or "",
                                      placeholder="e.g. 100% travel, commission-only, "
                                                  "contract-to-hire")
+        skip_companies = st.text_area(
+            "Companies to skip", value=profile.get("skip_companies") or "",
+            placeholder="One per line, e.g. staffing agencies or a company you've ruled out",
+            help="The daily review drops their jobs before scoring. A name matches when it "
+                 "appears in the employer's name, so \"Robert Half\" also catches "
+                 "\"Robert Half Technology\".")
         about_me = st.text_area(
             "About me", value=profile.get("about_me") or "", height=200,
             placeholder="Your experience and skills, as on a resume: years, tools, "
@@ -147,7 +204,8 @@ if section == "What I'm looking for":
         data.save_job_profile(
             today, target_roles=target_roles, locations=locations,
             work_modes=", ".join(work_modes), min_salary=min_salary, must_haves=must_haves,
-            nice_to_haves=nice_to_haves, deal_breakers=deal_breakers, about_me=about_me)
+            nice_to_haves=nice_to_haves, deal_breakers=deal_breakers, about_me=about_me,
+            skip_companies=skip_companies)
         done("Saved. The next daily review will use it.")
 
     with card("scoring"):
@@ -160,6 +218,10 @@ if section == "What I'm looking for":
                    f"{config.STRONG_FIT}+ is a strong fit, {config.MAYBE_FIT}+ is worth a look. "
                    "The weights live in app/config.py.")
         st.markdown(f"**Pay.** {config.PAY_RESEARCH}")
+        st.markdown(f"**Dismissals.** When you dismiss a lead you say why; the review reads "
+                    f"the last {config.DISMISSAL_DAYS} days of reasons as a hint of what you "
+                    "don't want, alongside the companies to skip above. Leads nobody touches "
+                    f"for {config.LEAD_STALE_DAYS} days move to Stale.")
         st.caption(f"{pay_badge(120000, 140000, 'estimated')} means the review's estimate; "
                    f"{pay_badge(None, None, None)} means nothing was found, and the score "
                    "ignores pay.")

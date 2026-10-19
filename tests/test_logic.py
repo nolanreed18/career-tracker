@@ -216,11 +216,44 @@ def test_parse_salary():
 
 # ---- job leads --------------------------------------------------------------
 
-def test_the_same_job_from_two_sites_gets_the_same_key():
-    a = logic.lead_key("Acme, Inc.", "Senior Data Analyst", "Chicago, IL")
-    b = logic.lead_key("acme inc", "Senior  Data Analyst ", "chicago il")
-    assert a == b == "acme inc|senior data analyst|chicago il"
-    assert logic.lead_key("Acme", "Analyst", None) != logic.lead_key("Acme", "Analyst", "Remote")
+def test_the_same_job_gets_the_same_key_whatever_the_site_or_city():
+    a = logic.lead_key("Acme, Inc.", "Senior Data Analyst")
+    b = logic.lead_key("acme inc", "Senior  Data Analyst ")
+    assert a == b == "acme inc|senior data analyst"
+    assert logic.lead_key("Acme", "Analyst") != logic.lead_key("Acme", "Senior Analyst")
+    lead, _ = logic.clean_lead({"source": "Dice", "title": "Analyst", "company": "Acme",
+                                "location": "Denver, CO"})
+    other, _ = logic.clean_lead({"source": "LinkedIn", "title": "Analyst", "company": "ACME",
+                                 "location": "Denver Metropolitan Area"})
+    assert lead["dedupe_key"] == other["dedupe_key"] == "acme|analyst"
+
+
+def test_stale_leads_are_the_old_ones_still_sitting_there():
+    today = date(2026, 10, 19)
+    assert logic.is_stale(date(2026, 10, 4), today) and not logic.is_stale(date(2026, 10, 5), today)
+    assert not logic.is_stale(None, today)
+    frame = pd.DataFrame({"title": ["old", "new"], "found_on": [date(2026, 9, 1), today]})
+    fresh, stale = logic.split_stale(frame, today)
+    assert fresh["title"].tolist() == ["new"] and stale["title"].tolist() == ["old"]
+    empty = pd.DataFrame(columns=["title", "found_on"])
+    assert all(f.empty for f in logic.split_stale(empty, today))
+
+
+def test_companies_to_skip_match_however_the_site_writes_them():
+    skip = logic.skip_list("Robert Half\nTEKsystems, Insight Global;\n")
+    assert skip == ["robert half", "teksystems", "insight global"]
+    assert logic.skips_company("Robert Half Technology", skip)
+    assert logic.skips_company("TEKSYSTEMS, Inc.", skip)
+    assert not logic.skips_company("Halfway House", skip)
+    assert not logic.skips_company("Acme", []) and logic.skip_list(None) == []
+
+
+def test_dismissal_notes_are_plain_records():
+    frame = pd.DataFrame([{"title": "Clerk", "company": "Acme", "location": None,
+                           "dismiss_reason": "wrong role", "dismissed_on": date(2026, 10, 18)}])
+    assert logic.dismissal_notes(frame) == [{
+        "title": "Clerk", "company": "Acme", "location": None, "reason": "wrong role",
+        "dismissed_on": "2026-10-18"}]
 
 
 def test_a_lead_is_cleaned_for_the_database():
@@ -233,7 +266,7 @@ def test_a_lead_is_cleaned_for_the_database():
     assert lead["title"] == "Data Analyst" and lead["work_mode"] == "remote"
     assert (lead["salary_min"], lead["salary_max"]) == (120000, 140000)
     assert lead["posted_on"] == date(2026, 10, 12) and lead["fit_score"] == 8
-    assert lead["dedupe_key"] == "acme|data analyst|remote us"
+    assert lead["dedupe_key"] == "acme|data analyst"
 
 
 def test_a_lead_without_a_company_or_with_a_bad_score_is_refused():

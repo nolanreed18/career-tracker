@@ -2,7 +2,7 @@
 with data, and the main forms do what they say."""
 
 import os
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import psycopg
@@ -10,6 +10,7 @@ import pytest
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
+import config
 import data
 import logic
 import theme
@@ -356,14 +357,54 @@ def test_a_lead_shows_listed_pay_plainly_and_a_warning_when_pay_is_missing_or_es
                "Levels.fyi range, Data Engineer, Denver" in c for c in captions)
 
 
-def test_dismissing_a_lead_moves_it_to_dismissed_and_restore_brings_it_back():
+def test_dismissing_a_lead_asks_why_and_restore_brings_it_back():
     seed()
     at = run(LEADS)
-    widget(at.button, "Dismiss", 1).click().run()
+    widget(at.selectbox, "Dismiss", 1).select("wrong role").run()
+    assert not at.exception, [e.message for e in at.exception]
     assert data.job_leads("new")["title"].tolist() == ["Analytics Engineer"]
+    gone = data.job_leads("dismissed").iloc[0]
+    assert (gone["dismiss_reason"], gone["dismissed_on"]) == ("wrong role", TODAY)
     widget(at.radio, "Section").set_value("Dismissed").run()
+    assert any(":gray-badge[wrong role] dismissed today" in m.value for m in at.markdown)
     click(at, "Restore")
     assert len(data.job_leads("new")) == 2
+    assert data.lead(int(gone["lead_id"]))["dismiss_reason"] is None
+
+
+def test_todays_leads_are_marked_new_and_old_ones_go_stale():
+    seed()                                                  # Gamma and Delta arrive today
+    data.add_leads([logic.clean_lead(r)[0] for r in (
+        {"source": "Dice", "title": "Yesterday's Analyst", "company": "Eta", "fit_score": 8},
+    )], TODAY - timedelta(days=1))
+    data.add_leads([logic.clean_lead(r)[0] for r in (
+        {"source": "Dice", "title": "Forgotten Engineer", "company": "Theta", "fit_score": 9},
+    )], TODAY - timedelta(days=config.LEAD_STALE_DAYS + 1))
+    at = run(LEADS)
+    assert any("3 new leads: 2 today, 2 strong" in c.value and "1 stale under Stale" in c.value
+               for c in at.caption)
+    shown = [m.value for m in at.markdown if "**" in m.value and "—" in m.value]
+    assert widget(at.radio, "Show").value == "today"       # today's batch comes up first
+    assert len(shown) == 2 and all(":blue-badge[New]" in m for m in shown)
+    assert not any("Forgotten Engineer" in m for m in shown)
+    widget(at.radio, "Show").set_value("all").run()
+    shown = [m.value for m in at.markdown if "**" in m.value and "—" in m.value]
+    assert len(shown) == 3 and sum(":blue-badge[New]" in m for m in shown) == 2
+    assert "Analytics Engineer" in shown[0] and "Yesterday's Analyst" in shown[1]   # best first
+    widget(at.radio, "Section").set_value("Stale").run()
+    assert any("Forgotten Engineer" in m.value for m in at.markdown)
+    home = run(HOME)
+    assert any("3 new job leads to review, 2 strong" in m.value for m in home.markdown)
+
+
+def test_companies_to_skip_are_saved_with_the_profile():
+    seed()
+    at = run(LEADS)
+    widget(at.radio, "Section").set_value("What I'm looking for").run()
+    widget(at.text_area, "Companies to skip").set_value("Robert Half\nTEKsystems").run()
+    click(at, "Save")
+    assert data.job_profile()["skip_companies"] == "Robert Half\nTEKsystems"
+    assert any("**Dismissals.**" in m.value for m in at.markdown)
 
 
 def test_moving_a_lead_creates_the_application():
@@ -395,9 +436,9 @@ def test_weak_leads_are_hidden_until_asked_for():
         "source": "Indeed", "title": "Excel Reporting Clerk", "company": "Epsilon",
         "fit_score": 2, "fit_reason": "Pure Excel reporting: a deal-breaker."})[0]], TODAY)
     at = run(LEADS)
-    assert any("3 new leads: 1 strong (fit 7+), 1 weak (under 4)." in c.value
+    assert any("3 new leads: 3 today, 1 strong (fit 7+), 1 weak (under 4)." in c.value
                for c in at.caption)
-    shown = " ".join(m.value for m in at.markdown)
+    shown = " ".join(m.value for m in at.markdown)           # New today: weak ones wait
     assert "Analytics Engineer" in shown and "BI Developer" in shown
     assert "Excel Reporting Clerk" not in shown
     widget(at.radio, "Show").set_value("all").run()

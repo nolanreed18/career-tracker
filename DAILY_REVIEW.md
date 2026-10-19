@@ -48,8 +48,10 @@ the inbox, never in this public repository.
    links (Glassdoor's real link looks like
    `glassdoor.com/partner/jobListing.htm?...&jobListingId=...`). Skip only
    links that aren't a job: unsubscribe, "see all jobs", edit alert. Within
-   this run, keep one copy of a job seen on several sites (prefer the link
-   from the company or LinkedIn), and count how many repeats you dropped.
+   this run, the same company and title is one job, however many sites or
+   cities list it: keep one copy (prefer the location closest to the
+   profile, then the link from the company or LinkedIn), and count how
+   many repeats you dropped.
 
 4. **Read what's wanted, how to score, and what's known:**
 
@@ -59,12 +61,17 @@ the inbox, never in this public repository.
    python3 leads.py known
    ```
 
-   `profile` is what the owner is looking for. `rubric` gives `today` (the
-   owner's date; the session's clock is UTC, which can be a day ahead), the
-   scoring categories with their weights and what each one means, and the
-   pay rules. `known` lists the jobs already stored as
-   `company|title|location` (lower-case, punctuation dropped). Skip jobs
-   already there, and count how many you skipped.
+   `profile` is what the owner is looking for, plus `skip_companies` (drop
+   every job from those employers before anything else; a name matches when
+   it appears in the employer's name) and `dismissed_recently` (jobs the
+   owner dismissed lately and why: `wrong role`, `location`, `pay`,
+   `company`, `already applied` or `other`; treat each as a hint of what
+   they don't want, so a job much like a dismissed one rates lower on that
+   category). `rubric` gives `today` (the owner's date; the session's clock
+   is UTC, which can be a day ahead), the scoring categories with their
+   weights and what each one means, and the pay rules. `known` lists the
+   jobs already stored as `company|title` (lower-case, punctuation
+   dropped). Skip jobs already there, and count how many you skipped.
 
 5. **Find the pay** for each new job whose email gave none, unless the job is
    plainly weak (its role or location would rate 3 or under against the
@@ -110,8 +117,9 @@ the inbox, never in this public repository.
    python3 leads.py add <that file>
    ```
 
-   It prints how many were added and skipped. If it refuses the file, fix the
-   rows it names and run it again.
+   It prints how many were added, skipped as already seen, and dropped as
+   companies to skip. If it refuses the file, fix the rows it names and run
+   it again.
 
 8. **Email the owner one digest.** Write `run.json` to the scratchpad:
 
@@ -132,7 +140,8 @@ the inbox, never in this public repository.
    `subject` as the subject, `html` as `htmlBody` and `text` as `body`, each
    pasted exactly as printed, without editing, shortening or reformatting.
    The digest is built from what `add` stored, so it needs step 7 done first;
-   with nothing new it still sends a short note.
+   with nothing new it still sends a short note. It also reminds the owner
+   of strong leads from earlier days still sitting in the inbox.
 
 9. **File the alert emails.** Label every thread read in step 2
    `job-alerts-reviewed` (create the label if missing) and remove it from the

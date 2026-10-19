@@ -1,6 +1,7 @@
 """The daily job-alert review's way into the database.
 
-    python leads.py profile          what you're looking for, as JSON
+    python leads.py profile          what you're looking for, as JSON, with the
+                                     companies to skip and recent dismissals
     python leads.py rubric           today's date (owner's time zone) and the scoring
                                      categories, weights and thresholds, as JSON
     python leads.py known            every stored lead's dedupe key, one per line
@@ -16,8 +17,9 @@ needs a pay_note saying where it came from), job_url, posted_on
 category 1-10 (e.g. {"role": 9, "industry": 6, ...}), plus deal_breaker
 (true/false). The score is worked out from those; rate pay only when a
 salary is given. A plain fit_score (1-10) is also accepted. The same job
-seen before, from any site, is skipped. Nothing is added unless every row
-is valid.
+(company and title) seen before, from any site, is skipped, as is any job
+from the profile's companies to skip. Nothing is added unless every row is
+valid.
 
 run.json gives the digest what the database doesn't know: app_url (the
 app's address; required), and optionally emails_read, sources ({"LinkedIn":
@@ -28,6 +30,7 @@ anything).
 import json
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "app"))
@@ -43,8 +46,10 @@ def main(argv: list[str]) -> int:
         data.use_http()          # cloud sessions can't open a Postgres connection
     command = argv[0] if argv else ""
     if command == "profile":
-        profile = data.job_profile()
-        print(json.dumps(profile or {}, default=str, indent=2))
+        profile = data.job_profile() or {}
+        since = data.today() - timedelta(days=config.DISMISSAL_DAYS)
+        profile["dismissed_recently"] = logic.dismissal_notes(data.dismissed_recently(since))
+        print(json.dumps(profile, default=str, indent=2))
         return 0
     if command == "rubric":
         print(json.dumps({
@@ -81,8 +86,12 @@ def main(argv: list[str]) -> int:
             print("nothing added:\n" + "\n".join(problems), file=sys.stderr)
             return 1
         data.migrate()                     # the live tables may predate a column
-        added, skipped = data.add_leads(leads, data.today())
-        print(f"added {added}, skipped {skipped} already seen")
+        skip = logic.skip_list((data.job_profile() or {}).get("skip_companies"))
+        kept = [lead for lead in leads if not logic.skips_company(lead["company"], skip)]
+        dropped = len(leads) - len(kept)
+        added, skipped = data.add_leads(kept, data.today())
+        print(f"added {added}, skipped {skipped} already seen"
+              + (f", dropped {dropped} from companies to skip" if dropped else ""))
         return 0
     if command == "digest" and len(argv) == 2:
         notes = json.loads(Path(argv[1]).read_text(encoding="utf-8"))
@@ -92,8 +101,9 @@ def main(argv: list[str]) -> int:
         today = data.today()
         leads = data.leads_found(today).to_dict("records")
         attention = logic.needs_attention(data.applications(), data.interviews(), today)
-        print(json.dumps(digest.render(today, leads, attention, notes["app_url"], notes),
-                         indent=2))
+        waiting = data.strong_leads_waiting(today).to_dict("records")
+        print(json.dumps(digest.render(today, leads, attention, notes["app_url"], notes,
+                                       waiting), indent=2))
         return 0
     print(__doc__, file=sys.stderr)
     return 2

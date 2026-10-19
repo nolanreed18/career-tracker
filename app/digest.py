@@ -187,12 +187,14 @@ def attention_rows(items: list[logic.Attention]) -> str:
 # ---- the email --------------------------------------------------------------
 
 def render(today: date, leads: list[dict], attention: list[logic.Attention], app_url: str,
-           notes: dict | None = None) -> dict:
+           notes: dict | None = None, waiting: list[dict] = ()) -> dict:
     """{"subject", "html", "text"} for the digest. `leads` are the rows the
     review added today (data.leads_found), best first; `attention` is what
     Home would list (logic.needs_attention); `notes` may give emails_read,
-    sources ({site: emails}), already_known, duplicates and problem."""
+    sources ({site: emails}), already_known, duplicates and problem;
+    `waiting` are strong leads from earlier days still in the inbox."""
     notes = notes or {}
+    waiting = list(waiting)
     problem = logic.value(notes.get("problem"))
     by_tier = tiers(leads)
     strong, maybe = by_tier["strong"], by_tier["maybe"]
@@ -240,6 +242,17 @@ def render(today: date, leads: list[dict], attention: list[logic.Attention], app
                     f'<span class="co">— {e(top.get("company"))}</span></div>'
                     + (f'<div class="r" style="margin-top:4px">{e(reason)}</div>' if reason else "")
                     + "</td></tr></table></td></tr>")
+    if waiting:
+        names = "<br>".join(
+            f'<strong>{logic.fit_text(w.get("fit_score"))}</strong> &nbsp;{title_link(w)} '
+            f'<span class="co">— {e(w.get("company"))}</span>' for w in waiting[:5])
+        more = f"<br>…and {len(waiting) - 5} more" if len(waiting) > 5 else ""
+        rows.append(f'<tr><td style="padding:12px 0 0 0"><table role="presentation" width="100%" '
+                    f'cellpadding="0" cellspacing="0" class="cd" style="border-left:4px solid {ORANGE}">'
+                    f'<tr><td class="f" style="padding:14px 16px;font-size:14px;line-height:22px">'
+                    f'<div class="k" style="color:{ORANGE}">Still waiting · '
+                    f'{logic.plural(len(waiting), "strong lead")} from earlier this week</div>'
+                    f'<div style="margin-top:4px">{names}{more}</div></td></tr></table></td></tr>')
     if strong:
         rows.append(section(f"Strong fits ({config.STRONG_FIT}+)", GREEN,
                             "".join(lead_card(lead) for lead in strong)))
@@ -278,16 +291,22 @@ def render(today: date, leads: list[dict], attention: list[logic.Attention], app
                 f'style="max-width:640px">' + "\n".join(rows)
                 + "</table></td></tr></table></body></html>")
     return {"subject": subject(today, leads, problem), "html": html_out,
-            "text": render_text(today, leads, attention, app_url, notes)}
+            "text": render_text(today, leads, attention, app_url, notes, waiting)}
 
 
 def render_text(today: date, leads: list[dict], attention: list[logic.Attention],
-                app_url: str, notes: dict) -> str:
+                app_url: str, notes: dict, waiting: list[dict] = ()) -> str:
     """The plain-text alternative, for clients that don't show HTML."""
     lines = [f"Job leads for {today:%A, %B} {today.day}", ""]
     problem = logic.value(notes.get("problem"))
     if problem:
         lines += [f"Something went wrong: {problem}", ""]
+    if waiting:
+        lines.append(f"Still waiting in your inbox: {logic.plural(len(waiting), 'strong lead')}"
+                     " from earlier this week: "
+                     + "; ".join(f"{logic.fit_text(w.get('fit_score'))} {w.get('title')} — "
+                                 f"{w.get('company')}" for w in waiting[:5]))
+        lines.append("")
     if not leads:
         lines.append("Nothing new today.")
     for lead in leads:

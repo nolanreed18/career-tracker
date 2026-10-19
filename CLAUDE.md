@@ -43,8 +43,10 @@ only they can do (accounts, secrets, clicking merge).
   and the pay rules (`PAY_SOURCES`, `PAY_RESEARCH`): pay is rated only when a
   lead has a salary, listed or estimated; `logic.clean_lead` refuses a pay
   rating without one, and unknown pay stays out of the score.
-  **Status / kind lists are repeated in `schema.sql` CHECKs**: change both
-  (tests fail if they drift). Add a table → add it to `backup.TABLES` and the
+  **Status / kind lists are repeated in `schema.sql` CHECKs** (statuses,
+  kinds, lead statuses, `DISMISS_REASONS`): change both (tests fail if they
+  drift). A lead's dedupe key is company|title (`logic.lead_key`); stale
+  leads (`LEAD_STALE_DAYS`) are a view, not a status. Add a table → add it to `backup.TABLES` and the
   `TABLES` list in `conftest.py`.
 - `schema.sql` must stay re-runnable (`if not exists`): `data.py` runs it on the
   first connection of each process. Changing an existing table → also add an

@@ -46,7 +46,7 @@ for n, item in enumerate(items):
             st.session_state["open_application"] = item.application_id
             st.switch_page("pages/1_Applications.py")
 
-new_leads = data.job_leads("new")
+new_leads, _ = logic.split_stale(data.job_leads("new"), today)
 if not new_leads.empty:
     strong = int((new_leads["fit_score"].fillna(0) >= config.STRONG_FIT).sum())
     with card("leads"):
