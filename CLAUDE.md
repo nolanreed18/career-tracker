@@ -14,6 +14,10 @@ only they can do (accounts, secrets, clicking merge).
   Backups are artifacts anyone signed in to GitHub can download: the workflow
   only ever uploads them inside a 7z file locked with `BACKUP_PASSWORD`.
   Never commit real data: `data/` and `*.csv` are gitignored.
+- The daily job-alert review (`DAILY_REVIEW.md`) runs in a cloud session and
+  reaches the database only through `leads.py`, over Neon's HTTPS endpoint
+  (`db.HttpCursor`, switched on when `CLAUDE_CODE_REMOTE` is set). Keep its
+  queries to what `HttpCursor` supports: one statement each, no transactions.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no

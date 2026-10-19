@@ -5,8 +5,13 @@ this file. A running Streamlit app with no .env -- Community Cloud -- falls
 back to st.secrets. Neither path ever prints the value.
 """
 
+import json
 import os
+import re
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -57,3 +62,108 @@ def get_dsn() -> str:
 def connect(**kwargs) -> psycopg.Connection:
     """Open a connection. Caller manages the transaction unless autocommit."""
     return psycopg.connect(get_dsn(), **kwargs)
+
+
+# ---- Postgres over HTTPS ----------------------------------------------------
+#
+# Claude's cloud sessions (the daily job-alert review) reach the internet only
+# through an HTTPS proxy, so a Postgres connection on port 5432 hangs there.
+# Neon also answers SQL over HTTPS, its official serverless method; leads.py
+# switches data.py onto it. The app itself never uses this path. The
+# connection string goes only to Neon's own endpoint, never into output.
+
+HTTP_TIMEOUT_S = 30
+
+
+def neon_sql_urls(host: str) -> list[str]:
+    """Where Neon answers SQL over HTTPS for this database host: its regional
+    "api." endpoint, then the database's own host."""
+    region = host.split(".", 1)[1] if "." in host else host
+    return [f"https://api.{region}/sql", f"https://{host}/sql"]
+
+
+def http_query(query: str, params: list) -> dict:
+    """One statement through Neon's HTTPS endpoint; its JSON reply
+    ({"fields": [...], "rows": [...], "rowCount": n})."""
+    dsn = get_dsn()
+    host = urllib.parse.urlparse(dsn).hostname or ""
+    if not host.endswith(".neon.tech"):
+        raise RuntimeError("SQL over HTTPS only works with a Neon database")
+    body = json.dumps({"query": query, "params": params}).encode()
+    headers = {"Neon-Connection-String": dsn, "Content-Type": "application/json"}
+    problem = "no endpoint answered"
+    for url in neon_sql_urls(host):
+        request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+                return json.loads(response.read())
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode(errors="replace").replace(dsn, "<DATABASE_URL>")
+            if exc.code == 404:
+                problem = f"{url} not found"
+                continue
+            raise RuntimeError(f"database error ({exc.code}): {detail[:300]}") from None
+        except urllib.error.URLError as exc:
+            problem = f"{url}: {exc.reason}"
+    raise RuntimeError(f"couldn't reach the database over HTTPS ({problem})")
+
+
+_PLACEHOLDER = re.compile(r"%\((\w+)\)s|%s|%%")
+
+
+def to_numbered(query: str, params) -> tuple[str, list]:
+    """psycopg's %s / %(name)s placeholders as Postgres $1, $2..., with the
+    values in that order."""
+    values: list = []
+    numbers: dict[str, int] = {}
+    positional = None if isinstance(params, dict) else iter(params or ())
+
+    def swap(match: re.Match) -> str:
+        if match.group(0) == "%%":
+            return "%"
+        if name := match.group(1):
+            if name not in numbers:
+                values.append(params[name])
+                numbers[name] = len(values)
+            return f"${numbers[name]}"
+        values.append(next(positional))
+        return f"${len(values)}"
+
+    return _PLACEHOLDER.sub(swap, query), values
+
+
+class _Column:
+    def __init__(self, name: str):
+        self.name = name
+
+
+class HttpCursor:
+    """Just enough of a psycopg cursor for data.py, over Neon's HTTPS
+    endpoint. Each statement stands alone: there are no transactions."""
+
+    def __init__(self, row_factory=None):
+        self.dict_rows = row_factory is not None
+        self.rows: list = []
+        self.description: list = []
+        self.rowcount = -1
+
+    def execute(self, query, params=None):
+        if not isinstance(query, str):
+            query = query.as_string(None)
+        text, values = to_numbered(query, params)
+        values = [v if v is None or isinstance(v, (bool, int, float)) else str(v)
+                  for v in values]
+        reply = http_query(text, values)
+        names = [field["name"] for field in reply.get("fields", [])]
+        self.description = [_Column(n) for n in names]
+        self.rowcount = reply.get("rowCount", -1)
+        self.rows = [dict(row) if self.dict_rows else tuple(row[n] for n in names)
+                     for row in reply.get("rows", [])]
+        return self
+
+    def fetchone(self):
+        return self.rows.pop(0) if self.rows else None
+
+    def fetchall(self):
+        rows, self.rows = self.rows, []
+        return rows

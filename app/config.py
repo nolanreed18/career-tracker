@@ -41,8 +41,9 @@ CAREER_KINDS = ["win", "skill", "certification", "feedback", "learning"]
 # Job leads from alert emails. "moved" means it became an application.
 LEAD_STATUSES = ["new", "moved", "dismissed"]
 
-# The sites job alerts come from, in the order the review checks them.
-LEAD_SOURCES = ["LinkedIn", "Indeed", "Glassdoor", "Wellfound", "Dice"]
+# The sites job alerts come from (DAILY_REVIEW.md reads their emails).
+LEAD_SOURCES = ["LinkedIn", "Indeed", "Glassdoor", "Built In", "Dice", "Wellfound",
+                "Welcome to the Jungle"]
 
 # Fit scores (1-10) at or above this are a strong match: highlighted in the
 # app and listed first in the daily email.

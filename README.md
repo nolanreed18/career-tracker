@@ -119,6 +119,20 @@ and `APP_PASSWORD=…` (the password the app asks for);
 `python apply_schema.py` creates the tables by hand. The app does this itself,
 and it's safe to run again: it never deletes anything.
 
+## Daily job-alert review
+
+Job sites email alerts to the job-search Gmail. Every morning a scheduled
+Claude task follows [`DAILY_REVIEW.md`](DAILY_REVIEW.md): it reads the new
+alert emails, scores each job 1–10 against **Job Leads → What I'm looking
+for**, adds the new ones to the Job Leads page, emails a short digest of the
+best, and files the alert emails under the `job-alerts-reviewed` label.
+
+It runs in a Claude cloud session, which reaches the database through
+Neon's HTTPS endpoint (`db.HttpCursor`) because it can't open a normal
+Postgres connection. The cloud environment needs `*.neon.tech` in its
+allowed domains and `DATABASE_URL` as an environment variable, and
+`.claude/settings.json` allows exactly the three `leads.py` commands it runs.
+
 ## Backups
 
 `.github/workflows/backup.yml` runs `backup.py` every Sunday morning (and

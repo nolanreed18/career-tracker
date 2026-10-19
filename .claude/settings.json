@@ -10,5 +10,12 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python3 leads.py profile)",
+      "Bash(python3 leads.py known)",
+      "Bash(python3 leads.py add *)"
+    ]
   }
 }
