@@ -48,3 +48,7 @@ LEAD_SOURCES = ["LinkedIn", "Indeed", "Glassdoor", "Built In", "Dice", "Wellfoun
 # Fit scores (1-10) at or above this are a strong match: highlighted in the
 # app and listed first in the daily email.
 STRONG_FIT = 7
+
+# Scores below this are weak matches: the Job Leads inbox hides them until
+# asked (they stay stored, so the same job never comes back).
+MAYBE_FIT = 4

@@ -1,9 +1,11 @@
 """Every page, run headless against the throwaway database: it draws empty and
 with data, and the main forms do what they say."""
 
+import os
 from datetime import date
 from pathlib import Path
 
+import psycopg
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -270,3 +272,34 @@ def test_the_profile_form_saves():
     profile = data.job_profile()
     assert (profile["target_roles"], profile["min_salary"], profile["work_modes"]) == (
         "Data Analyst", 100000, "remote")
+
+
+def test_weak_leads_are_hidden_until_asked_for():
+    seed()
+    data.add_leads([logic.clean_lead({
+        "source": "Indeed", "title": "Excel Reporting Clerk", "company": "Epsilon",
+        "fit_score": 2, "fit_reason": "Pure Excel reporting: a deal-breaker."})[0]], TODAY)
+    at = run(LEADS)
+    assert any("3 new leads: 1 strong (fit 7+), 1 weak (under 4)." in c.value
+               for c in at.caption)
+    shown = " ".join(m.value for m in at.markdown)
+    assert "Analytics Engineer" in shown and "BI Developer" in shown
+    assert "Excel Reporting Clerk" not in shown
+    widget(at.radio, "Show").set_value("all").run()
+    shown = " ".join(m.value for m in at.markdown)
+    assert "Excel Reporting Clerk" in shown and "Pure Excel reporting" in shown
+    widget(at.radio, "Show").set_value("strong").run()
+    shown = " ".join(m.value for m in at.markdown)
+    assert "Analytics Engineer" in shown and "BI Developer" not in shown
+
+
+def test_todays_glassdoor_links_open_the_right_form():
+    data.add_leads([logic.clean_lead({
+        "source": "Glassdoor", "title": "Analyst", "company": "Zeta", "fit_score": 8})[0]], TODAY)
+    lead_id = int(data.job_leads()["lead_id"][0])
+    with psycopg.connect(os.environ["TEST_DATABASE_URL"], autocommit=True) as conn:
+        conn.execute("update job_leads set job_url = %s where lead_id = %s",
+                     ("https://www.glassdoor.com/job-listing?jl=1010293120973", lead_id))
+    at = run(LEADS)
+    assert any("partner/jobListing.htm?jobListingId=1010293120973" in m.value
+               for m in at.markdown)

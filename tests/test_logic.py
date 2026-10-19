@@ -250,3 +250,23 @@ def test_fit_labels():
     assert logic.fit_label(5) == "🟡 5/10"
     assert logic.fit_label(2) == "⚪ 2/10"
     assert logic.fit_label(None) == ""
+
+
+def test_weak_is_below_the_maybe_line_and_unscored_is_not_weak():
+    assert logic.is_weak(config.MAYBE_FIT - 1)
+    assert not logic.is_weak(config.MAYBE_FIT)
+    assert not logic.is_weak(None)
+
+
+def test_a_rebuilt_glassdoor_link_becomes_the_form_glassdoor_serves():
+    fixed = "https://www.glassdoor.com/partner/jobListing.htm?jobListingId=1010293120973"
+    assert logic.job_link("https://www.glassdoor.com/job-listing?jl=1010293120973") == fixed
+    assert logic.job_link("https://glassdoor.com/job-listing/?jl=1010293120973") == fixed
+    real = ("https://www.glassdoor.com/partner/jobListing.htm?pos=101&jobListingId=1"
+            "&utm_source=jobalert")
+    assert logic.job_link(real) == real                     # the emailed link stays whole
+    assert logic.job_link(" https://example.com/j/1 ") == "https://example.com/j/1"
+    assert logic.job_link(None) is None
+    lead, _ = logic.clean_lead({"source": "Glassdoor", "title": "A", "company": "B",
+                                "job_url": "https://www.glassdoor.com/job-listing?jl=5"})
+    assert lead["job_url"].endswith("jobListingId=5")       # fixed on the way in, too
