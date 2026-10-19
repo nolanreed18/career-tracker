@@ -39,9 +39,14 @@ the inbox, never in this public repository.
 3. **Pull out every job**: title, company, location, work mode (remote /
    hybrid / onsite, if stated), salary text, the job link, posted date, and
    the source site (LinkedIn, Indeed, Glassdoor, Built In, Dice, Wellfound,
-   Welcome to the Jungle). Use the job's own link, not an "unsubscribe" or
-   "see all jobs" link. Within this run, keep one copy of a job seen on
-   several sites (prefer the link from the company or LinkedIn).
+   Welcome to the Jungle). The job link is the one the email itself puts on
+   that job, **kept exactly as it is**, tracking parameters and all: never
+   shorten it, rebuild it from an ID, or guess a "cleaner" form, because job
+   sites' bot protection blocks made-up links (Glassdoor's real link looks
+   like `glassdoor.com/partner/jobListing.htm?...&jobListingId=...`). Skip
+   only links that aren't a job: unsubscribe, "see all jobs", edit alert.
+   Within this run, keep one copy of a job seen on several sites (prefer the
+   link from the company or LinkedIn).
 
 4. **Read what's wanted and what's known:**
 
