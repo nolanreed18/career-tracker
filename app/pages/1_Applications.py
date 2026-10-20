@@ -127,7 +127,7 @@ else:
             dates=("applied_on", "next_action_on", "last_update_on")),
         hide_index=True, width="stretch",
         column_config={
-            "company": "Company", "status": "Status",
+            "company": "Company", "status": st.column_config.TextColumn("Status", width=105),
             "role": st.column_config.TextColumn("Role", width="large"),
             "applied_on": st.column_config.DateColumn("Applied", format="MMM D"),
             "next_action_on": st.column_config.DateColumn("Next step", format="MMM D"),

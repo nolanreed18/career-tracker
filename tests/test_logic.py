@@ -141,6 +141,11 @@ def test_response_rate_counts_anything_that_reached_a_screen():
     assert logic.response_rate(frame, events((1, "applied"), (1, "screening"),
                                              (1, "rejected"))) == (2, 3)
     assert logic.response_rate(apps(), events()) == (0, 0)
+    # 2 never had a screening event but an interview is on record: a response
+    # (1 was screened, 3 is interviewing, so all three sent ones responded).
+    interviews = pd.DataFrame({"application_id": [2]})
+    assert logic.response_rate(frame, events((1, "screening")), interviews) == (3, 3)
+    assert logic.by_source(frame, events(), interviews)["responded"].sum() == 2    # 2 and 3
 
 
 def test_by_source():
@@ -495,5 +500,6 @@ def test_a_tailored_version_is_measured_against_the_master_and_ends_bullets_its_
     assert [b["text"] for b in stripped["roles"][0]["bullets"]] == ["Did x for finance", "Did y"]
     assert logic.match_endings(tailored, {"roles": []}) == tailored
     assert logic.place("Remote", "remote") == ["Remote"]
-    assert logic.place("Denver, CO", "hybrid") == ["Denver, CO", "hybrid"]
-    assert logic.place(None, "onsite") == ["onsite"] and logic.place("", None) == []
+    assert logic.place("Denver, CO", "hybrid") == ["Denver, CO", "Hybrid"]
+    assert logic.place("Plainview, TX", "remote") == ["Plainview, TX", "Remote"]
+    assert logic.place(None, "onsite") == ["Onsite"] and logic.place("", None) == []

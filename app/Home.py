@@ -23,7 +23,7 @@ open_apps = apps[apps["status"].isin(config.OPEN_STATUSES)] if not apps.empty el
 week_ago = today - timedelta(days=6)
 applied_this_week = (int(apps["applied_on"].map(lambda d: not logic.blank(d) and d >= week_ago)
                          .sum()) if not apps.empty else 0)
-responded, sent = logic.response_rate(apps, events)
+responded, sent = logic.response_rate(apps, events, interviews)
 
 open_col, week_col, rate_col = st.columns(3, gap="xsmall", wrap=False)
 open_col.metric("Open", len(open_apps), border=True)
