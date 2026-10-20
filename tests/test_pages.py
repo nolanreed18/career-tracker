@@ -622,6 +622,23 @@ def test_the_header_doesnt_repeat_a_remote_location():
     assert any(m.value.endswith("applied today · Remote · LinkedIn") for m in at.markdown)
 
 
+def test_the_tailor_section_keeps_its_application_across_sections():
+    import docx_fixture
+    data.save_resume_master(docx_fixture.SAMPLE, TODAY)
+    first = data.add_application(data.company_id_for("Acme", TODAY), "Analyst", "saved", TODAY)
+    second = data.add_application(data.company_id_for("Beta", TODAY), "PM", "saved", TODAY)
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Tailor").run()
+    widget(at.selectbox, "Application").set_value(first).run()
+    assert widget(at.selectbox, "Application").value == first
+    widget(at.radio, "Section").set_value("Master").run()
+    widget(at.radio, "Section").set_value("Tailor").run()
+    assert widget(at.selectbox, "Application").value == first      # not back to the newest
+    at.session_state["tailor_application"] = second                 # sent from Applications
+    widget(at.radio, "Section").set_value("Tailor").run()
+    assert widget(at.selectbox, "Application").value == second
+
+
 def test_the_posting_section_saves_the_job_posting():
     app_id = seed()
     at = new_app(PAGES[0])
