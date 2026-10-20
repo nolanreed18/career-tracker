@@ -16,6 +16,7 @@ from ui import (
     disclosure,
     done,
     empty,
+    find_posting_button,
     index_of,
     md,
     optional,
@@ -161,10 +162,27 @@ st.markdown(f"{status_badge(app['status'])} {md(' · '.join(facts))}")
 if app["next_action"] or app["next_action_on"]:
     due = f" — due {logic.when(app['next_action_on'], today)}" if app["next_action_on"] else ""
     st.markdown(f"**Next step:** {md(app['next_action'] or 'Next step')}{md(due)}")
-if app["job_url"]:
+if app["apply_url"]:
+    apply_col, open_col = st.columns(2)
+    apply_col.link_button(f"Apply on {app['company']}'s site", app["apply_url"], type="primary",
+                          width="stretch")
+    if app["job_url"]:
+        open_col.link_button("Open the posting", app["job_url"], width="stretch")
+elif app["job_url"]:
     st.link_button("Open job posting", app["job_url"])
+    if app["apply_note"]:
+        st.caption(md(f"Not found on the employer's site: {app['apply_note']}"))
 if app["notes"]:
     st.caption(md(app["notes"]))
+applied_col, find_col = st.columns(2)
+if app["status"] == "saved" and applied_col.button(
+        "Applied today", icon=":material/send:", width="stretch",
+        help="Marks it Applied as of today and starts the follow-up clock"):
+    data.set_status(picked, "applied", today,
+                    "Applied on the employer's site" if app["apply_url"] else "Applied")
+    done("Marked as applied today.")
+with find_col:
+    find_posting_button(app, "application")
 
 section = sections("application", ["Log update", "Interviews", "Posting", "Edit", "History"])
 

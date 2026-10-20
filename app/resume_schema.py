@@ -82,3 +82,10 @@ class Tailored(BaseModel):
 def empty() -> dict:
     return Resume(name="", email="", phone="", linkedin="", roles=[], projects=[],
                   education=[], skill_groups=[], conflicts=[]).model_dump()
+
+
+class CompanyPosting(BaseModel):
+    """Where a posting lives on the employer's own site (ai.find_posting)."""
+    url: str                # the posting's address there; "" when not found
+    title: str              # the title as that site shows it; "" when not found
+    note: str               # one sentence: how sure, or why it wasn't found

@@ -78,6 +78,9 @@ MIGRATIONS = [
     "alter table job_profile add column if not exists skip_companies text",
     # 2026-10: the job posting's text on an application, for tailoring the resume.
     "alter table applications add column if not exists posting text",
+    # 2026-10: where to apply on the employer's own site, looked up when a lead is added.
+    "alter table applications add column if not exists apply_url text",
+    "alter table applications add column if not exists apply_note text",
 ]
 
 
@@ -293,7 +296,7 @@ def delete_contact(contact_id: int) -> None:
 
 APPLICATION_FIELDS = {"company_id", "role", "job_url", "location", "work_mode", "salary_min",
                       "salary_max", "source", "applied_on", "next_action", "next_action_on",
-                      "contact_id", "notes", "posting"}
+                      "contact_id", "notes", "posting", "apply_url", "apply_note"}
 
 _APPLICATIONS = """
     select a.*, co.name as company,

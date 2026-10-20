@@ -207,6 +207,7 @@ def test_category_ratings_are_stored_with_the_lead():
 
 def test_migrate_brings_an_older_job_leads_table_up_to_date(database):
     with psycopg.connect(database, autocommit=True) as conn:        # the shape before 2026-10
+        conn.execute("alter table applications drop column apply_url, drop column apply_note")
         conn.execute("alter table job_leads drop column fit_detail")
         conn.execute("alter table job_leads drop column pay_source")
         conn.execute("alter table job_leads drop column pay_note")
@@ -221,6 +222,8 @@ def test_migrate_brings_an_older_job_leads_table_up_to_date(database):
         """).fetchall())
     assert columns == {"fit_score": "numeric", "fit_detail": "jsonb", "pay_source": "text",
                        "pay_note": "text"}
+    app_id = data.add_application(data.company_id_for("Acme", TODAY), "A", "saved", TODAY)
+    data.update_application(app_id, apply_url="https://acme.com/jobs/1")   # the columns are back
 
 
 
@@ -353,6 +356,10 @@ def test_a_posting_and_tailored_versions_live_with_the_application():
     app_id = data.add_application(acme, "Analyst", "saved", TODAY)
     data.update_application(app_id, posting="  We need SQL.  ")
     assert data.application(app_id)["posting"] == "We need SQL."
+    data.update_application(app_id, apply_url="https://acme.com/jobs/1", apply_note="Sure.")
+    assert data.application(app_id)["apply_url"] == "https://acme.com/jobs/1"
+    data.update_application(app_id, apply_url="", apply_note="Not found.")
+    assert data.application(app_id)["apply_url"] is None               # blank is none
     first = data.add_tailored(app_id, {"roles": [], "cover_letter": "Dear"}, "  ", "m-1", TODAY)
     second = data.add_tailored(app_id, {"roles": [1]}, "lead with SQL", "m-1", TODAY)
     versions = data.tailored_versions(app_id)

@@ -437,14 +437,66 @@ def test_companies_to_skip_are_saved_with_the_profile():
     assert any("**Dismissals.**" in m.value for m in at.markdown)
 
 
-def test_moving_a_lead_creates_the_application():
+def test_moving_a_lead_creates_the_application_and_reads_its_posting(monkeypatch):
+    import posting
     seed()
+    monkeypatch.setattr(posting, "fetch", lambda url: posting.Posting(
+        "Analytics Engineer", "Gamma", "Denver, CO", "We need dbt. " * 20))
     at = run(LEADS)
     widget(at.button, "Add").click().run()
     apps = data.applications()
     moved = apps[apps["role"] == "Analytics Engineer"].iloc[0]
     assert (moved["company"], moved["status"]) == ("Gamma", "saved")
     assert data.job_leads("moved")["title"].tolist() == ["Analytics Engineer"]
+    saved = data.application(int(moved["application_id"]))
+    assert saved["posting"].startswith("Analytics Engineer — Gamma · Denver, CO\n\nWe need dbt.")
+    assert saved["apply_url"] is None                          # no Claude key: no search
+    assert at.session_state["flash"] == ("Added to Applications as Saved. "
+                                         "Posting read (260 characters).")
+
+
+def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
+    import ai
+    import posting
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    seed()
+    monkeypatch.setattr(posting, "fetch", lambda url: posting.Posting(
+        "Analytics Engineer", "Gamma", "Denver, CO", "We need dbt. " * 20))
+    asked = []
+    monkeypatch.setattr(ai, "find_posting", lambda *args: asked.append(args) or (
+        {"url": "https://boards.greenhouse.io/gamma/jobs/7", "title": "Analytics Engineer",
+         "note": "Same title and location on Gamma's Greenhouse board."},
+        ai.Usage("claude-opus-5-5", 3000, 500, 2)))
+    at = run(LEADS)
+    widget(at.button, "Add").click().run()
+    app = data.applications().query("role == 'Analytics Engineer'").iloc[0]
+    saved = data.application(int(app["application_id"]))
+    assert asked[0][:3] == ("Gamma", "Analytics Engineer", None)
+    assert asked[0][4].startswith("Analytics Engineer — Gamma")       # the posting just read
+    assert saved["apply_url"] == "https://boards.greenhouse.io/gamma/jobs/7"
+    assert saved["apply_note"].startswith("Same title")
+    assert at.session_state["flash"].endswith(
+        "Posting read (260 characters). Found it on the employer's site: Analytics Engineer "
+        "($0.04).")
+    assert data.ai_usage_since(TODAY) == (1, 0.042)
+
+    # The application: Apply on the employer's site, Applied today, and a new search.
+    monkeypatch.setattr(ai, "find_posting", lambda *args: (
+        {"url": "", "title": "", "note": "Only on LinkedIn, as an Easy Apply posting."},
+        ai.Usage("claude-opus-5-5", 3000, 500, 4)))
+    at = new_app(APPS)
+    at.session_state["open_application"] = int(app["application_id"])
+    at.run()
+    click(at, "Find it on the employer's site")
+    assert at.success[0].value == ("Not found on the employer's site: Only on LinkedIn, as an "
+                                   "Easy Apply posting. ($0.06).")
+    assert data.application(int(app["application_id"]))["apply_url"] is None
+    click(at, "Applied today")
+    assert at.success[0].value == "Marked as applied today."
+    after = data.application(int(app["application_id"]))
+    assert (after["status"], after["applied_on"]) == ("applied", TODAY)
+    assert data.events(int(app["application_id"]))["note"].tolist()[-1] == "Applied"
+    assert not any(b.label == "Applied today" for b in at.button)        # only while Saved
 
 
 def test_the_profile_form_saves():

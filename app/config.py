@@ -110,6 +110,14 @@ AI_MODEL = "claude-opus-5-5"
 # the app (thinking counts as output).
 AI_PRICES = {"claude-opus-5-5": (4.0, 20.0)}
 AI_MAX_TOKENS = 32000          # thinking counts against it; a cut-off answer is an error
+AI_SEARCH_PRICE = 0.01         # dollars per web search ($10 per 1,000), on top of the tokens
+AI_SEARCH_MAX = 4              # searches one "find it on the employer's site" call may make
+AI_FIND_MAX_TOKENS = 8000      # that call's answer is a few lines (thinking counts too)
+POSTING_PROMPT_CHARS = 1500    # how much of the posting that call is shown
+# Job boards and aggregators: a posting found there is not the employer's own.
+JOB_BOARDS = ["linkedin.com", "indeed.com", "glassdoor.com", "ziprecruiter.com", "builtin.com",
+              "dice.com", "wellfound.com", "welcometothejungle.com", "simplyhired.com",
+              "monster.com", "talent.com", "jooble.org", "lensa.com", "google.com"]
 
 # A job posting read from its link (app/posting.py): shorter than this
 # and the page gave no description; longer is cut, the tail is boilerplate.

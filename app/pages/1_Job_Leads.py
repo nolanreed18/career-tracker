@@ -20,6 +20,7 @@ from ui import (
     fit_breakdown,
     md,
     pay_badge,
+    prepare_application,
     round_key,
     sections,
     setup,
@@ -67,9 +68,13 @@ def lead_card(lead) -> None:
             st.markdown(md(lead.fit_reason))
         move_col, dismiss_col = st.columns(2, wrap=False)
         if move_col.button("Add", key=f"move_{lead_id}", type="primary", width="stretch",
-                           help="Add to Applications as Saved, with this fit note"):
+                           help="Save it as an application, read the posting from its link and "
+                                "have Claude find it on the employer's own site to apply there"):
             application_id = data.move_lead_to_applications(lead_id, today)
-            st.session_state["flash"] = "Added to Applications as Saved."
+            with st.spinner("Saved. Reading the posting and looking for it on the employer's "
+                            "site…"):
+                notes = prepare_application(application_id, today)
+            st.session_state["flash"] = " ".join(["Added to Applications as Saved."] + notes)
             st.session_state["open_application"] = application_id
             st.switch_page("pages/2_Applications.py")
         reason = dismiss_col.selectbox(
