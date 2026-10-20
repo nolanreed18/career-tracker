@@ -97,7 +97,12 @@ def test_home_lists_what_needs_attention_most_urgent_first():
     assert "Send thank-you: 2 days overdue" in lines[0]
     assert "Onsite, tomorrow" in lines[1]
     assert "No update in 43 days" in lines[2]
-    assert widget(at.metric, "Open").value == "2"
+    assert widget(at.metric, "Reviewed").value == "2"            # both seeded leads
+    assert widget(at.metric, "Avg fit").value != "—"
+    assert widget(at.metric, "8+ waiting").value == "1"           # Gamma at 9, still new
+    assert widget(at.metric, "9+ waiting").value == "1"
+    assert any("2 leads in the inbox, 2 new today, 1 strong" in m.value for m in at.markdown)
+    assert not any(b.label == "Log a win" for b in at.button)
 
 
 def test_adding_an_application_makes_the_company_and_opens_it():
@@ -221,7 +226,7 @@ def test_the_right_password_opens_the_app_and_a_wrong_one_does_not(monkeypatch):
     assert not at.metric
     widget(at.text_input, "Password").set_value(PASSWORD)
     click(at, "Sign in")
-    assert widget(at.metric, "Open").value == "0"
+    assert widget(at.metric, "Reviewed").value == "0"
 
 
 def test_dark_mode_is_a_saved_choice_and_light_is_the_default():
@@ -283,7 +288,7 @@ def test_google_offers_both_ways_in_until_someone_signs_in(google):
 def test_an_allowed_google_account_goes_straight_in(google):
     google("me@example.com")
     at = new_app(HOME, signed_in=False).run()
-    assert widget(at.metric, "Open").value == "0"
+    assert widget(at.metric, "Reviewed").value == "0"
     for path in PAGES:                              # and stays in on every page
         assert not new_app(path, signed_in=False).run().exception
 
@@ -327,7 +332,7 @@ def test_leads_are_listed_best_fit_first_and_home_points_to_them():
     assert "Analytics Engineer" in titles[0] and ":green-badge[9/10]" in titles[0]
     assert "BI Developer" in titles[1]
     home = run(HOME)
-    assert any("2 new job leads to review, 1 strong" in m.value for m in home.markdown)
+    assert any("2 leads in the inbox, 2 new today, 1 strong" in m.value for m in home.markdown)
 
 
 def test_a_lead_shows_its_category_ratings_and_the_rules_are_explained():
@@ -395,7 +400,7 @@ def test_todays_leads_are_marked_new_and_old_ones_go_stale():
     widget(at.radio, "Section").set_value("Stale").run()
     assert any("Forgotten Engineer" in m.value for m in at.markdown)
     home = run(HOME)
-    assert any("3 new job leads to review, 2 strong" in m.value for m in home.markdown)
+    assert any("3 leads in the inbox, 2 new today, 2 strong" in m.value for m in home.markdown)
 
 
 def test_companies_to_skip_are_saved_with_the_profile():
