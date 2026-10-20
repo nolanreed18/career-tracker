@@ -118,4 +118,7 @@ def test_a_big_day_still_makes_a_small_email():
     assert "Role 25" in html and "Role 24" in html               # strong past the cards: rows
     assert "…and 22 more worth a look" in html and "…and 22 more weak or unscored" in html
     assert html.count("trk=xxx") <= config.DIGEST_CARDS + config.DIGEST_ROWS * 2
-    assert text.count("trk=xxx") == digest.TEXT_FULL and "…and 75 more in the app." in text
+    assert "trk=xxx" not in text and "…and 75 more in the app." in text   # 600-char links: left out
+    assert text.count("https://www.example.com/jobs/view/1234567890") == 0
+    short = digest.render(TODAY, [lead(job_url="https://example.com/j/9")], [], APP, {})
+    assert "     https://example.com/j/9" in short["text"]

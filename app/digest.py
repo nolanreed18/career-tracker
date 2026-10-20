@@ -24,6 +24,7 @@ ATTENTION = {"overdue": (RED, "Overdue"), "due": (ORANGE, "Due today"),
              "stale_saved": (GRAY, "Saved")}
 WARNING = "&#9888;&#xFE0E;"          # a text-style warning sign, coloured by its span
 TEXT_FULL = 10                       # leads written out in full (with links) in the text version
+LINK_MAX = 200                       # longer links (opaque redirects) are left to the app
 
 STYLE = f"""
 body{{margin:0;padding:0;background:{BG}}}
@@ -351,7 +352,8 @@ def render_text(today: date, leads: list[dict], attention: list[logic.Attention]
         lines.append(f"     {where(lead)} · {pay}")
         if logic.value(lead.get("fit_reason")):
             lines.append(f"     {lead['fit_reason']}")
-        if url := logic.job_link(lead.get("job_url")):
+        url = logic.job_link(lead.get("job_url"))
+        if url and len(url) <= LINK_MAX:             # an opaque redirect runs to kilobytes
             lines.append(f"     {url}")
         lines.append("")
     for lead in others[:config.DIGEST_ROWS]:
