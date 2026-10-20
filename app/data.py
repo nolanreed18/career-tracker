@@ -597,6 +597,22 @@ def lead(lead_id: int) -> dict | None:
     return _one("select * from job_leads where lead_id = %s", (lead_id,))
 
 
+def lead_stats(marks: tuple[float, ...] = config.HOME_FIT_MARKS) -> dict:
+    """How the lead pipeline stands: how many postings the review has scored
+    in all (reviewed), their average fit, and how many still sit new in the
+    inbox at or above each mark (waiting, in the marks' order)."""
+    counts = ", ".join(
+        f"count(*) filter (where status = 'new' and fit_score >= %s) as waiting_{n}"
+        for n in range(len(marks)))
+    row = _one(f"""
+        select count(*) as reviewed, avg(fit_score) as average_fit{", " + counts if marks else ""}
+        from job_leads
+    """, tuple(marks)) or {}
+    return {"reviewed": int(row.get("reviewed") or 0),
+            "average_fit": None if row.get("average_fit") is None else float(row["average_fit"]),
+            "waiting": [int(row.get(f"waiting_{n}") or 0) for n in range(len(marks))]}
+
+
 def leads_found(on: date) -> pd.DataFrame:
     """The leads one daily review added (found that day, still new), best
     fit first: what its digest reports."""

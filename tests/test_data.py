@@ -425,3 +425,16 @@ def test_migrate_cleans_posting_links_stored_with_tracking_wrappers(database):
     data.migrate()
     assert data.job_leads("new")["job_url"].tolist() == ["https://www.linkedin.com/jobs/view/4477910397/"]
     assert data.application(app_id)["job_url"] == "https://www.linkedin.com/jobs/view/4477910397/"
+
+
+def test_lead_stats_count_the_reviewed_the_average_and_the_inbox_above_each_mark():
+    assert data.lead_stats() == {"reviewed": 0, "average_fit": None, "waiting": [0, 0]}
+    data.add_leads(leads({"title": "A", "fit_score": 9.2}, {"title": "B", "fit_score": 8.1},
+                         {"title": "C", "fit_score": 5.0}, {"title": "D"}), TODAY)
+    stats = data.lead_stats()
+    assert stats["reviewed"] == 4 and stats["waiting"] == [2, 1]
+    assert round(stats["average_fit"], 2) == round((9.2 + 8.1 + 5.0) / 3, 2)   # unscored skipped
+    top = int(data.job_leads("new").iloc[0]["lead_id"])
+    data.move_lead_to_applications(top, TODAY)                     # A leaves the inbox
+    assert data.lead_stats()["waiting"] == [1, 0] and data.lead_stats()["reviewed"] == 4
+    assert data.lead_stats(marks=(7.0,))["waiting"] == [1]

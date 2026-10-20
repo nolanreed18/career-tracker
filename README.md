@@ -7,9 +7,11 @@ database, hosted free on Streamlit Community Cloud.
 
 ## What's in it
 
-- **Home**: open applications, applications sent this week, response rate, and
-  **Needs attention**: overdue next steps, interviews in the next 7 days, and
-  open applications with no update for 14 days.
+- **Home**: how the lead pipeline stands (postings reviewed, their average
+  fit, and how many leads scored 8+ and 9+ still wait in the inbox), the
+  inbox in one line with a Review button, and **Needs attention**: overdue
+  next steps, interviews in the next 7 days, and open applications with no
+  update for 14 days.
 - **Applications**: add one, filter and search, then for each application log
   updates (status changes or plain notes), set the next step, add interviews,
   edit, and see its full history.

@@ -1,7 +1,5 @@
 """Home: where the search stands and what needs doing next."""
 
-from datetime import timedelta
-
 import streamlit as st
 
 import fresh
@@ -17,18 +15,29 @@ today = data.today()
 setup("Career Tracker", f"{today:%A, %B %-d}")
 apps = data.applications()
 interviews = data.interviews()
-events = data.all_events()
 
-open_apps = apps[apps["status"].isin(config.OPEN_STATUSES)] if not apps.empty else apps
-week_ago = today - timedelta(days=6)
-applied_this_week = (int(apps["applied_on"].map(lambda d: not logic.blank(d) and d >= week_ago)
-                         .sum()) if not apps.empty else 0)
-responded, sent = logic.response_rate(apps, events, interviews)
+stats = data.lead_stats()
+tiles = st.columns(2 + len(config.HOME_FIT_MARKS), gap="xsmall", wrap=False)
+tiles[0].metric("Reviewed", stats["reviewed"], border=True)
+tiles[1].metric("Avg fit", "—" if stats["average_fit"] is None
+                else logic.fit_text(round(stats["average_fit"], 1)), border=True)
+for tile, mark, waiting in zip(tiles[2:], config.HOME_FIT_MARKS, stats["waiting"]):
+    tile.metric(f"{mark:g}+ waiting", waiting, border=True)
+st.caption("Reviewed: postings the daily review has scored, and their average fit. Waiting: "
+           "leads at that score or better still in the inbox, not yet added or dismissed.")
 
-open_col, week_col, rate_col = st.columns(3, gap="xsmall", wrap=False)
-open_col.metric("Open", len(open_apps), border=True)
-week_col.metric("This week", applied_this_week, border=True)
-rate_col.metric("Response rate", f"{responded / sent:.0%}" if sent else "—", border=True)
+new_leads, _ = logic.split_stale(data.job_leads("new"), today)
+if not new_leads.empty:
+    strong = int((new_leads["fit_score"].fillna(0) >= config.STRONG_FIT).sum())
+    found_today = int((new_leads["found_on"] == today).sum())
+    with card("leads"):
+        text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
+        text_col.markdown(f"{badge('blue', 'Leads')} "
+                          f"{logic.plural(len(new_leads), 'lead')} in the inbox"
+                          + (f", {found_today} new today" if found_today else "")
+                          + (f", {strong} strong" if strong else ""))
+        if button_col.button("Review", key="review_leads", width="stretch"):
+            st.switch_page("pages/7_Job_Leads.py")
 
 st.subheader("Needs attention")
 items = logic.needs_attention(apps, interviews, today)
@@ -46,23 +55,9 @@ for n, item in enumerate(items):
             st.session_state["open_application"] = item.application_id
             st.switch_page("pages/1_Applications.py")
 
-new_leads, _ = logic.split_stale(data.job_leads("new"), today)
-if not new_leads.empty:
-    strong = int((new_leads["fit_score"].fillna(0) >= config.STRONG_FIT).sum())
-    with card("leads"):
-        text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
-        text_col.markdown(f"{badge('blue', 'Leads')} "
-                          f"{logic.plural(len(new_leads), 'new job lead')} to review"
-                          + (f", {strong} strong" if strong else ""))
-        if button_col.button("Review", key="review_leads", width="stretch"):
-            st.switch_page("pages/7_Job_Leads.py")
-
 st.caption(f"Applications with no update for {config.FOLLOW_UP_DAYS} days are flagged for a "
            "follow-up. Logging any update, or setting a next step, clears the flag.")
 
-add_col, win_col = st.columns(2)
-if add_col.button("Add application", type="primary", width="stretch"):
+if st.button("Add application", type="primary", width="stretch"):
     st.session_state["open_add_application"] = True
     st.switch_page("pages/1_Applications.py")
-if win_col.button("Log a win", width="stretch"):
-    st.switch_page("pages/4_Career_Log.py")
