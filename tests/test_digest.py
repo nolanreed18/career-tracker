@@ -102,3 +102,20 @@ def test_user_text_is_escaped_and_missing_values_are_skipped():
     assert "None" not in out["html"] and "nan" not in out["html"]
     assert "None" not in out["text"]
     assert config.STRONG_FIT == 7                      # the section titles above assume it
+
+
+def test_a_big_day_still_makes_a_small_email():
+    long_url = "https://www.example.com/jobs/view/1234567890?" + "trk=" + "x" * 600
+    leads = [lead(title=f"Role {n}", company=f"Company {n}", job_url=long_url + str(n),
+                  fit_score=9.0 - n * 0.08, fit_reason="A reason sentence " * 8)
+             for n in range(100)]                              # 100 leads: 25 strong, 37 maybe…
+    out = digest.render(TODAY, leads, [], APP, {})
+    html, text = out["html"], out["text"]
+    assert len(html.encode()) < 60_000 and len(text.encode()) < 12_000
+    cards = html.count('class="cd" style="margin:0 0 10px 0"')
+    assert cards == config.DIGEST_CARDS                      # 20 cards, best first
+    assert "Role 0" in html and "Role 99" not in html          # the tail is a count
+    assert "Role 25" in html and "Role 24" in html               # strong past the cards: rows
+    assert "…and 22 more worth a look" in html and "…and 22 more weak or unscored" in html
+    assert html.count("trk=xxx") <= config.DIGEST_CARDS + config.DIGEST_ROWS * 2
+    assert text.count("trk=xxx") == digest.TEXT_FULL and "…and 75 more in the app." in text

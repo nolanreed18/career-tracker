@@ -20,7 +20,9 @@ only they can do (accounts, secrets, clicking merge).
   queries to what `HttpCursor` supports: one statement each, no transactions.
   Its digest email is `app/digest.py` (pure, like `logic.py`), printed by
   `leads.py digest`; the run pastes it into Gmail, so keep it under 100 KB
-  (Gmail clips) and email-safe (tables, the class stylesheet, no web fonts).
+  (Gmail clips, and the run re-types every byte: `config.DIGEST_CARDS` /
+  `DIGEST_ROWS` cap it, test_digest checks a 100-lead day) and email-safe
+  (tables, the class stylesheet, no web fonts).
   A new `leads.py` command also goes in `.claude/settings.json`.
 - Claude inside the app is `app/ai.py` only: the key is `ANTHROPIC_API_KEY`
   in secrets (or `.env`), never printed; every call sits behind a button the
