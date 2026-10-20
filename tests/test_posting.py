@@ -88,3 +88,52 @@ def test_fetch_turns_a_refusal_or_a_dead_network_into_advice(monkeypatch):
     monkeypatch.setattr(posting.httpx, "get", dead)
     with pytest.raises(posting.PostingError, match=r"Couldn't reach the posting \(ConnectError\)"):
         posting.fetch("https://jobs.example.com/analyst")
+
+
+WORKDAY = """{"jobPostingInfo": {"title": "Senior Development Systems Engineer",
+  "jobDescription": "<p>Job Description</p><p>bpx energy builds things.</p><ul><li>SQL</li></ul>",
+  "location": "United States of America - Texas - Houston",
+  "additionalLocations": ["United States of America - Colorado - Denver"], "jobReqId": "RQ117112"}}"""
+
+
+def test_a_workday_link_is_read_from_its_data_feed(monkeypatch):
+    asked = []
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: asked.append((url, accept)) or WORKDAY)
+    found = posting.employer_posting("https://bpinternational.wd3.myworkdayjobs.com/en-US/bpCareers/job/"
+                                     "United-States-of-America---Texas---Houston/"
+                                     "Senior-Development-Systems-Engineer_RQ117112?source=x")
+    assert asked == [("https://bpinternational.wd3.myworkdayjobs.com/wday/cxs/bpinternational/bpCareers/"
+                      "job/United-States-of-America---Texas---Houston/"
+                      "Senior-Development-Systems-Engineer_RQ117112", "application/json")]
+    assert found.title == "Senior Development Systems Engineer"
+    assert found.location == ("United States of America - Texas - Houston, "
+                              "United States of America - Colorado - Denver")
+    assert found.text == "Job Description\n\nbpx energy builds things.\n• SQL"
+
+
+def test_greenhouse_and_lever_links_are_read_from_their_feeds(monkeypatch):
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: (
+        '{"title": "Analyst", "location": {"name": "Denver, CO"}, '
+        '"content": "&lt;p&gt;Build &lt;b&gt;dashboards&lt;/b&gt;.&lt;/p&gt;"}'))
+    found = posting.employer_posting("https://boards.greenhouse.io/acme/jobs/4012345")
+    assert (found.title, found.location, found.text) == ("Analyst", "Denver, CO", "Build dashboards.")
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: (
+        '{"text": "Data Engineer", "categories": {"location": "Remote"}, '
+        '"descriptionPlain": "Remote role.", "lists": [{"text": "Requirements", '
+        '"content": "<li>Python</li><li>SQL</li>"}]}'))
+    found = posting.employer_posting("https://jobs.lever.co/acme/0f8b1c2d-1234-4abc-9def-1234567890ab")
+    assert (found.title, found.location) == ("Data Engineer", "Remote")
+    assert found.text == "Remote role.\n\nRequirements\n• Python\n• SQL"
+
+
+def test_other_links_and_unreadable_feeds_give_nothing_without_an_error(monkeypatch):
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: pytest.fail("fetched"))
+    assert posting.employer_posting("https://careers.acme.com/jobs/1") is None
+    assert posting.employer_posting(None) is None
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: "<html>not json</html>")
+    assert posting.employer_posting("https://boards.greenhouse.io/acme/jobs/1") is None
+
+    def refused(url, accept=None):
+        raise posting.PostingError("The site answered 403 instead of the posting: paste it.")
+    monkeypatch.setattr(posting, "_get", refused)
+    assert posting.employer_posting("https://acme.wd5.myworkdayjobs.com/jobs/job/Denver/Analyst_R1") is None

@@ -86,6 +86,7 @@ def empty() -> dict:
 
 class CompanyPosting(BaseModel):
     """Where a posting lives on the employer's own site (ai.find_posting)."""
-    url: str                # the posting's address there; "" when not found
+    url: str                # the posting's address there; "" when nothing fits
     title: str              # the title as that site shows it; "" when not found
-    note: str               # one sentence: how sure, or why it wasn't found
+    location: str           # the location as that site lists it; "" when not found
+    note: str               # a sentence or two: how sure, what differs, or why not
