@@ -167,7 +167,7 @@ if app["applied_on"]:
     facts.append(f"applied {logic.when(app['applied_on'], today)}")
 if salary := logic.salary_range(app["salary_min"], app["salary_max"]):
     facts.append(salary)
-facts += [x for x in (app["location"], app["work_mode"], app["source"]) if x]
+facts += logic.place(app["location"], app["work_mode"]) + ([app["source"]] if app["source"] else [])
 st.markdown(f"{status_badge(app['status'])} {md(' · '.join(facts))}")
 if app["next_action"] or app["next_action_on"]:
     due = f" — due {logic.when(app['next_action_on'], today)}" if app["next_action_on"] else ""

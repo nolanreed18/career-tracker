@@ -255,11 +255,11 @@ if section == "Tailor":
             with st.spinner("Reading the posting and choosing bullets…"):
                 try:
                     result, usage = ai.tailor(content, app["posting"], app["company"],
-                                              app["role"], steer)
+                                              app["role"], today, steer)
                 except ai.AIError as problem:
                     st.error(str(problem))
                 else:
-                    tailored = logic.clean_tailored(result)
+                    tailored = logic.clean_tailored(logic.match_endings(result, content))
                     data.add_tailored(picked, tailored, steer, usage.model, today)
                     data.log_ai_usage("tailor", usage.model, usage.input_tokens,
                                       usage.output_tokens, usage.cost_usd, today)
@@ -298,6 +298,11 @@ if section == "Tailor":
             st.caption(f"{logic.plural(counts['bullets'], 'bullet')}: {counts['kept']} as on the "
                        f"master, {counts['reworded']} reworded{unmatched} · {counts['covered']} "
                        f"of {counts['keywords']} keywords covered · {row['model']}.")
+            budget, length = logic.master_budget(content), logic.tailored_chars(tailored)
+            if length > budget["characters"] * logic.PAGE_SLACK:
+                st.warning(f"Longer than the master ({length:,} characters of bullets against "
+                           f"{budget['characters']:,}): it may run onto a second page. Trim a "
+                           "bullet or two below, or tailor again with the steer “shorter”.")
             template = data.resume_template()
             name = content.get("name", "")
             if template is None:

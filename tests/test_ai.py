@@ -2,6 +2,7 @@
 key, a refusal, and a good answer with its cost."""
 
 import types
+from datetime import date
 
 import anthropic
 import httpx2 as httpx  # the SDK's HTTP library (not the httpx package)
@@ -125,7 +126,10 @@ def test_tailor_sends_the_master_the_posting_and_the_steer(monkeypatch):
     fake_client(monkeypatch, messages=messages)
     master = {"name": "Sample", "email": "s@example.com", "roles": [{"employer": "Acme"}],
               "projects": [], "skill_groups": [], "education": [], "conflicts": ["x"]}
-    content, usage = ai.tailor(master, "  We need SQL.  ", "Acme", "Analyst", "lead with SQL")
+    master["roles"] = [{"employer": "Acme", "bullets": [
+        {"text": "Did x", "in_master": True}, {"text": "Pool", "in_master": False}]}]
+    content, usage = ai.tailor(master, "  We need SQL.  ", "Acme", "Analyst", date(2026, 10, 20),
+                               "lead with SQL")
     assert content["roles"][0]["bullets"][0]["original"] == "Did x"
     assert content["keywords"] == [{"term": "SQL", "covered": True, "where": "Did x for finance"}]
     assert usage.cost_usd == 0.184
@@ -135,5 +139,7 @@ def test_tailor_sends_the_master_the_posting_and_the_steer(monkeypatch):
     assert '<posting company="Acme" role="Analyst">\nWe need SQL.\n</posting>' in sent
     assert '"employer": "Acme"' in sent and "s@example.com" not in sent and "conflicts" not in sent
     assert "<notes" in sent and "lead with SQL" in sent
+    assert '<person name="Sample" today="October 20, 2026"/>' in sent
+    assert '<limits bullets="1" characters="5"/>' in sent              # the printed master
     with pytest.raises(ai.AIError, match="Paste the job posting"):
-        ai.tailor(master, "   ", "Acme", "Analyst")
+        ai.tailor(master, "   ", "Acme", "Analyst", date(2026, 10, 20))

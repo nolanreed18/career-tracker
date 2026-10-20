@@ -463,3 +463,37 @@ def test_a_tailored_resume_is_cleaned_counted_and_exported_in_the_masters_shape(
         "Hi,", "One two\nthree.", "Sincerely,\nSam"]                 # a line break kept
     assert logic.file_stem("Nolan Hughes", "Resume", "Acme Corp.") == "NolanHughes_Resume_AcmeCorp"
     assert logic.file_stem("", "") == "Resume"
+
+
+def test_roles_print_newest_first_when_every_start_is_a_month():
+    assert logic.parse_month("Jan 2025") == date(2025, 1, 1)
+    assert logic.parse_month("September 2023") == date(2023, 9, 1)
+    assert logic.parse_month("late 2024") is None and logic.parse_month("") is None
+    roles = [{"employer": "A", "start": "Jan 2025"}, {"employer": "C", "start": "Jun 2022"},
+             {"employer": "B", "start": "Jan 2024"}, {"employer": "B2", "start": "Jan 2024"}]
+    assert [r["employer"] for r in logic.roles_by_date(roles)] == ["A", "B", "B2", "C"]
+    vague = roles + [{"employer": "D", "start": "late 2024"}]
+    assert logic.roles_by_date(vague) == vague                     # one vague date: as given
+    assert logic.roles_by_date([]) == []
+
+
+def test_a_tailored_version_is_measured_against_the_master_and_ends_bullets_its_way():
+    master = {"roles": [{"bullets": [{"text": "Did x.", "in_master": True},
+                                     {"text": "Did y.", "in_master": True},
+                                     {"text": "Pool bullet", "in_master": False}]}],
+              "projects": [{"bullets": [{"text": "Made z", "in_master": True}]}]}
+    assert logic.master_budget(master) == {"bullets": 3, "characters": 18}
+    tailored = {"roles": [{"bullets": [{"text": "Did x for finance"}, {"text": "Did y."}]}],
+                "projects": [{"bullets": [{"text": "Made z!"}]}]}
+    assert logic.tailored_chars(tailored) == 30
+    ended = logic.match_endings(tailored, master)                  # most master bullets end "."
+    assert [b["text"] for b in ended["roles"][0]["bullets"]] == ["Did x for finance.", "Did y."]
+    assert ended["projects"][0]["bullets"][0]["text"] == "Made z!"
+    bare = {"roles": [{"bullets": [{"text": "Did x", "in_master": True},
+                                   {"text": "Did y", "in_master": True}]}]}
+    stripped = logic.match_endings(tailored, bare)
+    assert [b["text"] for b in stripped["roles"][0]["bullets"]] == ["Did x for finance", "Did y"]
+    assert logic.match_endings(tailored, {"roles": []}) == tailored
+    assert logic.place("Remote", "remote") == ["Remote"]
+    assert logic.place("Denver, CO", "hybrid") == ["Denver, CO", "hybrid"]
+    assert logic.place(None, "onsite") == ["onsite"] and logic.place("", None) == []
