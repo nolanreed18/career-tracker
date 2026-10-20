@@ -77,10 +77,13 @@ the inbox, never in this public repository.
    plainly weak (its role or location would rate 3 or under against the
    profile: leave those unresearched).
    - First open the job link itself with the web fetch tool and read the
-     posting: a range stated there is `"listed"` pay, exactly like one from
-     the email (Colorado postings must state one). If the fetch fails, is
-     blocked, or shows a sign-in wall, move on; don't retry or try other
-     forms of the link.
+     posting: a range the employer states there is `"listed"` pay, exactly
+     like one from the email (Colorado postings must state one). A job
+     board's own figure (Glassdoor's "Estimated", an "estimated" range on
+     LinkedIn or Indeed, anything not from the employer) is an estimate,
+     never listed, wherever you read it, the alert email included. If the
+     fetch fails, is blocked, or shows a sign-in wall, move on; don't retry
+     or try other forms of the link.
    - Then, still without pay, use the web search tool, at most two searches
      per job: `"<title>" "<company>" salary`, then
      `<title> salary <city or state>`. Take, in this order: the posting's

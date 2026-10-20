@@ -8,10 +8,12 @@ import json
 import os
 import sys
 from dataclasses import dataclass
+from datetime import date
 
 import anthropic
 
 import config
+import logic
 import resume_schema
 
 SYSTEM = """You turn a person's career documents into structured resume data.
@@ -55,7 +57,14 @@ Rules:
 - Keep each role's employer, title, location and dates exactly, and the
   roles' order. Drop a role only when nothing in it serves the posting, and
   never the current or most recent role.
-- One page, like the master: about as many bullets as the master prints.
+- person gives the name to sign the letter with and today's date: count
+  years of experience and whether a degree is finished from that date,
+  never from a guess.
+- One page, like the master: limits gives how many bullets the master
+  prints and how many characters they total; stay within both, trimming
+  words before dropping a bullet.
+- Within a role keep the tense the master's printed bullets use there,
+  and end bullets as the master ends them (no full stop when it has none).
 - skill_groups: the master's groups with the relevant skills first; keep
   anything the posting mentions, add nothing the master lacks.
 - keywords: the posting's 10 to 20 requirements and terms a screener would
@@ -186,14 +195,19 @@ def master_for_prompt(master: dict) -> dict:
                                                  "education")}
 
 
-def tailor(master: dict, posting: str, company: str, role: str,
+def tailor(master: dict, posting: str, company: str, role: str, today: date,
            notes: str = "") -> tuple[dict, Usage]:
     """The master tailored to one posting (resume_schema.Tailored as a dict:
     chosen and reworded bullets, skills, keyword coverage, the list of
-    changes, the cover letter) and what the call cost. One call."""
+    changes, the cover letter) and what the call cost. One call. The
+    person's name and today's date go along, so the letter is signed and
+    tenure is counted right; the master's printed size is the page budget."""
     if not posting.strip():
         raise AIError("Paste the job posting first: Claude tailors to its words.")
-    prompt = (f"<master>\n{json.dumps(master_for_prompt(master), indent=1)}\n</master>\n\n"
+    budget = logic.master_budget(master)
+    prompt = (f"<person name=\"{master.get('name', '')}\" today=\"{logic.long_date(today)}\"/>\n"
+              f"<limits bullets=\"{budget['bullets']}\" characters=\"{budget['characters']}\"/>\n\n"
+              f"<master>\n{json.dumps(master_for_prompt(master), indent=1)}\n</master>\n\n"
               f"<posting company=\"{company}\" role=\"{role}\">\n{posting.strip()}\n</posting>\n\n")
     if notes.strip():
         prompt += f"<notes from=\"the person\">\n{notes.strip()}\n</notes>\n\n"

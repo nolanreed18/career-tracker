@@ -274,7 +274,7 @@ def build(template: bytes, content: dict) -> bytes:
 
     section("Experience")
     last_employer = None
-    for role in content.get("roles", []):
+    for role in logic.roles_by_date(content.get("roles", [])):     # newest first
         if not logic.prints(role):             # nothing ticked: the role stays off the page
             continue
         if role["employer"] != last_employer:  # one employer line for roles there in a row

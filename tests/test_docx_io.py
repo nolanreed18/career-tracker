@@ -122,6 +122,9 @@ def test_headings_employers_and_long_lines_follow_the_templates_habits():
     assert paras[texts.index("Education") - 1].column_break
     lines = [t for t in texts if t.startswith("Tool")]
     assert lines == [same_employer["skill_groups"][0]["skills"]]     # one line; Word wraps it
+    backwards = {**docx_fixture.SAMPLE, "roles": docx_fixture.SAMPLE["roles"][::-1]}
+    dated = [p.text for p in docx_io.outline(docx_io.build(docx_fixture.template(), backwards))]
+    assert dated.index("Acme Energy") < dated.index("Beta Chemicals")  # newest first regardless
 
 
 def test_a_letter_keeps_the_header_in_one_column():

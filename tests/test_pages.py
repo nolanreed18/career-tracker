@@ -577,7 +577,8 @@ def test_tailor_section_makes_a_version_with_both_downloads_and_saves_edits(monk
         TAILORED, ai.Usage("claude-opus-5-5", 6000, 8000)))
     widget(at.text_input, "Steer Claude (optional)").set_value("lead with SQL")
     click(at, "Tailor with Claude")
-    assert calls[0][1:] == ("We need SQL and Tableau.", "Acme Corp.", "Analyst", "lead with SQL")
+    assert calls[0][1:] == ("We need SQL and Tableau.", "Acme Corp.", "Analyst", TODAY,
+                            "lead with SQL")
     assert any("Tailored for Acme Corp.: 1 bullet, 1 of 2 keywords covered. Cost $0.18." in s.value
                for s in at.success)
     assert [b.label for b in at.get("download_button")] == ["Download tailored resume",
@@ -597,6 +598,28 @@ def test_tailor_section_makes_a_version_with_both_downloads_and_saves_edits(monk
     saved = data.tailored(int(version["tailor_id"]))["content"]
     assert saved["cover_letter"] == "Dear Hiring Team,\n\nEdited."
     assert saved["roles"][0]["bullets"][0]["original"] == "Built a pipeline that saved 2 hours a day."
+
+
+def test_a_tailored_version_longer_than_the_master_gets_a_warning():
+    import docx_fixture
+    data.save_resume_master(docx_fixture.SAMPLE, TODAY)
+    app_id = data.add_application(data.company_id_for("Acme Corp.", TODAY), "Analyst", "saved",
+                                  TODAY, posting="We need SQL.")
+    long = {**TAILORED, "roles": [{**TAILORED["roles"][0], "bullets": [
+        {"text": "A bullet " * 40, "original": "", "skills": []}]}]}
+    data.add_tailored(app_id, logic.clean_tailored(long), None, "m", TODAY)
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Tailor").run()
+    assert any("Longer than the master" in w.value for w in at.warning)
+
+
+def test_the_header_doesnt_repeat_a_remote_location():
+    app_id = data.add_application(data.company_id_for("Acme", TODAY), "Analyst", "applied", TODAY,
+                                  location="Remote", work_mode="remote", source="LinkedIn")
+    at = new_app(PAGES[0])
+    at.session_state["open_application"] = app_id
+    at.run()
+    assert any(m.value.endswith("applied today · Remote · LinkedIn") for m in at.markdown)
 
 
 def test_the_posting_section_saves_the_job_posting():

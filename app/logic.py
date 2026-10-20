@@ -3,6 +3,8 @@ the stats, formatting, and reading an imported spreadsheet. No database and
 no Streamlit, so all of it is tested directly.
 """
 
+import calendar
+import copy
 import re
 from dataclasses import dataclass
 from datetime import date, time, timedelta
@@ -774,3 +776,73 @@ def contact_line(master: dict) -> str:
 def long_date(d: date) -> str:
     """October 19, 2026: how a letter is dated."""
     return f"{d:%B} {d.day}, {d.year}"
+
+
+MONTHS = {name.lower(): n for n, name in enumerate(calendar.month_abbr) if name}
+PAGE_SLACK = 1.05                    # a tailored version this much longer than the master
+                                     # (in characters of bullets) risks a second page
+
+
+def parse_month(text) -> date | None:
+    """'Jan 2025' or 'January 2025' as the first of that month; None otherwise."""
+    parts = str(text or "").strip().split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        return None
+    month = MONTHS.get(parts[0][:3].lower())
+    return date(int(parts[1]), month, 1) if month else None
+
+
+def roles_by_date(roles: list[dict]) -> list[dict]:
+    """Roles newest first by start month, when every start reads as one
+    ("Jan 2025"); otherwise in the order given. A side role held alongside
+    another lands where its start date puts it."""
+    starts = [parse_month(r.get("start")) for r in roles]
+    if not roles or any(s is None for s in starts):
+        return list(roles)
+    order = sorted(range(len(roles)), key=lambda i: starts[i], reverse=True)
+    return [roles[i] for i in order]
+
+
+def _printed(master: dict) -> list[str]:
+    return [b["text"] for role in list(master.get("roles", [])) + list(master.get("projects", []))
+            for b in role.get("bullets", []) if b.get("in_master")]
+
+
+def master_budget(master: dict) -> dict:
+    """What the printed master holds: bullets and their characters together,
+    the one-page budget a tailored version has to fit."""
+    printed = _printed(master)
+    return {"bullets": len(printed), "characters": sum(len(t) for t in printed)}
+
+
+def tailored_chars(tailored: dict) -> int:
+    """Characters of bullets a tailored version prints."""
+    return sum(len(b["text"]) for role in list(tailored.get("roles", []))
+               + list(tailored.get("projects", [])) for b in role.get("bullets", []))
+
+
+def match_endings(tailored: dict, master: dict) -> dict:
+    """The tailored bullets ending as the master's printed ones do: with a
+    full stop when most of the master's have one, without when most don't."""
+    printed = _printed(master)
+    if not printed:
+        return tailored
+    with_stop = sum(t.rstrip().endswith(".") for t in printed) * 2 > len(printed)
+    out = copy.deepcopy(tailored)
+    for role in list(out.get("roles", [])) + list(out.get("projects", [])):
+        for bullet in role.get("bullets", []):
+            text = bullet["text"].rstrip()
+            if with_stop and text and not text.endswith((".", "!", "?")):
+                text += "."
+            elif not with_stop:
+                text = text.rstrip(".")
+            bullet["text"] = text
+    return out
+
+
+def place(location, work_mode) -> list[str]:
+    """Location and work mode for a header, without saying "Remote · remote"."""
+    parts = [str(x).strip() for x in (location, work_mode) if not blank(x)]
+    if len(parts) == 2 and parts[0].lower() == parts[1].lower():
+        parts = parts[:1]
+    return parts
