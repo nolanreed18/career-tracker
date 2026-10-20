@@ -133,8 +133,11 @@ def weekly_applications(apps: pd.DataFrame, today: date,
     return pd.DataFrame({"week": starts, "applications": [counts[s] for s in starts]})
 
 
-def responded_ids(apps: pd.DataFrame, events: pd.DataFrame) -> set[int]:
-    """Applications that ever reached a screen or further."""
+def responded_ids(apps: pd.DataFrame, events: pd.DataFrame,
+                  interviews: pd.DataFrame | None = None) -> set[int]:
+    """Applications that ever reached a screen or further, or had an
+    interview on record (an imported rejection often has the interview
+    without the screening step in its history)."""
     reached = set()
     if not events.empty:
         reached |= set(events.loc[events["status"].isin(config.RESPONDED_STATUSES),
@@ -142,26 +145,30 @@ def responded_ids(apps: pd.DataFrame, events: pd.DataFrame) -> set[int]:
     if not apps.empty:
         reached |= set(apps.loc[apps["status"].isin(config.RESPONDED_STATUSES),
                                 "application_id"].astype(int))
+    if interviews is not None and not interviews.empty:
+        reached |= set(interviews["application_id"].astype(int))
     return reached
 
 
-def response_rate(apps: pd.DataFrame, events: pd.DataFrame) -> tuple[int, int]:
+def response_rate(apps: pd.DataFrame, events: pd.DataFrame,
+                  interviews: pd.DataFrame | None = None) -> tuple[int, int]:
     """(responded, applied): of the applications actually sent, how many got
-    as far as a screen. Rejections without a screen don't count as responses."""
+    as far as a screen or an interview. Rejections without one don't count."""
     if apps.empty:
         return 0, 0
     sent = apps[apps["status"] != "saved"]
-    reached = responded_ids(apps, events)
+    reached = responded_ids(apps, events, interviews)
     return sum(int(i) in reached for i in sent["application_id"]), len(sent)
 
 
-def by_source(apps: pd.DataFrame, events: pd.DataFrame) -> pd.DataFrame:
+def by_source(apps: pd.DataFrame, events: pd.DataFrame,
+              interviews: pd.DataFrame | None = None) -> pd.DataFrame:
     """Applications sent and responses, per source, most-used source first."""
     columns = ["source", "applied", "responded", "rate"]
     sent = apps[apps["status"] != "saved"] if not apps.empty else apps
     if sent.empty:
         return pd.DataFrame(columns=columns)
-    reached = responded_ids(apps, events)
+    reached = responded_ids(apps, events, interviews)
     rows = []
     for source, group in sent.groupby(sent["source"].map(lambda s: value(s) or "(not set)")):
         applied = len(group)
@@ -841,8 +848,10 @@ def match_endings(tailored: dict, master: dict) -> dict:
 
 
 def place(location, work_mode) -> list[str]:
-    """Location and work mode for a header, without saying "Remote · remote"."""
-    parts = [str(x).strip() for x in (location, work_mode) if not blank(x)]
-    if len(parts) == 2 and parts[0].lower() == parts[1].lower():
-        parts = parts[:1]
-    return parts
+    """Location and work mode for a header: the mode capitalised, and left
+    out when it only repeats the location ("Remote · remote")."""
+    where = "" if blank(location) else str(location).strip()
+    mode = "" if blank(work_mode) else str(work_mode).strip().capitalize()
+    if where and mode and where.lower() == mode.lower():
+        mode = ""
+    return [part for part in (where, mode) if part]

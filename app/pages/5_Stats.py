@@ -16,12 +16,13 @@ setup("Stats", "How the search is going, in numbers")
 today = data.today()
 apps = data.applications()
 events = data.all_events()
+interviews = data.interviews()
 
 if apps.empty:
     empty("bar_chart", "No stats yet", "They appear once you've added some applications.")
     st.stop()
 
-responded, sent = logic.response_rate(apps, events)
+responded, sent = logic.response_rate(apps, events, interviews)
 open_count = int(apps["status"].isin(config.OPEN_STATUSES).sum())
 offers = int(apps["status"].isin(["offer", "accepted"]).sum())
 sent_col, rate_col, offer_col = st.columns(3, gap="xsmall", wrap=False)
@@ -44,7 +45,7 @@ weekly["week"] = weekly["week"].map(lambda d: f"{d:%b} {d.day}")
 st.bar_chart(weekly, x="week", y="applications", x_label="Week of", y_label="", sort=False)
 
 st.subheader("What's working")
-sources = logic.by_source(apps, events)
+sources = logic.by_source(apps, events, interviews)
 if sources.empty:
     st.caption("Nothing applied for yet.")
 else:
@@ -53,5 +54,5 @@ else:
         "rate": st.column_config.ProgressColumn("Response rate", format="percent",
                                                 min_value=0, max_value=1),
     })
-    st.caption("Response = reached a screen or further. Set each application's "
+    st.caption("Response = reached a screen, an interview or further. Set each application's "
                "source to see which channels pay off.")
