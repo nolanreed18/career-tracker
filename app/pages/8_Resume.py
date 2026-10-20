@@ -235,12 +235,15 @@ if section == "Tailor":
         ids = [int(i) for i in open_apps["application_id"]]
         labels = {int(r.application_id): f"{r.company} — {r.role}"
                   for r in open_apps.itertuples()}
+        # The dropdown forgets its choice while another section is open; keep it ourselves.
         if (wanted := st.session_state.pop("tailor_application", None)) in ids:
             st.session_state["tailor_pick"] = wanted            # sent here from Applications
-        if st.session_state.get("tailor_pick") not in ids:
-            st.session_state["tailor_pick"] = ids[0]
+        elif st.session_state.get("tailor_pick") not in ids:
+            kept = st.session_state.get("tailor_pick_kept")
+            st.session_state["tailor_pick"] = kept if kept in ids else ids[0]
         picked = st.selectbox("Application", ids, format_func=lambda i: labels[i],
                               key="tailor_pick")
+        st.session_state["tailor_pick_kept"] = picked
         app = data.application(picked)
         with st.form(f"posting_{picked}"):
             posting = st.text_area("Job posting", value=app["posting"] or "", height=200,
@@ -258,6 +261,11 @@ if section == "Tailor":
                                               app["role"], today, steer)
                 except ai.AIError as problem:
                     st.error(str(problem))
+                    if problem.usage:                  # a reply came back: it still cost
+                        data.log_ai_usage("tailor (failed)", problem.usage.model,
+                                          problem.usage.input_tokens,
+                                          problem.usage.output_tokens, problem.usage.cost_usd,
+                                          today)
                 else:
                     tailored = logic.clean_tailored(logic.match_endings(result, content))
                     data.add_tailored(picked, tailored, steer, usage.model, today)
@@ -466,6 +474,10 @@ if section == "Build from files":
                 content, usage = ai.structure_resume(texts)
             except ai.AIError as problem:
                 st.error(str(problem))
+                if problem.usage:
+                    data.log_ai_usage("structure resume (failed)", problem.usage.model,
+                                      problem.usage.input_tokens, problem.usage.output_tokens,
+                                      problem.usage.cost_usd, today)
             else:
                 data.save_resume_master(logic.clean_resume(content), today)
                 data.log_ai_usage("structure resume", usage.model, usage.input_tokens,

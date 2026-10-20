@@ -44,15 +44,24 @@ class FakeModels:
 
 
 class FakeMessages:
-    def __init__(self, parsed, stop_reason="end_turn", error=None):
-        self.parsed, self.stop_reason, self.error, self.calls = parsed, stop_reason, error, []
+    """The API stood in: create() answers with the given pydantic object as
+    JSON text (or any text), and the stop reason asked for."""
 
-    def parse(self, **kwargs):
+    def __init__(self, parsed, stop_reason="end_turn", error=None, text=None):
+        self.parsed, self.stop_reason, self.error, self.calls = parsed, stop_reason, error, []
+        self.text = text
+
+    def create(self, **kwargs):
         self.calls.append(kwargs)
         if self.error:
             raise self.error
+        if self.text is not None:
+            text = self.text
+        else:
+            text = "" if self.parsed is None else self.parsed.model_dump_json()
         return types.SimpleNamespace(
-            parsed_output=self.parsed, stop_reason=self.stop_reason, model=kwargs["model"],
+            content=[types.SimpleNamespace(type="text", text=text)],
+            stop_reason=self.stop_reason, model=kwargs["model"],
             usage=types.SimpleNamespace(input_tokens=6000, output_tokens=8000))
 
 
@@ -94,10 +103,12 @@ def test_structure_resume_sends_every_file_and_returns_data_with_its_cost(monkey
     assert content["conflicts"] == ["GPA 3.88 vs 3.90"]
     assert (usage.model, usage.input_tokens, usage.output_tokens) == ("claude-opus-5-5", 6000, 8000)
     call = messages.calls[0]
-    assert call["model"] == config.AI_MODEL and call["output_format"] is resume_schema.Resume
+    assert call["model"] == config.AI_MODEL and call["max_tokens"] == config.AI_MAX_TOKENS
     assert '<document kind="resume">' in call["messages"][0]["content"]
     assert '<document kind="history">' in call["messages"][0]["content"]
-    assert call["system"] == ai.SYSTEM and call["output_config"] == {"effort": "high"}
+    assert call["system"] == ai.SYSTEM and call["output_config"]["effort"] == "high"
+    schema = call["output_config"]["format"]
+    assert schema["type"] == "json_schema" and "roles" in schema["schema"]["properties"]
 
 
 def test_structure_resume_needs_the_resume_and_handles_a_refusal(monkeypatch):
@@ -135,7 +146,8 @@ def test_tailor_sends_the_master_the_posting_and_the_steer(monkeypatch):
     assert usage.cost_usd == 0.184
     call = messages.calls[0]
     sent = call["messages"][0]["content"]
-    assert call["system"] == ai.TAILOR_SYSTEM and call["output_format"] is resume_schema.Tailored
+    assert call["system"] == ai.TAILOR_SYSTEM
+    assert "cover_letter" in call["output_config"]["format"]["schema"]["properties"]
     assert '<posting company="Acme" role="Analyst">\nWe need SQL.\n</posting>' in sent
     assert '"employer": "Acme"' in sent and "s@example.com" not in sent and "conflicts" not in sent
     assert "<notes" in sent and "lead with SQL" in sent
@@ -143,3 +155,18 @@ def test_tailor_sends_the_master_the_posting_and_the_steer(monkeypatch):
     assert '<limits bullets="1" characters="5"/>' in sent              # the printed master
     with pytest.raises(ai.AIError, match="Paste the job posting"):
         ai.tailor(master, "   ", "Acme", "Analyst", date(2026, 10, 20))
+
+
+def test_a_cut_off_refused_or_malformed_answer_is_a_plain_error_with_its_cost(monkeypatch):
+    parsed = resume_schema.Resume(**resume_schema.empty())
+    fake_client(monkeypatch, messages=FakeMessages(parsed, stop_reason="max_tokens"))
+    with pytest.raises(ai.AIError, match="cut off") as caught:
+        ai.structure_resume({"resume": "## Sample"})
+    assert caught.value.usage.cost_usd == 0.184
+    fake_client(monkeypatch, messages=FakeMessages(parsed, stop_reason="refusal"))
+    with pytest.raises(ai.AIError, match="declined"):
+        ai.structure_resume({"resume": "## Sample"})
+    fake_client(monkeypatch, messages=FakeMessages(parsed, text='{"name": "Sample", "roles": '))
+    with pytest.raises(ai.AIError, match="didn't fit") as caught:
+        ai.structure_resume({"resume": "## Sample"})
+    assert caught.value.usage.input_tokens == 6000

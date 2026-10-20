@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from datetime import date
 
 import anthropic
+import pydantic
+from anthropic.lib._parse._transform import transform_schema  # what parse() sends
+from pydantic import TypeAdapter
 
 import config
 import logic
@@ -82,7 +85,13 @@ Rules:
 
 
 class AIError(Exception):
-    """Something the owner should read: no key, a refused key, a refusal."""
+    """Something the owner should read: no key, a refused key, a refusal, an
+    answer cut off or malformed. Carries the call's usage when a reply came
+    back, so a failed call still shows in the costs."""
+
+    def __init__(self, message: str, usage: "Usage | None" = None):
+        super().__init__(message)
+        self.usage = usage
 
 
 @dataclass(frozen=True)
@@ -158,21 +167,29 @@ def ping() -> str:
 
 def _parse(system: str, prompt: str, shape) -> tuple[dict, Usage]:
     """One structured-output call: the answer as a dict in the given pydantic
-    shape (validated by the SDK) and what it cost. Refusals and API errors
-    become AIError with a plain message."""
+    shape and what it cost. The reply is checked here rather than by the
+    SDK's parse(), so an answer cut off at the token limit, a refusal or a
+    malformed answer each become an AIError that still carries the usage."""
+    schema = transform_schema(TypeAdapter(shape).json_schema())
     try:
-        response = client().messages.parse(
+        response = client().messages.create(
             model=config.AI_MODEL, max_tokens=config.AI_MAX_TOKENS, system=system,
             messages=[{"role": "user", "content": prompt}],
-            output_format=shape, output_config={"effort": "high"})
+            output_config={"effort": "high", "format": {"type": "json_schema", "schema": schema}})
     except anthropic.APIError as exc:
         raise AIError(_explain(exc)) from None
-    if response.stop_reason == "refusal":
-        raise AIError("Claude declined this request.")
-    if response.parsed_output is None:
-        raise AIError("Claude's answer didn't fit the expected shape; try again.")
     usage = Usage(response.model, response.usage.input_tokens, response.usage.output_tokens)
-    return response.parsed_output.model_dump(), usage
+    if response.stop_reason == "refusal":
+        raise AIError("Claude declined this request.", usage)
+    if response.stop_reason == "max_tokens":
+        raise AIError("Claude's answer ran past the token limit and was cut off. Try again; "
+                      "for a tailoring, steer it with \"shorter\".", usage)
+    text = "".join(block.text for block in response.content if block.type == "text")
+    try:
+        parsed = shape.model_validate_json(text)
+    except pydantic.ValidationError:
+        raise AIError("Claude's answer didn't fit the expected shape; try again.", usage) from None
+    return parsed.model_dump(), usage
 
 
 def structure_resume(sources: dict[str, str]) -> tuple[dict, Usage]:

@@ -108,7 +108,7 @@ AI_MODEL = "claude-opus-5-5"
 # Dollars per million input / output tokens, for the running cost shown in
 # the app (thinking counts as output).
 AI_PRICES = {"claude-opus-5-5": (4.0, 20.0)}
-AI_MAX_TOKENS = 16000
+AI_MAX_TOKENS = 32000          # thinking counts against it; a cut-off answer is an error
 
 # Where a piece of the master resume came from (resume_sources.kind, also a
 # CHECK in schema.sql): the resume itself, a project history, a projects
