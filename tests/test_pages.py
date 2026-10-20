@@ -510,6 +510,13 @@ def test_resume_page_shows_the_master_and_exports_it_in_the_templates_layout():
     assert data.resume_master()["content"]["conflicts"] == []
     click(at, "Add a role")
     assert len(data.resume_master()["content"]["roles"]) == 3
+    widget(at.checkbox, "Remove this role", -1).check()                # the one just added
+    widget(at.checkbox, "Remove this project").check()
+    click(at, "Save")
+    content = data.resume_master()["content"]
+    assert [r["employer"] for r in content["roles"]] == ["Acme Energy", "Beta Chemicals"]
+    assert content["projects"] == []
+    assert not any(w.value for w in at.checkbox if w.label == "Remove this role")   # fresh form
 
 
 def test_building_the_master_lands_on_the_master_section(monkeypatch):

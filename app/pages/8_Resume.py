@@ -88,8 +88,10 @@ def role_editor(role: dict, key: str, project: bool) -> dict:
     frame = st.data_editor(bullets_frame(role["bullets"]), column_config=BULLET_COLUMNS,
                            num_rows="dynamic", hide_index=True, key=f"{key}_bullets",
                            width="stretch", row_height=BULLET_ROW_HEIGHT)
+    remove = st.checkbox(f"Remove this {'project' if project else 'role'}", key=f"{key}_remove",
+                         help="Dropped from the master, and from the pool, when you save")
     return {"employer": name, "title": title, "location": location, "start": start, "end": end,
-            "bullets": bullets_from(frame)}
+            "bullets": bullets_from(frame), "remove": remove}
 
 
 if section == "Master":
@@ -128,7 +130,8 @@ if section == "Master":
                 st.caption("Fix the right value below; the list stays until you tick "
                            "“Clear the conflicts list” and save.")
 
-        with st.form("resume_master"):
+        form_round = round_key("master")       # a fresh form after every save: no stale cells
+        with st.form(f"resume_master_{form_round}"):
             st.markdown("**Contact**")
             name_col, email_col = st.columns(2)
             name = name_col.text_input("Name", content.get("name", ""))
@@ -138,21 +141,23 @@ if section == "Master":
             linkedin = link_col.text_input("LinkedIn", content.get("linkedin", ""))
 
             st.markdown("**Experience**")
-            roles = [role_editor(role, f"role{n}", project=False)
+            roles = [role_editor(role, f"{form_round}_role{n}", project=False)
                      for n, role in enumerate(content.get("roles", []))]
             st.markdown("**Education**")
             education = st.data_editor(
                 pd.DataFrame(content.get("education", []), columns=["school", "when", "degree"]),
                 column_config={"school": "School", "when": "When", "degree": "Degree and detail"},
-                num_rows="dynamic", hide_index=True, key="education", width="stretch")
+                num_rows="dynamic", hide_index=True, key=f"{form_round}_education",
+                width="stretch")
             st.markdown("**Skills**")
             skills = st.data_editor(
                 pd.DataFrame(content.get("skill_groups", []), columns=["name", "skills"]),
                 column_config={"name": "Group", "skills": st.column_config.TextColumn(
                     "Skills", width="large")},
-                num_rows="dynamic", hide_index=True, key="skill_groups", width="stretch")
+                num_rows="dynamic", hide_index=True, key=f"{form_round}_skill_groups",
+                width="stretch")
             st.markdown("**Personal projects**")
-            projects = [role_editor(project, f"project{n}", project=True)
+            projects = [role_editor(project, f"{form_round}_project{n}", project=True)
                         for n, project in enumerate(content.get("projects", []))]
             clear_conflicts = st.checkbox("Clear the conflicts list: I've checked them",
                                           value=False, disabled=not content.get("conflicts"))
@@ -160,7 +165,8 @@ if section == "Master":
         if saved:
             edited = {
                 "name": name, "email": email, "phone": phone, "linkedin": linkedin,
-                "roles": roles, "projects": projects,
+                "roles": [r for r in roles if not r.pop("remove")],
+                "projects": [p for p in projects if not p.pop("remove")],
                 "education": [r for r in education.fillna("").to_dict("records")
                               if str(r.get("school", "")).strip()],
                 "skill_groups": [r for r in skills.fillna("").to_dict("records")
@@ -168,17 +174,20 @@ if section == "Master":
                 "conflicts": [] if clear_conflicts else content.get("conflicts", []),
             }
             data.save_resume_master(logic.clean_resume(edited), today)
+            bump_round("master")
             done("Saved.")
         add_role, add_project = st.columns(2)
         if add_role.button("Add a role", width="stretch"):
             content["roles"].append({"employer": "New employer", "title": "", "location": "",
                                      "start": "", "end": "", "bullets": []})
             data.save_resume_master(logic.clean_resume(content), today)
+            bump_round("master")
             done("Added a role: fill it in and save.")
         if add_project.button("Add a project", width="stretch"):
             content["projects"].append({"employer": "New project", "title": "", "location": "",
                                         "start": "", "end": "", "bullets": []})
             data.save_resume_master(logic.clean_resume(content), today)
+            bump_round("master")
             done("Added a project: fill it in and save.")
 
 # ---- tailor -----------------------------------------------------------------------
