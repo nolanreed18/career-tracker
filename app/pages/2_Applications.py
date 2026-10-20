@@ -19,6 +19,7 @@ from ui import (
     index_of,
     md,
     optional,
+    posting_button,
     round_key,
     sections,
     setup,
@@ -216,10 +217,11 @@ if section == "Interviews":
         done("Interview added.", "interview_round")
 
 if section == "Posting":
+    posting_button(app, "application")
     with st.form(f"posting_{picked}"):
         posting = st.text_area("Job posting", value=app["posting"] or "", height=260,
-                               help="Paste the whole posting: Claude tailors the resume to "
-                                    "its words.")
+                               help="Read it from the link above, or paste the whole posting: "
+                                    "Claude tailors the resume to its words.")
         saved_posting = st.form_submit_button("Save posting", type="primary")
     if saved_posting:
         data.update_application(picked, posting=posting)
@@ -231,10 +233,10 @@ if section == "Posting":
     if st.button("Tailor the resume for this job", icon=":material/auto_awesome:",
                  disabled=not app["posting"]):
         st.session_state["tailor_application"] = picked
-        st.session_state["resume_goto"] = "Tailor"
+        st.session_state["resume_goto"] = "Resume Builder"
         st.switch_page("pages/8_Resume.py")
     if not app["posting"]:
-        st.caption("Save the posting first: tailoring reads it.")
+        st.caption("Get or save the posting first: tailoring reads it.")
 
 if section == "Edit":
     edit_round = st.session_state.get("edit_round", 0)

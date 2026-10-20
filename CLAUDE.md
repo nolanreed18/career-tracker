@@ -34,7 +34,9 @@ only they can do (accounts, secrets, clicking merge).
   `app/docx_io.py`: the writer clones paragraphs from the owner's own resume
   (the template), never styles anything itself; `build` prints a resume,
   `letter` a cover letter. Tests stand the API in (`tests/test_ai.py`); no
-  test calls Claude.
+  test calls Claude. `app/posting.py` reads a job posting from its link for the
+  posting box (LinkedIn's guest copy; Indeed and Glassdoor refuse a server, so
+  the error says to paste); tests never fetch.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no

@@ -16,3 +16,5 @@ pyarrow<25
 # (app/docx_io.py). The SDK brings httpx2 and pydantic with it.
 anthropic==1.15.0
 python-docx==1.2.0
+# app/posting.py reads a job posting's page with httpx (above) and lxml,
+# which python-docx brings with it.
