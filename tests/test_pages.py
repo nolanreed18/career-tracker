@@ -465,8 +465,10 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
     asked = []
     monkeypatch.setattr(ai, "find_posting", lambda *args: asked.append(args) or (
         {"url": "https://boards.greenhouse.io/gamma/jobs/7", "title": "Analytics Engineer",
-         "note": "Same title and location on Gamma's Greenhouse board."},
+         "location": "", "note": "Same title on Gamma's Greenhouse board."},
         ai.Usage("claude-opus-5-5", 3000, 500, 2)))
+    monkeypatch.setattr(posting, "employer_posting", lambda url: posting.Posting(
+        "Analytics Engineer II", "", "Denver, CO", "Gamma's own words. " * 20))
     at = run(LEADS)
     widget(at.button, "Add").click().run()
     app = data.applications().query("role == 'Analytics Engineer'").iloc[0]
@@ -474,23 +476,29 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
     assert asked[0][:3] == ("Gamma", "Analytics Engineer", None)
     assert asked[0][4].startswith("Analytics Engineer — Gamma")       # the posting just read
     assert saved["apply_url"] == "https://boards.greenhouse.io/gamma/jobs/7"
-    assert saved["apply_note"].startswith("Same title")
+    assert saved["apply_note"] == ("Listed there as Analytics Engineer II in Denver, CO. Read from "
+                                   "the employer's site. Same title on Gamma's Greenhouse board.")
+    assert saved["posting"].startswith("Analytics Engineer — Gamma")   # LinkedIn's copy kept
     assert at.session_state["flash"].endswith(
-        "Posting read (260 characters). Found it on the employer's site: Analytics Engineer "
-        "($0.04).")
+        "Posting read (260 characters). Found it on the employer's site: Analytics Engineer II, "
+        "Denver, CO ($0.04).")
     assert data.ai_usage_since(TODAY) == (1, 0.042)
-
-    # The application: Apply on the employer's site, Applied today, and a new search.
-    monkeypatch.setattr(ai, "find_posting", lambda *args: (
-        {"url": "", "title": "", "note": "Only on LinkedIn, as an Easy Apply posting."},
-        ai.Usage("claude-opus-5-5", 3000, 500, 4)))
     at = new_app(APPS)
     at.session_state["open_application"] = int(app["application_id"])
     at.run()
+    assert any(c.value.startswith("Listed there as Analytics Engineer II") for c in at.caption)
+
+    # The application: Apply on the employer's site, Applied today, and a new search.
+    monkeypatch.setattr(ai, "find_posting", lambda *args: (
+        {"url": "", "title": "", "location": "",
+         "note": "Only on LinkedIn, as an Easy Apply posting."},
+        ai.Usage("claude-opus-5-5", 3000, 500, 4)))
     click(at, "Find it on the employer's site")
     assert at.success[0].value == ("Not found on the employer's site: Only on LinkedIn, as an "
                                    "Easy Apply posting. ($0.06).")
     assert data.application(int(app["application_id"]))["apply_url"] is None
+    assert any(c.value.startswith("Not found on the employer's site: Only on LinkedIn")
+               for c in at.caption)
     click(at, "Applied today")
     assert at.success[0].value == "Marked as applied today."
     after = data.application(int(app["application_id"]))

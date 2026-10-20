@@ -170,8 +170,9 @@ if app["apply_url"]:
         open_col.link_button("Open the posting", app["job_url"], width="stretch")
 elif app["job_url"]:
     st.link_button("Open job posting", app["job_url"])
-    if app["apply_note"]:
-        st.caption(md(f"Not found on the employer's site: {app['apply_note']}"))
+if app["apply_note"]:
+    st.caption(md(app["apply_note"] if app["apply_url"]
+                  else f"Not found on the employer's site: {app['apply_note']}"))
 if app["notes"]:
     st.caption(md(app["notes"]))
 applied_col, find_col = st.columns(2)

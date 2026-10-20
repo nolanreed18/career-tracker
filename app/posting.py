@@ -10,6 +10,7 @@ sites and applicant-tracking systems publish) when it has it, else the
 page's main text. Pure except fetch() and _get().
 """
 
+import html
 import json
 import re
 from dataclasses import dataclass
@@ -77,9 +78,10 @@ def fetch(url) -> Posting:
     return posting
 
 
-def _get(url: str) -> str:
+def _get(url: str, accept: str = HEADERS["Accept"]) -> str:
     try:
-        response = httpx.get(url, headers=HEADERS, timeout=TIMEOUT_S, follow_redirects=True)
+        response = httpx.get(url, headers={**HEADERS, "Accept": accept}, timeout=TIMEOUT_S,
+                             follow_redirects=True)
     except httpx.HTTPError as problem:
         raise PostingError(f"Couldn't reach the posting ({type(problem).__name__}): "
                            f"{PASTE}") from problem
@@ -87,6 +89,64 @@ def _get(url: str) -> str:
         raise PostingError(f"The site answered {response.status_code} instead of the posting: "
                            f"{PASTE}")
     return response.text
+
+
+# ---- the employer's own copy --------------------------------------------------
+
+# The applicant-tracking systems whose postings come as data: the page's
+# address, and the address of the data behind it (their pages are built in
+# the browser, so reading the page itself gives nothing).
+WORKDAY = re.compile(r"^https://([\w-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?"
+                     r"([^/?#]+)/job/([^?#]+)")
+GREENHOUSE = re.compile(r"^https://(?:boards|job-boards)\.greenhouse\.io/([^/?#]+)/jobs/(\d+)")
+LEVER = re.compile(r"^https://jobs\.lever\.co/([^/?#]+)/([0-9a-f-]{36})")
+
+
+def employer_posting(url) -> Posting | None:
+    """The posting as the employer's applicant-tracking system has it, when
+    the link is a Workday, Greenhouse or Lever one and its data can be read;
+    None otherwise (the link is still worth keeping)."""
+    url = str(url or "").strip()
+    try:
+        if match := WORKDAY.match(url):
+            tenant, _, site, rest = match.groups()
+            data = _json(f"https://{tenant}.{match.group(2)}.myworkdayjobs.com/wday/cxs/{tenant}"
+                         f"/{site}/job/{rest}")
+            info = data.get("jobPostingInfo") or {}
+            places = [info.get("location")] + list(info.get("additionalLocations") or [])
+            return _from_html(str(info.get("title") or ""), "",
+                              ", ".join(str(p) for p in places if p), info.get("jobDescription"))
+        if match := GREENHOUSE.match(url):
+            board, job_id = match.groups()
+            data = _json(f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs/{job_id}")
+            return _from_html(str(data.get("title") or ""), "",
+                              str((data.get("location") or {}).get("name") or ""),
+                              html.unescape(str(data.get("content") or "")))
+        if match := LEVER.match(url):
+            company, posting_id = match.groups()
+            data = _json(f"https://api.lever.co/v0/postings/{company}/{posting_id}")
+            parts = [str(data.get("descriptionPlain") or "")]
+            for block in data.get("lists") or []:
+                parts.append(f"{block.get('text', '')}\n"
+                             + text_of(lxml.html.fromstring(f"<ul>{block.get('content', '')}</ul>")))
+            return Posting(str(data.get("text") or ""), "",
+                           str((data.get("categories") or {}).get("location") or ""),
+                           "\n\n".join(p for p in parts if p.strip())[:config.POSTING_MAX_CHARS])
+    except (PostingError, ValueError, AttributeError, TypeError):
+        return None
+    return None
+
+
+def _json(url: str) -> dict:
+    data = json.loads(_get(url, accept="application/json"))
+    if not isinstance(data, dict):
+        raise ValueError("not an object")
+    return data
+
+
+def _from_html(title: str, company: str, location: str, description) -> Posting:
+    text = text_of(lxml.html.fromstring(f"<div>{description}</div>")) if description else ""
+    return Posting(title, company, location, text)
 
 
 # ---- reading pages ----------------------------------------------------------

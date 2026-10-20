@@ -194,8 +194,8 @@ class FakeSearchMessages:
 
 
 FOUND = ('Here it is.\n{"url": "https://bp.wd3.myworkdayjobs.com/en-US/bpx/job/Denver/R123", '
-         '"title": "Senior Development Systems Engineer", '
-         '"note": "Same title and location on bp\'s Workday site."}')
+         '"title": "Senior Development Systems Engineer", "location": "Houston, TX", '
+         '"note": "Same title on bp\'s Workday site; listed in Houston."}')
 
 
 def test_find_posting_searches_the_web_resumes_a_pause_and_counts_the_searches(monkeypatch):
@@ -205,6 +205,7 @@ def test_find_posting_searches_the_web_resumes_a_pause_and_counts_the_searches(m
                                    "LinkedIn", "Job Description " * 500)
     assert found["url"].startswith("https://bp.wd3.myworkdayjobs.com/")
     assert found["title"] == "Senior Development Systems Engineer"
+    assert found["location"] == "Houston, TX"
     assert (usage.input_tokens, usage.output_tokens, usage.searches) == (6000, 1000, 2)
     assert usage.cost_usd == round(6000 * 4 / 1e6 + 1000 * 20 / 1e6 + 2 * 0.01, 4)
     first, second = messages.calls
@@ -223,11 +224,11 @@ def test_find_posting_searches_the_web_resumes_a_pause_and_counts_the_searches(m
 def test_find_posting_treats_a_job_board_link_as_not_found_and_checks_the_shape(monkeypatch):
     fake_client(monkeypatch, messages=FakeSearchMessages(
         '{"url": "https://www.linkedin.com/jobs/view/1/", "title": "Analyst", '
-        '"note": "Only on LinkedIn."}', searches=3))
+        '"location": "", "note": "Only on LinkedIn."}', searches=3))
     found, usage = ai.find_posting("Acme", "Analyst", None, None, "")
     assert found["url"] == "" and found["note"].startswith("Found only on a job board")
     assert usage.searches == 3
-    fake_client(monkeypatch, messages=FakeSearchMessages('{"url": "", "title": "", '
+    fake_client(monkeypatch, messages=FakeSearchMessages('{"url": "", "title": "", "location": "", '
                                                          '"note": "Nothing on Acme\'s site."}'))
     assert ai.find_posting("Acme", "Analyst", "", "", "")[0]["url"] == ""
     fake_client(monkeypatch, messages=FakeSearchMessages("No JSON at all"))

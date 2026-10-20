@@ -157,12 +157,19 @@ def find_company_posting(app: dict, today) -> list[str]:
         return [f"Couldn't look for it on the employer's site: {problem}"]
     data.log_ai_usage("find posting", usage.model, usage.input_tokens, usage.output_tokens,
                       usage.cost_usd, today)
-    data.update_application(int(app["application_id"]), apply_url=found["url"],
-                            apply_note=found["note"])
+    title, location, note = found["title"], found["location"], found["note"]
+    if found["url"] and (checked := posting.employer_posting(found["url"])):
+        title, location = checked.title or title, checked.location or location   # as listed there
+        note = f"Read from the employer's site. {note}".strip()
+        if checked.text and not logic.value(app.get("posting")):
+            data.update_application(int(app["application_id"]), posting=checked.as_text())
+    if found["url"] and location:
+        note = f"Listed there as {title or app['role']} in {location}. {note}".strip()
+    data.update_application(int(app["application_id"]), apply_url=found["url"], apply_note=note)
     if found["url"]:
-        return [f"Found it on the employer's site: {found['title'] or app['role']} "
-                f"(${usage.cost_usd:.2f})."]
-    return [f"Not found on the employer's site: {found['note']} (${usage.cost_usd:.2f})."]
+        return [f"Found it on the employer's site: {title or app['role']}"
+                + (f", {location}" if location else "") + f" (${usage.cost_usd:.2f})."]
+    return [f"Not found on the employer's site: {note} (${usage.cost_usd:.2f})."]
 
 
 def prepare_application(application_id: int, today) -> list[str]:
