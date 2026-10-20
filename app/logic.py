@@ -572,18 +572,39 @@ def is_weak(score) -> bool:
 
 
 _GLASSDOOR_GUESS = re.compile(r"^https?://(?:www\.)?glassdoor\.com/job-listing/?\?jl=(\d+)$")
+_LINKEDIN_JOB = re.compile(r"^https?://(?:www\.)?linkedin\.com/(?:comm/)?jobs/view/(\d+)")
+_INDEED_JOB = re.compile(r"^https?://(?:www\.)?indeed\.com/(?:viewjob|rc/clk|pagead/clk)\b")
 
 
 def job_link(url) -> str | None:
-    """The posting link to open. A Glassdoor link rebuilt from a listing ID
-    (what the first daily review stored) is turned into the form Glassdoor
-    serves; anything else is kept as it is."""
+    """The posting link to open, cleaned: a Google or alert-email redirect is
+    unwrapped to the page it points at; LinkedIn, Indeed and Glassdoor
+    postings lose their tracking parameters (a LinkedIn alert link runs to
+    600 characters; the posting itself needs only its id). Anything else is
+    kept as it is."""
+    from urllib.parse import parse_qs, unquote, urlsplit
+
     url = value(url)
     if url is None:
         return None
     url = str(url).strip()
+    parts = urlsplit(url)
+    if parts.netloc.endswith("google.com") and parts.path == "/url":        # a redirect
+        inner = parse_qs(parts.query).get("q") or parse_qs(parts.query).get("url")
+        if inner:
+            return job_link(unquote(inner[0]))
     if match := _GLASSDOOR_GUESS.match(url):
         return f"https://www.glassdoor.com/partner/jobListing.htm?jobListingId={match.group(1)}"
+    if parts.netloc.endswith("glassdoor.com"):
+        listing = parse_qs(parts.query).get("jobListingId")
+        if listing and listing[0].isdigit():
+            return f"https://www.glassdoor.com/partner/jobListing.htm?jobListingId={listing[0]}"
+    if match := _LINKEDIN_JOB.match(url):
+        return f"https://www.linkedin.com/jobs/view/{match.group(1)}/"
+    if _INDEED_JOB.match(url):
+        key = parse_qs(parts.query).get("jk")
+        if key:
+            return f"https://www.indeed.com/viewjob?jk={key[0]}"
     return url
 
 

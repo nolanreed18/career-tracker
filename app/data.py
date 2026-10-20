@@ -93,6 +93,7 @@ def _connection() -> psycopg.Connection:
             with _conn.cursor() as cur:
                 _rescore_leads_without_pay(cur)
                 _rekey_leads(cur)
+                _clean_job_links(cur)
     elif time.monotonic() - _last_used >= PING_AFTER_IDLE_S:
         try:
             _conn.execute("select 1")
@@ -159,6 +160,19 @@ def migrate() -> None:
             cur.execute(statement)
         _rescore_leads_without_pay(cur)
         _rekey_leads(cur)
+        _clean_job_links(cur)
+
+
+def _clean_job_links(cur) -> None:
+    """Posting links stored with tracking wrappers (before logic.job_link
+    cleaned them on the way in) are rewritten to the clean form, on leads
+    and on the applications made from them. Safe to run again."""
+    for table, key in (("job_leads", "lead_id"), ("applications", "application_id")):
+        cur.execute(f"select {key}, job_url from {table} where job_url is not null")
+        for row_id, url in cur.fetchall():
+            clean = logic.job_link(url)
+            if clean != url:
+                cur.execute(f"update {table} set job_url = %s where {key} = %s", (clean, row_id))
 
 
 def _rekey_leads(cur) -> None:

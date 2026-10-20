@@ -345,7 +345,18 @@ def test_a_rebuilt_glassdoor_link_becomes_the_form_glassdoor_serves():
     assert logic.job_link("https://glassdoor.com/job-listing/?jl=1010293120973") == fixed
     real = ("https://www.glassdoor.com/partner/jobListing.htm?pos=101&jobListingId=1"
             "&utm_source=jobalert")
-    assert logic.job_link(real) == real                     # the emailed link stays whole
+    assert logic.job_link(real) == fixed.replace("1010293120973", "1")   # tracking dropped
+    wrapped = ("https://www.google.com/url?q=https://www.linkedin.com/comm/jobs/view/4477910397"
+               "?alertAction%3Dmarkasviewed%26savedSearchId%3D162%26trk%3Dx&source=gmail")
+    assert logic.job_link(wrapped) == "https://www.linkedin.com/jobs/view/4477910397/"
+    assert logic.job_link("https://www.linkedin.com/jobs/view/123?refId=x") == (
+        "https://www.linkedin.com/jobs/view/123/")
+    assert logic.job_link("https://www.indeed.com/viewjob?jk=abc123&from=ja&tk=z") == (
+        "https://www.indeed.com/viewjob?jk=abc123")
+    assert logic.job_link("https://engage.indeed.com/f/a/uZGm19L7") == (
+        "https://engage.indeed.com/f/a/uZGm19L7")                         # opaque: as it is
+    assert logic.job_link("https://boards.greenhouse.io/x/jobs/1?gh_src=a") == (
+        "https://boards.greenhouse.io/x/jobs/1?gh_src=a")
     assert logic.job_link(" https://example.com/j/1 ") == "https://example.com/j/1"
     assert logic.job_link(None) is None
     lead, _ = logic.clean_lead({"source": "Glassdoor", "title": "A", "company": "B",

@@ -409,3 +409,19 @@ def test_a_posting_and_tailored_versions_live_with_the_application():
     assert data.tailored_versions(app_id)["version"].tolist() == [1]
     data.delete_application(app_id)                       # takes its versions with it
     assert data.tailored(first) is None
+
+
+def test_migrate_cleans_posting_links_stored_with_tracking_wrappers(database):
+    wrapped = ("https://www.google.com/url?q=https://www.linkedin.com/comm/jobs/view/4477910397"
+               "?alertAction%3Dmarkasviewed%26trk%3Dx&source=gmail")
+    app_id = data.add_application(data.company_id_for("Acme", TODAY), "Analyst", "saved", TODAY,
+                                  job_url="https://example.com/j/1")
+    data.add_leads(leads({"title": "Analyst"}), TODAY)
+    with psycopg.connect(database, autocommit=True) as conn:      # as stored before the cleaner
+        conn.execute("update job_leads set job_url = %s", (wrapped,))
+        conn.execute("update applications set job_url = %s where application_id = %s",
+                     (wrapped, app_id))
+    data.migrate()
+    data.migrate()
+    assert data.job_leads("new")["job_url"].tolist() == ["https://www.linkedin.com/jobs/view/4477910397/"]
+    assert data.application(app_id)["job_url"] == "https://www.linkedin.com/jobs/view/4477910397/"
