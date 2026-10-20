@@ -115,7 +115,8 @@ def employer_posting(url) -> Posting | None:
             info = data.get("jobPostingInfo") or {}
             places = [info.get("location")] + list(info.get("additionalLocations") or [])
             return _from_html(str(info.get("title") or ""), "",
-                              ", ".join(str(p) for p in places if p), info.get("jobDescription"))
+                              " / ".join(_workday_place(p) for p in places if p),
+                              info.get("jobDescription"))
         if match := GREENHOUSE.match(url):
             board, job_id = match.groups()
             data = _json(f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs/{job_id}")
@@ -135,6 +136,12 @@ def employer_posting(url) -> Posting | None:
     except (PostingError, ValueError, AttributeError, TypeError):
         return None
     return None
+
+
+def _workday_place(text) -> str:
+    """Workday's "Country - State - City" as "City, State"; anything else as is."""
+    parts = [part.strip() for part in str(text).split(" - ")]
+    return f"{parts[2]}, {parts[1]}" if len(parts) == 3 else str(text).strip()
 
 
 def _json(url: str) -> dict:
