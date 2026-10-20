@@ -37,7 +37,7 @@ if not new_leads.empty:
                           + (f", {found_today} new today" if found_today else "")
                           + (f", {strong} strong" if strong else ""))
         if button_col.button("Review", key="review_leads", width="stretch"):
-            st.switch_page("pages/7_Job_Leads.py")
+            st.switch_page("pages/1_Job_Leads.py")
 
 st.subheader("Needs attention")
 items = logic.needs_attention(apps, interviews, today)
@@ -53,11 +53,11 @@ for n, item in enumerate(items):
                           f"{md(item.detail)}")
         if button_col.button("Open", key=f"attention_{n}", width="stretch"):
             st.session_state["open_application"] = item.application_id
-            st.switch_page("pages/1_Applications.py")
+            st.switch_page("pages/2_Applications.py")
 
 st.caption(f"Applications with no update for {config.FOLLOW_UP_DAYS} days are flagged for a "
            "follow-up. Logging any update, or setting a next step, clears the flag.")
 
 if st.button("Add application", type="primary", width="stretch"):
     st.session_state["open_add_application"] = True
-    st.switch_page("pages/1_Applications.py")
+    st.switch_page("pages/2_Applications.py")

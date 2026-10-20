@@ -109,6 +109,12 @@ def needs_attention(apps: pd.DataFrame, interviews: pd.DataFrame, today: date,
 
 # ---- stats ------------------------------------------------------------------
 
+def application_labels(apps: pd.DataFrame) -> dict[int, str]:
+    """{application_id: "Company — Role"} for a dropdown (plain ints: the
+    database driver doesn't take numpy's)."""
+    return {int(r.application_id): f"{r.company} — {r.role}" for r in apps.itertuples()}
+
+
 def pipeline(apps: pd.DataFrame) -> pd.DataFrame:
     """How many applications are at each status, in pipeline order."""
     counts = apps["status"].value_counts() if not apps.empty else pd.Series(dtype=int)

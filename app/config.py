@@ -33,6 +33,8 @@ RESPONDED_STATUSES = ["screening", "interviewing", "offer", "accepted"]
 
 WORK_MODES = ["onsite", "hybrid", "remote"]
 
+INTERVIEW_FORMATS = ["phone", "video", "onsite", "take-home"]
+
 CONTACT_KINDS = ["recruiter", "hiring manager", "referral", "colleague", "network"]
 
 # Career log entry types.
@@ -52,10 +54,6 @@ LEAD_STALE_DAYS = 14
 # How far back the daily review looks at dismissals, and how many it reads.
 DISMISSAL_DAYS = 30
 DISMISSAL_LIMIT = 30
-
-# The sites job alerts come from (DAILY_REVIEW.md reads their emails).
-LEAD_SOURCES = ["LinkedIn", "Indeed", "Glassdoor", "Built In", "Dice", "Wellfound",
-                "Welcome to the Jungle"]
 
 # How a lead's fit score is built. The daily review rates each job 1-10 on
 # every category against the profile (What I'm looking for); the score is the
@@ -123,3 +121,7 @@ BULLET_RANK_MAX = 5
 # Scores below this are weak matches: the Job Leads inbox hides them until
 # asked (they stay stored, so the same job never comes back).
 MAYBE_FIT = 4
+
+# Lead cards drawn at once on Job Leads; a button shows the next batch, so a
+# long inbox stays quick to draw on a phone.
+LEADS_SHOWN = 25

@@ -13,6 +13,7 @@ from ui import (
     bump_round,
     delete_button,
     disclosure,
+    done,
     empty,
     index_of,
     md,
@@ -26,13 +27,6 @@ setup("Companies & Contacts", "Who you're looking at, and who you know there")
 
 
 today = data.today()
-
-
-def done(message: str, counter: str | None = None) -> None:
-    if counter:
-        st.session_state[counter] = st.session_state.get(counter, 0) + 1
-    st.session_state["flash"] = message
-    st.rerun()
 
 
 companies = data.companies()

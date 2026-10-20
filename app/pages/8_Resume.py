@@ -16,17 +16,12 @@ import config
 import data
 import docx_io
 import logic
-from ui import badge, bump_round, card, delete_button, empty, md, round_key, sections, setup
+from ui import badge, bump_round, card, delete_button, done, empty, md, round_key, sections, setup
 
 setup("Resume", "Your master resume as data: built from your files, tailored per job",
       wide=True)
 
 today = data.today()
-
-
-def done(message: str) -> None:
-    st.session_state["flash"] = message
-    st.rerun()
 
 
 if goto := st.session_state.pop("resume_goto", None):   # an action that moves the eye
@@ -242,8 +237,7 @@ if section == "Tailor":
               "Add the job on Applications, or move a lead there, then tailor the master to it.")
     else:
         ids = [int(i) for i in open_apps["application_id"]]
-        labels = {int(r.application_id): f"{r.company} — {r.role}"
-                  for r in open_apps.itertuples()}
+        labels = logic.application_labels(open_apps)
         # The dropdown forgets its choice while another section is open; keep it ourselves.
         if (wanted := st.session_state.pop("tailor_application", None)) in ids:
             st.session_state["tailor_pick"] = wanted            # sent here from Applications

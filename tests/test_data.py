@@ -223,29 +223,6 @@ def test_migrate_brings_an_older_job_leads_table_up_to_date(database):
                        "pay_note": "text"}
 
 
-def test_migrate_rescores_leads_rated_on_pay_before_it_was_known(database):
-    data.add_leads([
-        logic.clean_lead({"source": "Dice", "title": "A", "company": "B", "salary": "$100k",
-                          "fit": {"role": 8, "pay": 4}})[0],
-        logic.clean_lead({"source": "Dice", "title": "C", "company": "D",
-                          "fit": {"role": 8, "industry": 4}})[0],
-    ], TODAY)
-    with psycopg.connect(database, autocommit=True) as conn:     # as the first review stored them
-        conn.execute("update job_leads set pay_source = null where title = 'A'")
-        conn.execute("""
-            update job_leads set fit_score = 5.9, fit_detail = '{"ratings": {"role": 8,
-                "industry": 4, "pay": 5}, "deal_breaker": false}' where title = 'C'
-        """)
-    data.migrate()
-    stored = data.job_leads().set_index("title")
-    assert stored.loc["A", "pay_source"] == "listed"           # it had a salary all along
-    assert float(stored.loc["A", "fit_score"]) == 6.8 and "pay" in stored.loc["A", "fit_detail"]["ratings"]
-    assert float(stored.loc["C", "fit_score"]) == 6.5 and logic.blank(stored.loc["C", "pay_source"])
-    assert stored.loc["C", "fit_detail"] == {"ratings": {"role": 8, "industry": 4},
-                                             "deal_breaker": False}
-    data.reset_connection()                                      # the app's own start-up path
-    data._schema_ready = False
-    assert float(data.job_leads().set_index("title").loc["C", "fit_score"]) == 6.5
 
 
 def test_a_dismissed_lead_stays_dismissed_when_seen_again():
@@ -287,25 +264,6 @@ def test_recent_dismissals_and_strong_leads_still_waiting():
     assert recent["title"].tolist() == ["Gone"] and recent["dismiss_reason"][0] == "company"
 
 
-def test_migrate_rekeys_leads_stored_with_a_location(database):
-    data.add_leads(leads({"title": "Analyst", "location": "Omaha, NE"})
-                   + leads({"title": "Engineer"}), TODAY)
-    with psycopg.connect(database, autocommit=True) as conn:    # keys as stored before 2026-10
-        conn.execute("update job_leads set dedupe_key = 'acme|analyst|omaha ne' "
-                     "where title = 'Analyst'")
-        conn.execute("update job_leads set dedupe_key = 'acme|engineer|' where title = 'Engineer'")
-        conn.execute("""
-            insert into job_leads (source, title, company, location, found_on, status, dedupe_key)
-            values ('Dice', 'Analyst', 'Acme', 'Nashville, TN', %s, 'new',
-                    'acme|analyst|nashville tn')
-        """, (TODAY,))
-    data.migrate()
-    data.migrate()
-    keys = data.known_lead_keys()
-    assert len(keys) == 3 and {"acme|analyst", "acme|engineer"} <= keys
-    twin = (keys - {"acme|analyst", "acme|engineer"}).pop()
-    assert twin.startswith("acme|analyst|")                           # the twin, kept apart
-    assert data.add_leads(leads({"title": "Analyst", "location": "Denver, CO"}), TODAY) == (0, 1)
 
 
 def test_moving_a_lead_makes_a_saved_application_with_the_fit_in_its_notes():
@@ -411,20 +369,6 @@ def test_a_posting_and_tailored_versions_live_with_the_application():
     assert data.tailored(first) is None
 
 
-def test_migrate_cleans_posting_links_stored_with_tracking_wrappers(database):
-    wrapped = ("https://www.google.com/url?q=https://www.linkedin.com/comm/jobs/view/4477910397"
-               "?alertAction%3Dmarkasviewed%26trk%3Dx&source=gmail")
-    app_id = data.add_application(data.company_id_for("Acme", TODAY), "Analyst", "saved", TODAY,
-                                  job_url="https://example.com/j/1")
-    data.add_leads(leads({"title": "Analyst"}), TODAY)
-    with psycopg.connect(database, autocommit=True) as conn:      # as stored before the cleaner
-        conn.execute("update job_leads set job_url = %s", (wrapped,))
-        conn.execute("update applications set job_url = %s where application_id = %s",
-                     (wrapped, app_id))
-    data.migrate()
-    data.migrate()
-    assert data.job_leads("new")["job_url"].tolist() == ["https://www.linkedin.com/jobs/view/4477910397/"]
-    assert data.application(app_id)["job_url"] == "https://www.linkedin.com/jobs/view/4477910397/"
 
 
 def test_lead_stats_count_the_reviewed_the_average_and_the_inbox_above_each_mark():

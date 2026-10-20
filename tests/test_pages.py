@@ -19,6 +19,8 @@ import ui
 ROOT = Path(__file__).resolve().parent.parent
 HOME = ROOT / "app" / "Home.py"
 PAGES = sorted((ROOT / "app" / "pages").glob("*.py"))
+LEADS, APPS, COMPANIES, LOG = (ROOT / "app" / "pages" / name for name in (
+    "1_Job_Leads.py", "2_Applications.py", "4_Companies_and_Contacts.py", "5_Career_Log.py"))
 TODAY = date(2026, 10, 14)
 
 
@@ -29,6 +31,7 @@ PASSWORD = "correct horse"
 def fixed_today(database, monkeypatch):
     monkeypatch.setattr(data, "today", lambda: TODAY)
     monkeypatch.setenv("APP_PASSWORD", PASSWORD)
+    monkeypatch.setattr(theme, "_applied", None)     # a fresh process: reads the saved look
 
 
 def new_app(path: Path, signed_in: bool = True) -> AppTest:
@@ -106,7 +109,7 @@ def test_home_lists_what_needs_attention_most_urgent_first():
 
 
 def test_adding_an_application_makes_the_company_and_opens_it():
-    at = run(PAGES[0])
+    at = run(APPS)
     assert not at.text_input                      # the form waits behind its button
     click(at, "Add an application")
     widget(at.text_input, "…or a new company").set_value("Gamma")
@@ -121,7 +124,7 @@ def test_adding_an_application_makes_the_company_and_opens_it():
 
 
 def test_an_application_needs_a_company_and_a_role():
-    at = run(PAGES[0])
+    at = run(APPS)
     click(at, "Add an application")
     widget(at.text_input, "Role").set_value("Engineer")
     click(at, "Add application")
@@ -133,7 +136,7 @@ def test_an_application_needs_a_company_and_a_role():
 def test_logging_an_update_records_history_and_clears_the_step():
     app_id = seed()
     data.update_application(app_id, next_action="Call", next_action_on=TODAY)
-    at = new_app(PAGES[0])
+    at = new_app(APPS)
     at.session_state["open_application"] = app_id
     at.run()
     widget(at.selectbox, "Status", -1).set_value("screening")
@@ -147,7 +150,7 @@ def test_logging_an_update_records_history_and_clears_the_step():
 
 def test_deleting_needs_the_confirmation():
     app_id = seed()
-    at = new_app(PAGES[0])
+    at = new_app(APPS)
     at.session_state["open_application"] = app_id
     at.run()
     widget(at.radio, "Section").set_value("Edit").run()
@@ -160,7 +163,7 @@ def test_deleting_needs_the_confirmation():
 
 def test_a_company_in_use_is_not_deleted():
     seed()
-    at = run(PAGES[2])
+    at = run(COMPANIES)
     widget(at.selectbox, "Edit a company").set_value("Acme").run()
     assert widget(at.button, "Delete company").disabled           # tick box first
     widget(at.checkbox, "I want to delete this company").check().run()
@@ -172,16 +175,16 @@ def test_a_company_in_use_is_not_deleted():
 def test_tables_show_blanks_not_none_for_missing_values():
     seed()
     data.add_application(data.company_id_for("Acme", TODAY), "Saved one", "saved", TODAY)
-    companies = run(PAGES[2]).dataframe[0].value
+    companies = run(COMPANIES).dataframe[0].value
     assert companies["industry"].tolist() == ["", ""]           # not None, not "None"
-    apps = run(PAGES[0]).dataframe[0].value
+    apps = run(APPS).dataframe[0].value
     assert apps["applied_on"].isna().sum() == 1                  # the one still Saved
 
 
 def test_a_deleted_company_leaves_the_dropdown():
     seed()
     data.add_company("Solo", TODAY)
-    at = run(PAGES[2])
+    at = run(COMPANIES)
     widget(at.selectbox, "Edit a company").set_value("Solo").run()
     widget(at.checkbox, "I want to delete this company").check().run()
     click(at, "Delete company")
@@ -192,7 +195,7 @@ def test_a_deleted_company_leaves_the_dropdown():
 
 def test_sections_stay_put_after_an_action():
     seed()
-    at = run(PAGES[2])
+    at = run(COMPANIES)
     widget(at.radio, "Section").set_value("Contacts").run()
     click(at, "Add a contact")
     widget(at.text_input, "Name").set_value("Ana")
@@ -203,7 +206,7 @@ def test_sections_stay_put_after_an_action():
 
 
 def test_logging_a_win():
-    at = run(PAGES[3])
+    at = run(LOG)
     widget(at.text_input, "What").set_value("Led the migration")
     click(at, "Add")
     assert data.career_entries("win")["title"].tolist() == ["Led the migration"]
@@ -235,22 +238,34 @@ def test_dark_mode_is_a_saved_choice_and_light_is_the_default():
     widget(at.toggle, "Dark mode").set_value(True).run()
     assert not at.exception
     assert data.get_setting("theme") == "dark" and theme.current() == "dark"
-    assert run(PAGES[0]).toggle[0].value is True          # every page follows
+    assert run(APPS).toggle[0].value is True          # every page follows
     widget(at.toggle, "Dark mode").set_value(False).run()
     assert data.get_setting("theme") == "light" and theme.current() == "light"
 
 
 def test_the_switch_follows_a_change_made_on_another_device():
-    at = run(HOME)
-    assert widget(at.toggle, "Dark mode").value is False
-    data.set_setting("theme", "dark")                 # flipped on the phone, say
-    at.run()
-    assert not at.exception
-    assert widget(at.toggle, "Dark mode").value is True
+    laptop = run(HOME)
+    assert widget(laptop.toggle, "Dark mode").value is False
+    phone = run(HOME)                                  # another device, the same app process
+    widget(phone.toggle, "Dark mode").set_value(True).run()
+    laptop.run()
+    assert not laptop.exception
+    assert widget(laptop.toggle, "Dark mode").value is True
     assert data.get_setting("theme") == "dark" and theme.current() == "dark"
-    data.set_setting("theme", "light")
+    widget(phone.toggle, "Dark mode").set_value(False).run()
+    laptop.run()
+    assert widget(laptop.toggle, "Dark mode").value is False and theme.current() == "light"
+
+
+def test_the_saved_look_is_read_once_per_process(monkeypatch):
+    data.set_setting("theme", "dark")
+    at = run(HOME)
+    assert theme.current() == "dark" and widget(at.toggle, "Dark mode").value is True
+    reads = []
+    monkeypatch.setattr(data, "get_setting", lambda *args: reads.append(args) or "light")
     at.run()
-    assert widget(at.toggle, "Dark mode").value is False and theme.current() == "light"
+    assert not at.exception and not reads               # no round trip, and no flip back
+    assert theme.current() == "dark" and widget(at.toggle, "Dark mode").value is True
 
 
 def test_signing_out_locks_the_app_again():
@@ -322,9 +337,6 @@ def test_google_without_allowed_emails_lets_nobody_in(google, monkeypatch):
     assert "isn't allowed" in at.error[0].value and not at.metric
 
 
-LEADS = ROOT / "app" / "pages" / "7_Job_Leads.py"
-
-
 def test_leads_are_listed_best_fit_first_and_home_points_to_them():
     seed()
     at = run(LEADS)
@@ -333,6 +345,18 @@ def test_leads_are_listed_best_fit_first_and_home_points_to_them():
     assert "BI Developer" in titles[1]
     home = run(HOME)
     assert any("2 leads in the inbox, 2 new today, 1 strong" in m.value for m in home.markdown)
+
+
+def test_a_long_inbox_is_drawn_a_batch_at_a_time():
+    data.add_leads([logic.clean_lead({"source": "Dice", "title": f"Role {n}", "company": f"Co {n}",
+                                      "fit": {"role": 8}})[0]
+                    for n in range(config.LEADS_SHOWN + 3)], TODAY)
+    at = run(LEADS)
+    cards = lambda: sum("**Role " in m.value for m in at.markdown)        # noqa: E731
+    assert cards() == config.LEADS_SHOWN
+    click(at, "Show 3 more (3 left)")
+    assert cards() == config.LEADS_SHOWN + 3
+    assert not any(b.label.startswith("Show ") for b in at.button)
 
 
 def test_a_lead_shows_its_category_ratings_and_the_rules_are_explained():
@@ -628,7 +652,7 @@ def test_a_tailored_version_longer_than_the_master_gets_a_warning():
 def test_the_header_doesnt_repeat_a_remote_location():
     app_id = data.add_application(data.company_id_for("Acme", TODAY), "Analyst", "applied", TODAY,
                                   location="Remote", work_mode="remote", source="LinkedIn")
-    at = new_app(PAGES[0])
+    at = new_app(APPS)
     at.session_state["open_application"] = app_id
     at.run()
     assert any(m.value.endswith("applied today · Remote · LinkedIn") for m in at.markdown)
@@ -653,7 +677,7 @@ def test_the_tailor_section_keeps_its_application_across_sections():
 
 def test_the_posting_section_saves_the_job_posting():
     app_id = seed()
-    at = new_app(PAGES[0])
+    at = new_app(APPS)
     at.session_state["open_application"] = app_id
     at.run()
     widget(at.radio, "Section").set_value("Posting").run()
