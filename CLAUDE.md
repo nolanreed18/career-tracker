@@ -36,7 +36,11 @@ only they can do (accounts, secrets, clicking merge).
   `letter` a cover letter. Tests stand the API in (`tests/test_ai.py`); no
   test calls Claude. `app/posting.py` reads a job posting from its link for the
   posting box (LinkedIn's guest copy; Indeed and Glassdoor refuse a server, so
-  the error says to paste); tests never fetch.
+  the error says to paste); tests never fetch. `ai.find_posting` (web search,
+  searches priced by `AI_SEARCH_PRICE`) runs inside the Add tap on a lead and
+  behind "Find it on the employer's site" (`ui.prepare_application`,
+  `ui.find_company_posting`): still one click, one call, logged like the rest.
+  `applications.apply_url` / `apply_note` hold what it found.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no

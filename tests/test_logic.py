@@ -520,3 +520,10 @@ def test_application_labels_are_company_dash_role_by_plain_id():
     apps = pd.DataFrame({"application_id": [7], "company": ["Acme"], "role": ["Analyst"]})
     labels = logic.application_labels(apps)
     assert labels == {7: "Acme — Analyst"} and type(next(iter(labels))) is int
+
+
+def test_a_job_board_link_is_told_from_an_employers_own_site():
+    assert logic.is_job_board("https://www.linkedin.com/jobs/view/1/")
+    assert logic.is_job_board("https://www.indeed.com/viewjob?jk=1") and logic.is_job_board("https://builtin.com/job/1")
+    assert not logic.is_job_board("https://bp.wd3.myworkdayjobs.com/en-US/bpx/job/R1")
+    assert not logic.is_job_board("https://boards.greenhouse.io/acme/jobs/1") and not logic.is_job_board(None)

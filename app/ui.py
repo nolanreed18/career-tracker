@@ -141,6 +141,69 @@ def posting_button(app: dict, key: str) -> None:
                  "Check it, then tailor.")
 
 
+def find_company_posting(app: dict, today) -> list[str]:
+    """ai.find_posting for one application: the link and note saved, the
+    call logged (a failed one too). Returns what to tell the owner."""
+    import ai  # here, not at the top: the SDK is slow to import and only this needs it
+
+    try:
+        found, usage = ai.find_posting(app["company"], app["role"], app.get("location"),
+                                       app.get("source"), app.get("posting") or "")
+    except ai.AIError as problem:
+        if problem.usage:
+            data.log_ai_usage("find posting (failed)", problem.usage.model,
+                              problem.usage.input_tokens, problem.usage.output_tokens,
+                              problem.usage.cost_usd, today)
+        return [f"Couldn't look for it on the employer's site: {problem}"]
+    data.log_ai_usage("find posting", usage.model, usage.input_tokens, usage.output_tokens,
+                      usage.cost_usd, today)
+    data.update_application(int(app["application_id"]), apply_url=found["url"],
+                            apply_note=found["note"])
+    if found["url"]:
+        return [f"Found it on the employer's site: {found['title'] or app['role']} "
+                f"(${usage.cost_usd:.2f})."]
+    return [f"Not found on the employer's site: {found['note']} (${usage.cost_usd:.2f})."]
+
+
+def prepare_application(application_id: int, today) -> list[str]:
+    """What the Add tap on a lead does after saving the application: read
+    the posting from its link, then look for it on the employer's own site
+    (when the Claude key is set). Each step says how it went; neither stops
+    the other."""
+    import ai
+
+    app = data.application(application_id)
+    notes = []
+    if logic.value(app.get("job_url")) and not logic.value(app.get("posting")):
+        try:
+            found = posting.fetch(app["job_url"])
+        except posting.PostingError as problem:
+            notes.append(f"Posting not read: {problem}")
+        else:
+            app["posting"] = found.as_text()
+            data.update_application(application_id, posting=app["posting"])
+            notes.append(f"Posting read ({len(found.text):,} characters).")
+    if ai.ready():
+        notes += find_company_posting(app, today)
+    return notes
+
+
+def find_posting_button(app: dict, key: str) -> None:
+    """A button that has Claude look for the posting on the employer's own
+    site and saves the link (find_company_posting); shown when the key is set."""
+    import ai
+
+    if not ai.ready():
+        return
+    if st.button("Find it on the employer's site", key=f"find_posting_{key}",
+                 icon=":material/travel_explore:", width="stretch",
+                 help="Claude searches the web for this posting on the employer's own "
+                      "careers site, so you can apply there (about 5 cents)"):
+        with st.spinner("Searching the employer's site…"):
+            notes = find_company_posting(app, data.today())
+        done(" ".join(notes))
+
+
 def card(key: str):
     """A bordered container styled as a card (the stylesheet finds the key)."""
     return st.container(border=True, key=f"card-{key}")

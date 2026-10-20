@@ -31,6 +31,8 @@ def test_cost_follows_the_price_table():
     assert ai.cost("claude-opus-5-5", 6000, 8000) == 0.184
     assert ai.cost("unknown-model", 6000, 8000) == 0
     assert ai.Usage("claude-opus-5-5", 6000, 8000).cost_usd == 0.184
+    assert ai.cost("claude-opus-5-5", 0, 0, searches=3) == 0.03          # $10 per 1,000
+    assert ai.Usage("claude-opus-5-5", 6000, 8000, 2).cost_usd == 0.204
 
 
 class FakeModels:
@@ -170,3 +172,65 @@ def test_a_cut_off_refused_or_malformed_answer_is_a_plain_error_with_its_cost(mo
     with pytest.raises(ai.AIError, match="didn't fit") as caught:
         ai.structure_resume({"resume": "## Sample"})
     assert caught.value.usage.input_tokens == 6000
+
+
+class FakeSearchMessages:
+    """The API stood in for a web-search call: create() answers with each
+    stop reason in turn (a paused turn has no text yet), counting searches."""
+
+    def __init__(self, text, stop_reasons=("end_turn",), searches=2):
+        self.text, self.stop_reasons, self.searches, self.calls = text, stop_reasons, searches, []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        reason = self.stop_reasons[min(len(self.calls), len(self.stop_reasons)) - 1]
+        return types.SimpleNamespace(
+            content=[types.SimpleNamespace(type="text", text="" if reason == "pause_turn"
+                                           else self.text)],
+            stop_reason=reason, model=kwargs["model"],
+            usage=types.SimpleNamespace(
+                input_tokens=3000, output_tokens=500,
+                server_tool_use=types.SimpleNamespace(web_search_requests=self.searches)))
+
+
+FOUND = ('Here it is.\n{"url": "https://bp.wd3.myworkdayjobs.com/en-US/bpx/job/Denver/R123", '
+         '"title": "Senior Development Systems Engineer", '
+         '"note": "Same title and location on bp\'s Workday site."}')
+
+
+def test_find_posting_searches_the_web_resumes_a_pause_and_counts_the_searches(monkeypatch):
+    messages = FakeSearchMessages(FOUND, stop_reasons=("pause_turn", "end_turn"), searches=1)
+    fake_client(monkeypatch, messages=messages)
+    found, usage = ai.find_posting("bp", "Senior Development Systems Engineer", "Denver, CO",
+                                   "LinkedIn", "Job Description " * 500)
+    assert found["url"].startswith("https://bp.wd3.myworkdayjobs.com/")
+    assert found["title"] == "Senior Development Systems Engineer"
+    assert (usage.input_tokens, usage.output_tokens, usage.searches) == (6000, 1000, 2)
+    assert usage.cost_usd == round(6000 * 4 / 1e6 + 1000 * 20 / 1e6 + 2 * 0.01, 4)
+    first, second = messages.calls
+    assert first["tools"] == [{"type": "web_search_20260209", "name": "web_search",
+                               "max_uses": config.AI_SEARCH_MAX}]
+    assert first["system"] == ai.FIND_SYSTEM and first["max_tokens"] == config.AI_FIND_MAX_TOKENS
+    prompt = first["messages"][0]["content"]
+    assert 'employer="bp"' in prompt and 'location="Denver, CO"' in prompt
+    assert len(prompt) < config.POSTING_PROMPT_CHARS + 300                 # the posting is trimmed
+    assert second["messages"][1]["role"] == "assistant"                   # resumed where it paused
+
+
+def test_find_posting_treats_a_job_board_link_as_not_found_and_checks_the_shape(monkeypatch):
+    fake_client(monkeypatch, messages=FakeSearchMessages(
+        '{"url": "https://www.linkedin.com/jobs/view/1/", "title": "Analyst", '
+        '"note": "Only on LinkedIn."}', searches=3))
+    found, usage = ai.find_posting("Acme", "Analyst", None, None, "")
+    assert found["url"] == "" and found["note"].startswith("Found only on a job board")
+    assert usage.searches == 3
+    fake_client(monkeypatch, messages=FakeSearchMessages('{"url": "", "title": "", '
+                                                         '"note": "Nothing on Acme\'s site."}'))
+    assert ai.find_posting("Acme", "Analyst", "", "", "")[0]["url"] == ""
+    fake_client(monkeypatch, messages=FakeSearchMessages("No JSON at all"))
+    with pytest.raises(ai.AIError, match="didn't fit") as caught:
+        ai.find_posting("Acme", "Analyst", "", "", "")
+    assert caught.value.usage.searches == 2
+    fake_client(monkeypatch, messages=FakeSearchMessages("", stop_reasons=("refusal",)))
+    with pytest.raises(ai.AIError, match="declined"):
+        ai.find_posting("Acme", "Analyst", "", "", "")

@@ -34,7 +34,11 @@ database, hosted free on Streamlit Community Cloud.
   shows how many new leads are waiting.
 - **Applications**: add one, filter and search, then for each application log
   updates (status changes or plain notes), set the next step, add interviews,
-  edit, and see its full history.
+  edit, and see its full history. **Add** on a lead saves it here, reads the
+  posting from its link and has Claude search for the same posting on the
+  employer's own careers site (about 5 cents), so the application opens with
+  **Apply on the employer's site** and never needs LinkedIn's Easy Apply;
+  **Applied today** logs the application in one tap.
 - **Interviews**: upcoming and past, with prep notes, "how it went" and a 1–5
   rating.
 - **Companies & Contacts**: companies (added for you with each application),

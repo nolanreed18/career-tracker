@@ -8,6 +8,7 @@ import copy
 import re
 from dataclasses import dataclass
 from datetime import date, time, timedelta
+from urllib.parse import urlparse
 
 import pandas as pd
 
@@ -580,6 +581,13 @@ def is_weak(score) -> bool:
 _GLASSDOOR_GUESS = re.compile(r"^https?://(?:www\.)?glassdoor\.com/job-listing/?\?jl=(\d+)$")
 _LINKEDIN_JOB = re.compile(r"^https?://(?:www\.)?linkedin\.com/(?:comm/)?jobs/view/(\d+)")
 _INDEED_JOB = re.compile(r"^https?://(?:www\.)?indeed\.com/(?:viewjob|rc/clk|pagead/clk)\b")
+
+
+def is_job_board(url) -> bool:
+    """True for a link on a job board or aggregator (config.JOB_BOARDS), as
+    against an employer's own site."""
+    host = urlparse(str(url or "")).netloc.lower()
+    return any(host == board or host.endswith("." + board) for board in config.JOB_BOARDS)
 
 
 def job_link(url) -> str | None:

@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "app"))
 import apply_schema  # noqa: E402
 import data  # noqa: E402
 import db  # noqa: E402
+import posting  # noqa: E402
 
 TABLES = ("companies, contacts, applications, application_events, interviews, "
           "career_entries, positions, job_profile, job_leads, settings, "
@@ -36,6 +37,9 @@ def no_real_database(monkeypatch):
     # Never over HTTPS in tests (a cloud session sets CLAUDE_CODE_REMOTE).
     monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
     monkeypatch.setattr(data, "_over_http", False)
+    # Nor the web: a test that reads a posting stands posting._get (or fetch) in.
+    monkeypatch.setattr(posting.httpx, "get",
+                        lambda url, **kwargs: pytest.fail(f"a test fetched {url}"))
     data.reset_connection()
     yield
     data.reset_connection()

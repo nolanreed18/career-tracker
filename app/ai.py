@@ -6,6 +6,7 @@ widgets (the key lookup mirrors db.py's secrets fallback)."""
 
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from datetime import date
@@ -84,6 +85,25 @@ Rules:
 """
 
 
+FIND_SYSTEM = """You find where a job posting lives on the employer's own careers site, so
+the person can apply there rather than through a job board.
+Rules:
+- Use web search, a few searches at most: the employer's name with the exact
+  title first, then with the location or the posting's own distinctive words.
+- It is the same posting only when the employer, the title and the location
+  match the one given; a similar role at the same employer is not it.
+- The employer's own site means its careers pages or its applicant-tracking
+  system (Workday, Greenhouse, Lever, iCIMS, SuccessFactors, Taleo, Ashby,
+  SmartRecruiters, Oracle, Phenom): never LinkedIn, Indeed, Glassdoor or
+  another job board or aggregator. A staffing agency that posted the job
+  counts as the employer.
+- Answer with one JSON object and nothing else:
+  {"url": "the posting's address on the employer's site, or \"\" when not found",
+   "title": "the title as that site shows it, or \"\"",
+   "note": "one sentence: how sure you are and why, or why it was not found"}
+"""
+
+
 class AIError(Exception):
     """Something the owner should read: no key, a refused key, a refusal, an
     answer cut off or malformed. Carries the call's usage when a reply came
@@ -99,16 +119,19 @@ class Usage:
     model: str
     input_tokens: int
     output_tokens: int
+    searches: int = 0           # web searches the call made (find_posting)
 
     @property
     def cost_usd(self) -> float:
-        return cost(self.model, self.input_tokens, self.output_tokens)
+        return cost(self.model, self.input_tokens, self.output_tokens, self.searches)
 
 
-def cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    """Dollars for one call, from config.AI_PRICES (0 for an unknown model)."""
+def cost(model: str, input_tokens: int, output_tokens: int, searches: int = 0) -> float:
+    """Dollars for one call: the tokens at config.AI_PRICES (0 for an unknown
+    model) plus the web searches at config.AI_SEARCH_PRICE."""
     per_in, per_out = config.AI_PRICES.get(model, (0.0, 0.0))
-    return round(input_tokens * per_in / 1e6 + output_tokens * per_out / 1e6, 4)
+    return round(input_tokens * per_in / 1e6 + output_tokens * per_out / 1e6
+                 + searches * config.AI_SEARCH_PRICE, 4)
 
 
 def _streamlit_secret() -> str | None:
@@ -230,3 +253,49 @@ def tailor(master: dict, posting: str, company: str, role: str, today: date,
         prompt += f"<notes from=\"the person\">\n{notes.strip()}\n</notes>\n\n"
     prompt += "Tailor the master resume to this posting and write the cover letter."
     return _parse(TAILOR_SYSTEM, prompt, resume_schema.Tailored)
+
+
+def find_posting(company: str, title: str, location, source, posting: str) -> tuple[dict, Usage]:
+    """Where the posting lives on the employer's own site
+    (resume_schema.CompanyPosting as a dict; url "" when not found) and what
+    the call cost, searches included. One call with web search, at most
+    config.AI_SEARCH_MAX searches; a paused server-side turn is resumed."""
+    prompt = (f"<posting employer=\"{company}\" title=\"{title}\" location=\"{location or ''}\" "
+              f"seen_on=\"{source or ''}\">\n{posting.strip()[:config.POSTING_PROMPT_CHARS]}\n"
+              "</posting>\n\nFind this posting on the employer's own site.")
+    messages = [{"role": "user", "content": prompt}]
+    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": config.AI_SEARCH_MAX}]
+    model, tokens_in, tokens_out, searches = config.AI_MODEL, 0, 0, 0
+    for _ in range(4):
+        try:
+            response = client().messages.create(
+                model=config.AI_MODEL, max_tokens=config.AI_FIND_MAX_TOKENS, system=FIND_SYSTEM,
+                messages=messages, tools=tools, output_config={"effort": "medium"})
+        except anthropic.APIError as exc:
+            spent = Usage(model, tokens_in, tokens_out, searches) if tokens_in else None
+            raise AIError(_explain(exc), spent) from None
+        model = response.model
+        tokens_in += response.usage.input_tokens
+        tokens_out += response.usage.output_tokens
+        server = getattr(response.usage, "server_tool_use", None)
+        searches += getattr(server, "web_search_requests", 0) or 0
+        if response.stop_reason != "pause_turn":
+            break
+        messages = [messages[0], {"role": "assistant", "content": response.content}]
+    usage = Usage(model, tokens_in, tokens_out, searches)
+    if response.stop_reason == "refusal":
+        raise AIError("Claude declined this request.", usage)
+    if response.stop_reason == "max_tokens":
+        raise AIError("Claude's answer ran past the token limit and was cut off. Try again.", usage)
+    text = "".join(block.text for block in response.content if block.type == "text")
+    found = re.search(r"\{.*\}", text, re.S)
+    try:
+        parsed = resume_schema.CompanyPosting.model_validate_json(found.group(0) if found else text)
+    except pydantic.ValidationError:
+        raise AIError("Claude's answer didn't fit the expected shape; try again.", usage) from None
+    result = parsed.model_dump()
+    url = result["url"].strip()
+    if url and (not url.startswith("http") or logic.is_job_board(url)):
+        result = {**result, "url": "",
+                  "note": f"Found only on a job board ({url}). {result['note']}".strip()}
+    return result, usage
