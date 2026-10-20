@@ -88,10 +88,15 @@ Rules:
 FIND_SYSTEM = """You find where a job posting lives on the employer's own careers site, so
 the person can apply there rather than through a job board.
 Rules:
-- Use web search, a few searches at most: the employer's name with the exact
-  title first, then with the location or the posting's own distinctive words.
-- It is the same posting only when the employer, the title and the location
-  match the one given; a similar role at the same employer is not it.
+- Search the web (job boards are excluded from results): the employer's name
+  with the exact title first, then with the location, then with a distinctive
+  phrase from the posting. When a search turns up the employer's careers site
+  or applicant-tracking system, open it and look there: its own search page,
+  the role's page, a listing of openings in that location.
+- It is the same posting when the employer and the location match and the
+  work described matches; the employer's site may word the title a little
+  differently from the job board (a level or a team name added or dropped).
+  A different role at the same employer is not it.
 - The employer's own site means its careers pages or its applicant-tracking
   system (Workday, Greenhouse, Lever, iCIMS, SuccessFactors, Taleo, Ashby,
   SmartRecruiters, Oracle, Phenom): never LinkedIn, Indeed, Glassdoor or
@@ -100,7 +105,8 @@ Rules:
 - Answer with one JSON object and nothing else:
   {"url": "the posting's address on the employer's site, or \"\" when not found",
    "title": "the title as that site shows it, or \"\"",
-   "note": "one sentence: how sure you are and why, or why it was not found"}
+   "note": "one or two sentences: how sure you are and why; when not found, the
+            closest thing you did find (with its address) and where you looked"}
 """
 
 
@@ -258,13 +264,17 @@ def tailor(master: dict, posting: str, company: str, role: str, today: date,
 def find_posting(company: str, title: str, location, source, posting: str) -> tuple[dict, Usage]:
     """Where the posting lives on the employer's own site
     (resume_schema.CompanyPosting as a dict; url "" when not found) and what
-    the call cost, searches included. One call with web search, at most
-    config.AI_SEARCH_MAX searches; a paused server-side turn is resumed."""
+    the call cost, searches included. One call with web search (job boards
+    kept out of the results, config.AI_SEARCH_MAX searches at most) and web
+    fetch, so it can open the careers site; a paused server turn is resumed."""
     prompt = (f"<posting employer=\"{company}\" title=\"{title}\" location=\"{location or ''}\" "
               f"seen_on=\"{source or ''}\">\n{posting.strip()[:config.POSTING_PROMPT_CHARS]}\n"
               "</posting>\n\nFind this posting on the employer's own site.")
     messages = [{"role": "user", "content": prompt}]
-    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": config.AI_SEARCH_MAX}]
+    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": config.AI_SEARCH_MAX,
+              "blocked_domains": config.JOB_BOARDS},
+             {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": config.AI_FETCH_MAX,
+              "max_content_tokens": config.AI_FETCH_TOKENS}]
     model, tokens_in, tokens_out, searches = config.AI_MODEL, 0, 0, 0
     for _ in range(4):
         try:
