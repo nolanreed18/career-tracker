@@ -106,8 +106,8 @@ def test_a_workday_link_is_read_from_its_data_feed(monkeypatch):
                       "job/United-States-of-America---Texas---Houston/"
                       "Senior-Development-Systems-Engineer_RQ117112", "application/json")]
     assert found.title == "Senior Development Systems Engineer"
-    assert found.location == ("United States of America - Texas - Houston, "
-                              "United States of America - Colorado - Denver")
+    assert found.location == "Houston, Texas / Denver, Colorado"
+    assert posting._workday_place("Remote - United States") == "Remote - United States"
     assert found.text == "Job Description\n\nbpx energy builds things.\n• SQL"
 
 
