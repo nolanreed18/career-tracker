@@ -3,10 +3,11 @@ summary up top, every lead with its score, pay and posting link, what the
 tracker says needs doing today, and links into the app. Pure: no database
 and no Streamlit (leads.py gathers the data and prints the result).
 
-The markup is what email clients allow: tables, a short stylesheet of
-classes (Gmail keeps those), no web fonts, and the colours of the app's
-light look (theme.py). It stays small because Gmail clips mail over 100 KB
-and the review pastes the whole thing into one Gmail call."""
+The markup is what email clients allow: tables, every style inline (the
+owner reads it in Outlook on a phone, which ignores a stylesheet), no web
+fonts, and the colours of the app's light look (theme.py). It stays small
+because Gmail clips mail over 100 KB and the review pastes the whole thing
+into one Gmail call."""
 
 import html
 from datetime import date
@@ -17,46 +18,13 @@ import logic
 BLUE, CYAN, GREEN, ORANGE, RED, GRAY = "#2563eb", "#06b6d4", "#10b981", "#f59e0b", "#f43f5e", "#64748b"
 BG, CARD, BORDER, TEXT, TEXT2, MUTED = "#f8fafc", "#ffffff", "#e2e8f0", "#0f172a", "#475569", "#64748b"
 YELLOW_BG, YELLOW_TEXT = "#fef9c3", "#854d0e"
-FONT = "Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
-TIERS = {"strong": (GREEN, "#ecfdf5"), "maybe": (BLUE, "#eff6ff"), "weak": (GRAY, "#f1f5f9")}
+FONT = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 ATTENTION = {"overdue": (RED, "Overdue"), "due": (ORANGE, "Due today"),
              "interview": (BLUE, "Interview"), "follow_up": (ORANGE, "Follow up"),
              "stale_saved": (GRAY, "Saved")}
 WARNING = "&#9888;&#xFE0E;"          # a text-style warning sign, coloured by its span
 TEXT_FULL = 10                       # leads written out in full (with links) in the text version
 LINK_MAX = 200                       # longer links (opaque redirects) are left to the app
-
-STYLE = f"""
-body{{margin:0;padding:0;background:{BG}}}
-table{{border-collapse:separate}}
-.f{{font-family:{FONT};color:{TEXT}}}
-.hd{{padding:26px 28px;border-radius:16px;background:{BLUE};background-image:linear-gradient(135deg,{BLUE},{CYAN});color:#ffffff}}
-.k{{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}}
-.cd{{background:{CARD};border:1px solid {BORDER};border-radius:12px}}
-.sc{{padding:14px 16px;vertical-align:top;width:46px}}
-.bd{{padding:14px 16px 14px 0;vertical-align:top;font-size:15px;line-height:22px}}
-.n{{display:inline-block;min-width:34px;text-align:center;padding:6px 8px;border-radius:10px;font-size:17px;font-weight:700;color:#ffffff}}
-.p{{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}}
-.pg{{color:{GREEN};background:#ecfdf5}}
-.pn{{color:{TEXT2};background:#f1f5f9}}
-.pr{{color:{RED};background:#fff1f2}}
-.py{{color:{YELLOW_TEXT};background:{YELLOW_BG}}}
-.pd{{color:#ffffff;background:{RED}}}
-.m{{color:{MUTED};font-size:13px}}
-.r{{margin-top:6px;color:{TEXT2};font-size:14px}}
-.ch{{margin-top:8px;line-height:22px}}
-a.t{{color:{BLUE};text-decoration:none}}
-.co{{color:{TEXT2}}}
-.bt{{display:inline-block;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;margin:0 8px 8px 0}}
-.se{{padding:22px 0 8px 0;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}}
-.ti{{padding:12px 10px;text-align:center}}
-.ti b{{display:block;font-size:24px}}
-.ti span{{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:{MUTED}}}
-.wk{{padding:4px 0;font-size:13px;color:{MUTED}}}
-.at{{padding:8px 0;border-bottom:1px solid {BORDER};font-size:14px}}
-.ft{{padding:22px 0 0 0;font-size:12px;line-height:18px;color:{MUTED}}}
-"""
-
 
 def e(text) -> str:
     return html.escape("" if text is None else str(text), quote=True)
@@ -85,21 +53,49 @@ def tiers(leads: list[dict]) -> dict[str, list[dict]]:
 
 # ---- pieces -----------------------------------------------------------------
 
-def pill(text: str, kind: str) -> str:
-    """A rounded label: kind g (good), n (neutral), r (bad), y (unverified), d (deal-breaker)."""
-    return f'<span class="p p{kind}">{text}</span>'
+# Styles are inline, every one: Outlook on the phone ignores a stylesheet,
+# Gmail keeps one, inline works in both. bgcolor attributes back the
+# backgrounds up, and nothing uses a gradient (Outlook drops the background
+# and keeps the white text, which made the button vanish).
+F = f"font-family:{FONT};"
+TEXT_STYLE = f"{F}color:{TEXT}"
+CARD_STYLE = f"border:1px solid {BORDER};border-radius:12px"
+KICKER = "font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase"
+CHIP = "display:inline-block;padding:2px 8px;border-radius:10px;line-height:18px"
+SCALE = [(1, (225, 29, 72)), (5, (249, 115, 22)), (6.5, (217, 119, 6)), (8, (22, 163, 74)),
+         (10, (4, 120, 87))]          # a 1–10 score's colour: red, orange, amber, green, emerald
 
 
-def solid_pill(text: str, color: str) -> str:
-    """A white-on-colour label (the few attention rows; inline so any colour works)."""
-    return f'<span class="p" style="color:#ffffff;background:{color}">{text}</span>'
+def score_color(score) -> str:
+    """The colour for a 1–10 score, blended along SCALE; grey when unscored."""
+    score = logic.value(score)
+    if score is None:
+        return GRAY
+    s = max(SCALE[0][0], min(SCALE[-1][0], float(score)))
+    for (lo, a), (hi, b) in zip(SCALE, SCALE[1:]):
+        if s <= hi:
+            t = (s - lo) / (hi - lo)
+            return "#%02x%02x%02x" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
+    return "#%02x%02x%02x" % SCALE[-1][1]
+
+
+def tint(color: str, amount: float = 0.85) -> str:
+    """The colour mixed towards white: a chip's background under its text."""
+    parts = (int(color[i:i + 2], 16) for i in (1, 3, 5))
+    return "#%02x%02x%02x" % tuple(round(x + (255 - x) * amount) for x in parts)
+
+
+def pill(text: str, color: str, background: str) -> str:
+    """A small rounded label. Spaces in `text` should be &nbsp; so it never wraps."""
+    return (f'<span style="display:inline-block;padding:2px 8px;border-radius:10px;'
+            f'font-size:12px;font-weight:600;line-height:18px;color:{color};'
+            f'background-color:{background}">{text}</span>')
 
 
 def score_pill(score) -> str:
-    tier = logic.fit_tier(score)
-    if tier is None:
-        return pill("–", "n")
-    return f'<span class="n" style="background:{TIERS[tier][0]}">{logic.fit_text(score)}</span>'
+    return (f'<span style="display:inline-block;min-width:34px;text-align:center;'
+            f'padding:6px 6px;border-radius:10px;font-size:17px;font-weight:700;color:#fff;'
+            f'background-color:{score_color(score)}">{logic.fit_text(score) or "–"}</span>')
 
 
 def pay_html(lead: dict) -> str:
@@ -107,10 +103,11 @@ def pay_html(lead: dict) -> str:
                                   lead.get("pay_source"))
     if state == "listed":
         return f'<span style="font-weight:600">{e(text)}</span>'
-    label = f"{WARNING} {e(text)}" + (" (estimate)" if state == "estimated" else "")
+    label = f"{WARNING}&nbsp;{e(text)}" + ("&nbsp;(estimate)" if state == "estimated" else "")
     note = lead.get("pay_note") if state == "estimated" else None
-    return pill(label, "y") + (
-        f' <span class="m">{e(note)}</span>' if logic.value(note) else "")
+    return pill(label, YELLOW_TEXT, YELLOW_BG) + (
+        f' <span style="color:{MUTED};font-size:13px">{e(note)}</span>'
+        if logic.value(note) else "")
 
 
 def rating_chips(detail) -> str:
@@ -118,16 +115,19 @@ def rating_chips(detail) -> str:
     if not isinstance(detail, dict) or not detail.get("ratings"):
         return ""
     ratings = detail["ratings"]
-    chips = []
-    for key, (label, _, _) in config.FIT_CATEGORIES.items():
+    chips = []                       # smaller than pill(): the div carries the font, and
+    for key, (label, _, _) in config.FIT_CATEGORIES.items():   # 20 cards × 6 chips add up
         if key not in ratings:
             continue
         n = ratings[key]
-        kind = "g" if n >= config.STRONG_FIT else "n" if n >= config.MAYBE_FIT else "r"
-        chips.append(pill(f"{e(label.split(' ')[0])} {n}", kind))
+        color = score_color(n)
+        chips.append(f'<span style="{CHIP};color:{color};background-color:{tint(color)}">'
+                     f'{e(label.split(" ")[0])}&nbsp;{n}</span>')
     if detail.get("deal_breaker"):
-        chips.insert(0, pill("Deal-breaker", "d"))
-    return f'<div class="ch">{" ".join(chips)}</div>'
+        chips.insert(0, f'<span style="{CHIP};color:#fff;background-color:{RED}">'
+                        'Deal&#8209;breaker</span>')
+    return (f'<div style="margin-top:8px;font-size:12px;font-weight:600;line-height:26px">'
+            f'{" ".join(chips)}</div>')
 
 
 def where(lead: dict) -> str:
@@ -137,73 +137,109 @@ def where(lead: dict) -> str:
     return " · ".join(str(p) for p in (lead.get("source"), location, mode) if p)
 
 
+def link(lead: dict) -> str | None:
+    """The posting link, cleaned up; None when there is none or it is huge
+    (an opaque redirect: the app has it, and the email stays small)."""
+    url = logic.job_link(lead.get("job_url"))
+    return url if url and len(url) <= LINK_MAX else None
+
+
 def title_link(lead: dict) -> str:
     title = f"<strong>{e(lead.get('title'))}</strong>"
-    url = logic.job_link(lead.get("job_url"))
-    return f'<a class="t" href="{e(url)}">{title}</a>' if url else title
+    url = link(lead)
+    return (f'<a href="{e(url)}" style="color:{BLUE};text-decoration:none">{title}</a>'
+            if url else title)
+
+
+def card(extra: str = "") -> str:
+    """The opening tag of a white, bordered card table."""
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            f'bgcolor="{CARD}" style="{CARD_STYLE}{";" + extra if extra else ""}">')
 
 
 def lead_card(lead: dict) -> str:
     reason = lead.get("fit_reason")
-    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="cd" '
-            f'style="margin:0 0 10px 0"><tr><td class="sc">{score_pill(lead.get("fit_score"))}</td>'
-            f'<td class="bd f">{title_link(lead)} <span class="co">— {e(lead.get("company"))}</span>'
-            f'<br><span class="m">{e(where(lead))}</span><br>'
+    return (card("margin:0 0 10px 0")
+            + f'<tr><td width="46" valign="top" style="padding:14px 0 14px 14px">'
+            f'{score_pill(lead.get("fit_score"))}</td>'
+            f'<td valign="top" style="padding:14px 16px 14px 12px;font-size:15px;'
+            f'line-height:22px;{TEXT_STYLE}">{title_link(lead)} '
+            f'<span style="color:{TEXT2}">— {e(lead.get("company"))}</span>'
+            f'<br><span style="color:{MUTED};font-size:13px">{e(where(lead))}</span><br>'
             f'<span style="font-size:13px">{pay_html(lead)}</span>'
-            + (f'<div class="r">{e(reason)}</div>' if logic.value(reason) else "")
+            + (f'<div style="margin-top:6px;color:{TEXT2};font-size:14px">{e(reason)}</div>'
+               if logic.value(reason) else "")
             + rating_chips(lead.get("fit_detail")) + "</td></tr></table>")
 
 
-def compact_row(lead: dict, link: bool = True) -> str:
-    url = logic.job_link(lead.get("job_url")) if link else None
+ROW_STYLE = f"padding:4px 0;font-size:13px;color:{MUTED};{F}"
+
+
+def compact_row(lead: dict, linked: bool = True) -> str:
+    """One line: score, title (linked unless the link is huge), company, place."""
+    url = link(lead) if linked else None
     title = e(lead.get("title"))
     if url:
         title = f'<a href="{e(url)}" style="color:{TEXT2}">{title}</a>'
     location = lead.get("location")
-    return (f'<tr><td class="wk f"><strong class="co">'
+    return (f'<tr><td style="{ROW_STYLE}"><strong style="color:{TEXT2}">'
             f'{logic.fit_text(lead.get("fit_score")) or "–"}</strong> &nbsp;{title} — '
             f'{e(lead.get("company"))}'
             + (f" · {e(location)}" if logic.value(location) else "") + "</td></tr>")
 
 
-def rows_table(leads: list[dict], link: bool, what: str, url: str) -> str:
+def rows_table(leads: list[dict], linked: bool, what: str, url: str) -> str:
     """One-line rows for up to DIGEST_ROWS leads, then a count of the rest
     with a link to the app, so a big day can't make a huge email."""
-    rows = "".join(compact_row(lead, link) for lead in leads[:config.DIGEST_ROWS])
+    rows = "".join(compact_row(lead, linked) for lead in leads[:config.DIGEST_ROWS])
     if len(leads) > config.DIGEST_ROWS:
-        rows += (f'<tr><td class="wk f">…and {len(leads) - config.DIGEST_ROWS} more {what} '
-                 f'<a href="{e(url)}" style="color:{CYAN}">in the app</a></td></tr>')
+        rows += (f'<tr><td style="{ROW_STYLE}">…and {len(leads) - config.DIGEST_ROWS} more '
+                 f'{what} <a href="{e(url)}" style="color:{CYAN}">in the app</a></td></tr>')
     return ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
             + rows + "</table>")
 
 
 def section(title: str, color: str, body: str) -> str:
-    return (f'<tr><td class="se f" style="color:{color}">{title}</td></tr>'
+    return (f'<tr><td style="padding:22px 0 8px 0;font-size:12px;font-weight:700;'
+            f'letter-spacing:.08em;text-transform:uppercase;color:{color};{F}">{title}</td></tr>'
             f'<tr><td>{body}</td></tr>')
 
 
 def button(text: str, url: str, primary: bool = True) -> str:
-    style = (f"background:{BLUE};background-image:linear-gradient(135deg,{BLUE},{CYAN});"
-             "color:#ffffff" if primary else
-             f"background:{CARD};color:{BLUE};border:1px solid {BORDER}")
-    return f'<a class="bt f" href="{e(url)}" style="{style}">{text}</a>'
+    """One button cell: solid colours only (a gradient loses in Outlook)."""
+    bg, fg, border = (BLUE, "#ffffff", BLUE) if primary else (CARD, BLUE, BORDER)
+    return (f'<td bgcolor="{bg}" style="border-radius:8px;border:1px solid {border}">'
+            f'<a href="{e(url)}" style="display:inline-block;padding:10px 18px;font-size:14px;'
+            f'font-weight:600;text-decoration:none;color:{fg};{F}">{text}</a></td>')
 
 
 def tile(number, label: str, color: str) -> str:
-    return (f'<td style="padding:0 4px"><table role="presentation" width="100%" cellpadding="0" '
-            f'cellspacing="0" class="cd"><tr><td class="ti f"><b style="color:{color}">{number}</b>'
-            f'<span>{label}</span></td></tr></table></td>')
+    return (f'<td style="padding:0 4px">{card()}<tr><td style="padding:12px 10px;'
+            f'text-align:center;{F}"><div style="font-size:24px;font-weight:700;color:{color}">'
+            f'{number}</div><div style="font-size:11px;font-weight:600;letter-spacing:.06em;'
+            f'text-transform:uppercase;color:{MUTED}">{label}</div></td></tr></table></td>')
 
 
 def attention_rows(items: list[logic.Attention]) -> str:
     rows = []
     for item in items:
         color, label = ATTENTION.get(item.kind, (GRAY, item.kind))
-        rows.append(f'<tr><td class="at f">{solid_pill(label, color)} '
+        rows.append(f'<tr><td style="padding:8px 0;border-bottom:1px solid {BORDER};'
+                    f'font-size:14px;{TEXT_STYLE}">{pill(label.replace(" ", "&nbsp;"), "#fff", color)} '
                     f'<strong>{e(item.headline)}</strong><br>'
-                    f'<span class="co" style="font-size:13px">{e(item.detail)}</span></td></tr>')
+                    f'<span style="color:{TEXT2};font-size:13px">{e(item.detail)}</span>'
+                    '</td></tr>')
     return ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
             + "".join(rows) + "</table>")
+
+
+def note_card(color: str, background: str, kicker: str, body: str) -> str:
+    """A card with a coloured left edge: the top pick, the waiting list, a problem."""
+    return (f'<tr><td style="padding:12px 0 0 0"><table role="presentation" width="100%" '
+            f'cellpadding="0" cellspacing="0" bgcolor="{background}" '
+            f'style="{CARD_STYLE};border-left:4px solid {color}"><tr><td style="padding:14px '
+            f'16px;font-size:14px;line-height:22px;{TEXT_STYLE}">'
+            f'<div style="{KICKER};color:{color}">{kicker}</div>{body}</td></tr></table></td></tr>')
 
 
 # ---- the email --------------------------------------------------------------
@@ -234,47 +270,40 @@ def render(today: date, leads: list[dict], attention: list[logic.Attention], app
                 f"{logic.plural(len(leads), 'new lead')} · {len(strong)} strong · "
                 f"{len(maybe)} worth a look" + (f" · {read_line}" if read_line else ""))
 
-    rows = [f'<tr><td class="hd f"><div class="k" style="opacity:.85">Career Tracker · daily review</div>'
-            f'<div style="font-size:26px;font-weight:700;margin-top:6px">{today:%A, %B} {today.day}</div>'
-            f'<div style="font-size:15px;margin-top:6px;opacity:.95">{headline}</div></td></tr>']
+    rows = [f'<tr><td bgcolor="{BLUE}" style="padding:26px 28px;border-radius:16px;'
+            f'color:#ffffff;{F}"><div style="{KICKER};color:#dbeafe">Career Tracker · daily '
+            f'review</div><div style="font-size:26px;font-weight:700;margin-top:6px">'
+            f'{today:%A, %B} {today.day}</div><div style="font-size:15px;margin-top:6px;'
+            f'color:#eff6ff">{headline}</div></td></tr>']
     if problem:
-        rows.append(f'<tr><td style="padding:16px 0 0 0"><table role="presentation" width="100%" '
-                    f'cellpadding="0" cellspacing="0" class="cd" style="background:#fff1f2;'
-                    f'border-color:{RED}"><tr><td class="f" style="padding:14px 16px;font-size:14px">'
-                    f'<strong style="color:{RED}">Something went wrong.</strong> {e(problem)}'
-                    f'</td></tr></table></td></tr>')
+        rows.append(note_card(RED, "#fff1f2", "Something went wrong.", e(problem)))
     if leads:
         rows.append('<tr><td style="padding:16px 0 0 0"><table role="presentation" width="100%" '
                     'cellpadding="0" cellspacing="0"><tr>'
                     + tile(len(leads), "New", BLUE) + tile(len(strong), "Strong", GREEN)
                     + tile(len(maybe), "Worth a look", CYAN) + tile(len(weak), "Weak", GRAY)
                     + "</tr></table></td></tr>")
-    rows.append(f'<tr><td style="padding:16px 0 0 0">{button("Open Job Leads", leads_url)}'
-                f'{button("Open Applications", apps_url, primary=False)}</td></tr>')
+    rows.append('<tr><td style="padding:16px 0 0 0"><table role="presentation" cellpadding="0" '
+                f'cellspacing="0"><tr>{button("Open Job Leads", leads_url)}<td width="8"></td>'
+                f'{button("Open Applications", apps_url, primary=False)}</tr></table></td></tr>')
     if leads:
         top = leads[0]
         reason = logic.value(top.get("fit_reason"))
-        color = TIERS[logic.fit_tier(top.get("fit_score")) or "weak"][0]
-        rows.append(f'<tr><td style="padding:12px 0 0 0"><table role="presentation" width="100%" '
-                    f'cellpadding="0" cellspacing="0" class="cd" style="border-left:4px solid {color}">'
-                    f'<tr><td class="f" style="padding:14px 16px;font-size:14px">'
-                    f'<div class="k" style="color:{MUTED}">Top pick · '
-                    f'{logic.fit_text(top.get("fit_score")) or "unscored"}</div>'
-                    f'<div style="margin-top:4px;font-size:16px">{title_link(top)} '
-                    f'<span class="co">— {e(top.get("company"))}</span></div>'
-                    + (f'<div class="r" style="margin-top:4px">{e(reason)}</div>' if reason else "")
-                    + "</td></tr></table></td></tr>")
+        rows.append(note_card(
+            score_color(top.get("fit_score")), CARD,
+            f"Top pick · {logic.fit_text(top.get('fit_score')) or 'unscored'}",
+            f'<div style="margin-top:4px;font-size:16px">{title_link(top)} '
+            f'<span style="color:{TEXT2}">— {e(top.get("company"))}</span></div>'
+            + (f'<div style="margin-top:4px;color:{TEXT2}">{e(reason)}</div>' if reason else "")))
     if waiting:
         names = "<br>".join(
             f'<strong>{logic.fit_text(w.get("fit_score"))}</strong> &nbsp;{title_link(w)} '
-            f'<span class="co">— {e(w.get("company"))}</span>' for w in waiting[:5])
+            f'<span style="color:{TEXT2}">— {e(w.get("company"))}</span>' for w in waiting[:5])
         more = f"<br>…and {len(waiting) - 5} more" if len(waiting) > 5 else ""
-        rows.append(f'<tr><td style="padding:12px 0 0 0"><table role="presentation" width="100%" '
-                    f'cellpadding="0" cellspacing="0" class="cd" style="border-left:4px solid {ORANGE}">'
-                    f'<tr><td class="f" style="padding:14px 16px;font-size:14px;line-height:22px">'
-                    f'<div class="k" style="color:{ORANGE}">Still waiting · '
-                    f'{logic.plural(len(waiting), "strong lead")} from earlier this week</div>'
-                    f'<div style="margin-top:4px">{names}{more}</div></td></tr></table></td></tr>')
+        rows.append(note_card(
+            ORANGE, CARD,
+            f"Still waiting · {logic.plural(len(waiting), 'strong lead')} from earlier this week",
+            f'<div style="margin-top:4px">{names}{more}</div>'))
     budget = config.DIGEST_CARDS                   # full cards, best first; the rest are rows
 
     def tier_body(tier_leads: list[dict], what: str) -> str:
@@ -305,18 +334,20 @@ def render(today: date, leads: list[dict], attention: list[logic.Attention], app
         facts.append(f"{notes['already_known']} already in the tracker")
     if notes.get("duplicates"):
         facts.append(f"{notes['duplicates']} listed twice")
-    rows.append('<tr><td class="ft f">' + (" · ".join(facts) + "<br>" if facts else "")
+    rows.append(f'<tr><td style="padding:22px 0 0 0;font-size:12px;line-height:18px;'
+                f'color:{MUTED};{F}">' + (" · ".join(facts) + "<br>" if facts else "")
                 + f'Scores are weighted averages of 1–10 ratings against <a href="{e(leads_url)}" '
                 f'style="color:{CYAN}">what you\'re looking for</a>: {weights}. A deal-breaker '
                 f'caps the score at {config.DEAL_BREAKER_CAP:g}. '
-                f'{pill(f"{WARNING} pay", "y")} marks an estimate or missing '
+                f'{pill(f"{WARNING}&nbsp;pay", YELLOW_TEXT, YELLOW_BG)} marks an estimate or missing '
                 f'pay; pay the review couldn\'t find is left out of the score.</td></tr>')
 
     html_out = (f'<!DOCTYPE html><html><head><meta charset="utf-8">'
                 f'<meta name="viewport" content="width=device-width">'
-                f'<title>{e(subject(today, leads, problem))}</title><style>{STYLE}</style></head>'
-                f'<body><table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-                f'style="background:{BG}"><tr><td align="center" style="padding:24px 12px">'
+                f'<title>{e(subject(today, leads, problem))}</title></head>'
+                f'<body style="margin:0;padding:0;background-color:{BG}">'
+                f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+                f'bgcolor="{BG}"><tr><td align="center" style="padding:24px 12px">'
                 f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
                 f'style="max-width:640px">' + "\n".join(rows)
                 + "</table></td></tr></table></body></html>")
@@ -352,9 +383,8 @@ def render_text(today: date, leads: list[dict], attention: list[logic.Attention]
         lines.append(f"     {where(lead)} · {pay}")
         if logic.value(lead.get("fit_reason")):
             lines.append(f"     {lead['fit_reason']}")
-        url = logic.job_link(lead.get("job_url"))
-        if url and len(url) <= LINK_MAX:             # an opaque redirect runs to kilobytes
-            lines.append(f"     {url}")
+        if link(lead):
+            lines.append(f"     {link(lead)}")
         lines.append("")
     for lead in others[:config.DIGEST_ROWS]:
         lines.append(f"{logic.fit_text(lead.get('fit_score')) or '-'}  {lead.get('title')} — "

@@ -55,7 +55,8 @@ def test_every_lead_is_shown_with_its_score_pay_posting_and_ratings():
     assert "Pay not listed" in html                                     # Gamma: unknown
     assert "~$110,000–$130,000" in html and "(estimate)" in html and "Glassdoor, Denver" in html
     assert "$90,000</span>" in html                                      # Epsilon: listed, plain
-    assert "Role 9" in html and "Industry 3" in html and "Deal-breaker" in html
+    assert "Role&nbsp;9" in html and "Industry&nbsp;3" in html   # chips never wrap
+    assert "Deal&#8209;breaker" in html
     assert "Strong fits (7+)" in html and "Worth a look (4–6.9)" in html
     assert "Weak or unscored (1, hidden in the app until asked)" in html
     assert "2.1</strong> &nbsp;Clerk — Zeta · Omaha, NE" in html         # the compact list
@@ -112,13 +113,13 @@ def test_a_big_day_still_makes_a_small_email():
     out = digest.render(TODAY, leads, [], APP, {})
     html, text = out["html"], out["text"]
     assert len(html.encode()) < 60_000 and len(text.encode()) < 12_000
-    cards = html.count('class="cd" style="margin:0 0 10px 0"')
+    cards = html.count(f'style="{digest.CARD_STYLE};margin:0 0 10px 0"')
     assert cards == config.DIGEST_CARDS                      # 20 cards, best first
     assert "Role 0" in html and "Role 99" not in html          # the tail is a count
     assert "Role 25" in html and "Role 24" in html               # strong past the cards: rows
     assert "…and 22 more worth a look" in html and "…and 22 more weak or unscored" in html
-    assert html.count("trk=xxx") <= config.DIGEST_CARDS + config.DIGEST_ROWS * 2
-    assert "trk=xxx" not in text and "…and 75 more in the app." in text   # 600-char links: left out
+    assert "trk=xxx" not in html and "trk=xxx" not in text    # 600-char links: left to the app
+    assert "…and 75 more in the app." in text
     assert text.count("https://www.example.com/jobs/view/1234567890") == 0
     short = digest.render(TODAY, [lead(job_url="https://example.com/j/9")], [], APP, {})
     assert "     https://example.com/j/9" in short["text"]
