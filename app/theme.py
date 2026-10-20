@@ -111,7 +111,8 @@ TOKENS = {
 
 # The one gradient: it means "selected" (and the main action).
 GRADIENT = "linear-gradient(135deg, rgba(37, 99, 235, 0.9), rgba(6, 182, 212, 0.75))"
-GRADIENT_SOFT = "linear-gradient(135deg, rgba(37, 99, 235, 0.28), rgba(6, 182, 212, 0.18))"
+
+_applied: str | None = None       # the mode apply() last set in this process
 
 
 def options(mode: str) -> dict:
@@ -124,8 +125,16 @@ def options(mode: str) -> dict:
 
 def apply(mode: str) -> None:
     """Make this the process's theme from the next script run on."""
+    global _applied
     for key, value in options(mode).items():
         config.set_option(f"theme.{key}", value)
+    _applied = mode
+
+
+def applied() -> str | None:
+    """The mode apply() last set, or None before the first apply() in this
+    process (config.toml's light palette, whatever the saved choice is)."""
+    return _applied
 
 
 def current() -> str | None:
@@ -170,6 +179,11 @@ def stylesheet(mode: str) -> str:
 /* Stat cards: a muted microlabel over a big mono number. Their columns may
    shrink below Streamlit's 120px minimum so three fit on a phone. */
 [data-testid="stColumn"]:has([data-testid="stMetric"]) {{ min-width: 0; }}
+@media (max-width: 640px) {{   /* four don't fit across a phone: two to a row */
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]) {{
+        flex-wrap: wrap !important; }}
+    [data-testid="stColumn"]:has([data-testid="stMetric"]) {{ flex: 1 1 40% !important; }}
+}}
 [data-testid="stMetric"] {{ background: var(--ct-card); border: 1px solid var(--ct-border);
     border-radius: 10px; padding: 10px; transition: border-color var(--ct-ease); }}
 [data-testid="stMetric"]:hover {{ border-color: var(--ct-blue); }}

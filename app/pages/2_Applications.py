@@ -14,6 +14,7 @@ from ui import (
     bump_round,
     delete_button,
     disclosure,
+    done,
     empty,
     index_of,
     md,
@@ -31,19 +32,6 @@ setup("Applications", "Add one, find one, keep it up to date")
 today = data.today()
 companies = data.companies()
 company_names = companies["name"].tolist()
-FORMATS = ["phone", "video", "onsite", "take-home"]
-
-
-def next_round(name: str) -> None:
-    """Forms are keyed by a counter; bumping it gives a fresh, empty form."""
-    st.session_state[name] = st.session_state.get(name, 0) + 1
-
-
-def done(message: str, form_counter: str | None = None) -> None:
-    if form_counter:
-        next_round(form_counter)
-    st.session_state["flash"] = message
-    st.rerun()
 
 
 # ---- add --------------------------------------------------------------------
@@ -134,7 +122,7 @@ else:
             "last_update_on": st.column_config.DateColumn("Updated", format="MMM D"),
         })
 
-labels = {int(r.application_id): f"{r.company} — {r.role}" for r in apps.itertuples()}
+labels = logic.application_labels(apps)
 options = [int(i) for i in view["application_id"]]
 pick_key = round_key("pick_application")
 if (requested := st.session_state.pop("open_application", None)) is not None:
@@ -218,7 +206,7 @@ if section == "Interviews":
         iv_at = time_col.time_input("Time", value=None, step=900)
         iv_round = st.text_input("Round", placeholder="Recruiter screen, Technical, Onsite…")
         format_col, who_col = st.columns(2)
-        iv_format = format_col.selectbox("Format", optional(FORMATS))
+        iv_format = format_col.selectbox("Format", optional(config.INTERVIEW_FORMATS))
         iv_who = who_col.text_input("Interviewers")
         iv_prep = st.text_area("Prep notes")
         added = st.form_submit_button("Add interview", type="primary")

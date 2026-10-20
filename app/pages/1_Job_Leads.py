@@ -14,6 +14,7 @@ from ui import (
     badge,
     bump_round,
     card,
+    done,
     empty,
     fit_badge,
     fit_breakdown,
@@ -28,11 +29,6 @@ setup("Job Leads", "From your alert emails, scored for fit every morning")
 
 
 today = data.today()
-
-
-def done(message: str) -> None:
-    st.session_state["flash"] = message
-    st.rerun()
 
 
 def describe(lead) -> str:
@@ -75,7 +71,7 @@ def lead_card(lead) -> None:
             application_id = data.move_lead_to_applications(lead_id, today)
             st.session_state["flash"] = "Added to Applications as Saved."
             st.session_state["open_application"] = application_id
-            st.switch_page("pages/1_Applications.py")
+            st.switch_page("pages/2_Applications.py")
         reason = dismiss_col.selectbox(
             "Dismiss", config.DISMISS_REASONS, index=None, placeholder="Dismiss…",
             key=f"dismiss_{lead_id}_{round_key('leads')}", label_visibility="collapsed",
@@ -84,6 +80,38 @@ def lead_card(lead) -> None:
             data.set_lead_status(lead_id, "dismissed", reason, today)
             bump_round("leads")
             done(f"Dismissed {lead.title} — {lead.company} ({reason}).")
+
+
+def in_batches(frame, key: str, draw) -> None:
+    """draw(lead) for the first config.LEADS_SHOWN leads, and a button for
+    the next batch: a long inbox stays quick to draw on a phone."""
+    batches = st.session_state.get(f"batches_{key}", 1)
+    for lead in frame.head(config.LEADS_SHOWN * batches).itertuples():
+        draw(lead)
+    left = len(frame) - config.LEADS_SHOWN * batches
+    if left > 0 and st.button(f"Show {min(config.LEADS_SHOWN, left)} more ({left} left)",
+                              key=f"more_{key}", width="stretch"):
+        st.session_state[f"batches_{key}"] = batches + 1
+        st.rerun()
+
+
+def dismissed_card(lead) -> None:
+    lead_id = int(lead.lead_id)
+    with card(f"dismissed-{lead_id}"):
+        text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
+        fit = fit_badge(lead.fit_score)
+        why = ""
+        if logic.value(lead.dismiss_reason):
+            why = badge("gray", lead.dismiss_reason)
+            if logic.value(lead.dismissed_on):
+                why += f" dismissed {logic.when(lead.dismissed_on, today)}"
+            why += "  \n"
+        text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}**\u00a0—\u00a0"
+                          f"{md(lead.company)}  \n{why}{describe(lead)} · {pay_line(lead)}")
+        if button_col.button("Restore", key=f"restore_{lead_id}", width="stretch"):
+            data.set_lead_status(lead_id, "new")
+            bump_round("leads")
+            done(f"Restored {lead.title} — {lead.company}.")
 
 
 section = sections("leads", ["Inbox", "Stale", "Dismissed", "What I'm looking for"])
@@ -126,8 +154,7 @@ if section == "Inbox":
             leads = leads[~weak]
         if leads.empty:
             empty("filter_alt", "Nothing in this view", "Choose All to see every lead.")
-        for lead in leads.itertuples():
-            lead_card(lead)
+        in_batches(leads, "inbox", lead_card)
 
 # ---- stale ------------------------------------------------------------------
 
@@ -139,8 +166,7 @@ if section == "Stale":
     if stale.empty:
         empty("history", "Nothing stale", "Leads drop in here after "
               f"{config.LEAD_STALE_DAYS} days in the inbox.")
-    for lead in stale.itertuples():
-        lead_card(lead)
+    in_batches(stale, "stale", lead_card)
 
 # ---- dismissed --------------------------------------------------------------
 
@@ -148,23 +174,7 @@ if section == "Dismissed":
     dismissed = data.job_leads("dismissed")
     if dismissed.empty:
         empty("delete_sweep", "Nothing dismissed", "Leads you dismiss wait here in case you change your mind.")
-    for lead in dismissed.itertuples():
-        lead_id = int(lead.lead_id)
-        with card(f"dismissed-{lead_id}"):
-            text_col, button_col = st.columns([4, 1], vertical_alignment="center", wrap=False)
-            fit = fit_badge(lead.fit_score)
-            why = ""
-            if logic.value(lead.dismiss_reason):
-                why = badge("gray", lead.dismiss_reason)
-                if logic.value(lead.dismissed_on):
-                    why += f" dismissed {logic.when(lead.dismissed_on, today)}"
-                why += "  \n"
-            text_col.markdown(f"{fit + ' · ' if fit else ''}**{md(lead.title)}**\u00a0—\u00a0"
-                              f"{md(lead.company)}  \n{why}{describe(lead)} · {pay_line(lead)}")
-            if button_col.button("Restore", key=f"restore_{lead_id}", width="stretch"):
-                data.set_lead_status(lead_id, "new")
-                bump_round("leads")
-                done(f"Restored {lead.title} — {lead.company}.")
+    in_batches(dismissed, "dismissed", dismissed_card)
 
 # ---- profile ----------------------------------------------------------------
 

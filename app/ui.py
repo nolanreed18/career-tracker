@@ -63,16 +63,21 @@ def appearance() -> None:
     """Apply the saved look (light unless Dark mode was switched on), draw the
     sidebar's Dark mode switch and sign-out, and add the stylesheet.
 
-    Streamlit reads its theme options as a script run starts, so a change
-    made during a run shows on the next one: after a switch, or when this
-    run began with other options (the first run after the app started),
+    The saved choice is read from the database once per process (one
+    round trip fewer on every rerun after that): theme.applied() remembers
+    it, and a switch on any device goes through here, so every open tab
+    follows. Streamlit reads its theme options as a script run starts, so a
+    change made during a run shows on the next one: after a switch, or when
+    this run began with other options (the first run after the app started),
     the page reruns once.
     """
-    mode = data.get_setting(THEME_SETTING)
-    if mode not in theme.MODES:
-        mode = theme.DEFAULT
     started_with = theme.current()
-    theme.apply(mode)
+    mode = theme.applied()
+    if mode is None:                                 # the first run in this process
+        mode = data.get_setting(THEME_SETTING)
+        if mode not in theme.MODES:
+            mode = theme.DEFAULT
+        theme.apply(mode)
     if "dark_mode" not in st.session_state or st.session_state.get("theme_shown") != mode:
         # First draw, or the choice was changed on another device: the switch
         # follows the saved choice rather than flipping it back.
@@ -104,6 +109,15 @@ def sign_out() -> None:
     st.session_state.pop(SIGNED_IN, None)
     if _google_email():
         st.logout()
+
+
+def done(message: str, counter: str | None = None) -> None:
+    """Finish an action: remember what happened (setup() shows it on the
+    next run), bump a form's counter so it comes back empty, and rerun."""
+    if counter:
+        st.session_state[counter] = st.session_state.get(counter, 0) + 1
+    st.session_state["flash"] = message
+    st.rerun()
 
 
 def card(key: str):

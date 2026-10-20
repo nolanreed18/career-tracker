@@ -73,8 +73,9 @@ only they can do (accounts, secrets, clicking merge).
   page gets it too.
 - Pass plain Python values to psycopg, not numpy (`int(x)` on DataFrame ids).
   Put user text into `st.markdown` through `ui.md()`: `$` would become maths.
-- Forms reset by bumping a counter in their key; set a widget's session state
-  only before it is drawn (or via a flag read at the top of the page).
+- Forms reset by bumping a counter in their key (`ui.done(message, counter)`
+  bumps it, keeps the message for the next run and reruns); set a widget's
+  session state only before it is drawn (or via a flag read at the top of the page).
 
 ## Tests
 - `ruff check .` and `pytest` before every push. DB and page tests need

@@ -12,19 +12,6 @@ database, hosted free on Streamlit Community Cloud.
   inbox in one line with a Review button, and **Needs attention**: overdue
   next steps, interviews in the next 7 days, and open applications with no
   update for 14 days.
-- **Applications**: add one, filter and search, then for each application log
-  updates (status changes or plain notes), set the next step, add interviews,
-  edit, and see its full history.
-- **Interviews**: upcoming and past, with prep notes, "how it went" and a 1–5
-  rating.
-- **Companies & Contacts**: companies (added for you with each application),
-  plus recruiters, referrals and network contacts with "last contacted" dates.
-- **Career Log**: wins, skills, certifications, feedback and things learned,
-  with a CSV download. A **Job history** tab keeps past jobs and pay.
-- **Stats**: pipeline by stage, applications per week, and response rate by
-  source.
-- **Import**: bring in applications from a spreadsheet saved as CSV. Headers
-  are matched loosely, and importing the same file twice adds nothing.
 - **Job Leads**: jobs from your job-alert emails, each scored for fit, best
   first. The daily review rates every job 1–10 on six categories (role,
   industry, location, pay, level, extras) against what you're looking for;
@@ -45,6 +32,19 @@ database, hosted free on Streamlit Community Cloud.
   looking for** tab holds the roles, places, pay floor, must-haves,
   deal-breakers and **companies to skip** the scores are based on. Home
   shows how many new leads are waiting.
+- **Applications**: add one, filter and search, then for each application log
+  updates (status changes or plain notes), set the next step, add interviews,
+  edit, and see its full history.
+- **Interviews**: upcoming and past, with prep notes, "how it went" and a 1–5
+  rating.
+- **Companies & Contacts**: companies (added for you with each application),
+  plus recruiters, referrals and network contacts with "last contacted" dates.
+- **Career Log**: wins, skills, certifications, feedback and things learned,
+  with a CSV download. A **Job history** tab keeps past jobs and pay.
+- **Stats**: pipeline by stage, applications per week, and response rate by
+  source.
+- **Import**: bring in applications from a spreadsheet saved as CSV. Headers
+  are matched loosely, and importing the same file twice adds nothing.
 
 - **Resume**: your master resume as data. Under **Build from files** you
   upload your resume as a Word file (it becomes the template every export is

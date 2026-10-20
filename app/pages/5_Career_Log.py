@@ -18,6 +18,7 @@ from ui import (
     card,
     delete_button,
     disclosure,
+    done,
     empty,
     kind_badge,
     md,
@@ -36,13 +37,6 @@ KIND_ICONS = {"win": "🏆", "skill": "🛠️", "certification": "📜", "feedb
 
 def kind_label(kind: str) -> str:
     return f"{KIND_ICONS.get(kind, '')} {kind.capitalize()}".strip()
-
-
-def done(message: str, counter: str | None = None) -> None:
-    if counter:
-        st.session_state[counter] = st.session_state.get(counter, 0) + 1
-    st.session_state["flash"] = message
-    st.rerun()
 
 
 section = sections("log", ["Log", "Job history"])

@@ -514,3 +514,9 @@ def test_a_tailored_version_is_measured_against_the_master_and_ends_bullets_its_
     assert logic.place("Denver, CO", "hybrid") == ["Denver, CO", "Hybrid"]
     assert logic.place("Plainview, TX", "remote") == ["Plainview, TX", "Remote"]
     assert logic.place(None, "onsite") == ["Onsite"] and logic.place("", None) == []
+
+
+def test_application_labels_are_company_dash_role_by_plain_id():
+    apps = pd.DataFrame({"application_id": [7], "company": ["Acme"], "role": ["Analyst"]})
+    labels = logic.application_labels(apps)
+    assert labels == {7: "Acme — Analyst"} and type(next(iter(labels))) is int

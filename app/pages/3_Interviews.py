@@ -9,23 +9,17 @@ fresh.check()                   # after a redeploy: no stale copies of the app's
 import config
 import data
 import logic
-from ui import delete_button, disclosure, empty, md, optional, setup
+from ui import delete_button, disclosure, done, empty, md, optional, setup
 
 setup("Interviews", "What's coming up, and how past ones went")
 
 
 today = data.today()
-FORMATS = ["phone", "video", "onsite", "take-home"]
 RATINGS = ["", "1 — rough", "2", "3 — okay", "4", "5 — great"]
 
 
 def rating_index(rating) -> int:
     return 0 if logic.blank(rating) else int(rating)
-
-
-def done(message: str) -> None:
-    st.session_state["flash"] = message
-    st.rerun()
 
 
 apps = data.applications()
@@ -34,8 +28,7 @@ if disclosure("Add an interview", "add_interview"):
     if open_apps.empty:
         st.caption("Add an application first; interviews belong to one.")
     else:
-        labels = {int(r.application_id): f"{r.company} — {r.role}"
-                  for r in open_apps.itertuples()}
+        labels = logic.application_labels(open_apps)
         n = st.session_state.get("iv_add_round", 0)
         with st.form(f"add_interview_{n}"):
             application_id = st.selectbox("Application", list(labels),
@@ -45,15 +38,14 @@ if disclosure("Add an interview", "add_interview"):
             at = time_col.time_input("Time", value=None, step=900)
             round_ = st.text_input("Round", placeholder="Recruiter screen, Technical, Onsite…")
             format_col, who_col = st.columns(2)
-            format_ = format_col.selectbox("Format", optional(FORMATS))
+            format_ = format_col.selectbox("Format", optional(config.INTERVIEW_FORMATS))
             who = who_col.text_input("Interviewers")
             prep = st.text_area("Prep notes")
             added = st.form_submit_button("Add interview", type="primary")
         if added:
             data.add_interview(application_id, on, start_time=at, round=round_,
                                format=format_ or None, interviewers=who, prep_notes=prep)
-            st.session_state["iv_add_round"] = n + 1
-            done("Interview added.")
+            done("Interview added.", "iv_add_round")
 
 interviews = data.interviews()
 if interviews.empty:
@@ -79,7 +71,7 @@ for heading, frame in (("Upcoming", upcoming), ("Past", past)):
                 e_on = day_col.date_input("Date", value=iv.scheduled_on)
                 e_at = time_col.time_input("Time", value=logic.value(iv.start_time), step=900)
                 e_round = st.text_input("Round", value=logic.value(iv.round) or "")
-                formats = optional(FORMATS)
+                formats = optional(config.INTERVIEW_FORMATS)
                 format_col, who_col = st.columns(2)
                 e_format = format_col.selectbox(
                     "Format", formats,

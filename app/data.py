@@ -90,10 +90,6 @@ def _connection() -> psycopg.Connection:
             for statement in MIGRATIONS:
                 _conn.execute(statement)
             _schema_ready = True
-            with _conn.cursor() as cur:
-                _rescore_leads_without_pay(cur)
-                _rekey_leads(cur)
-                _clean_job_links(cur)
     elif time.monotonic() - _last_used >= PING_AFTER_IDLE_S:
         try:
             _conn.execute("select 1")
@@ -158,59 +154,6 @@ def migrate() -> None:
     with _cursor() as cur:
         for statement in MIGRATIONS:
             cur.execute(statement)
-        _rescore_leads_without_pay(cur)
-        _rekey_leads(cur)
-        _clean_job_links(cur)
-
-
-def _clean_job_links(cur) -> None:
-    """Posting links stored with tracking wrappers (before logic.job_link
-    cleaned them on the way in) are rewritten to the clean form, on leads
-    and on the applications made from them. Safe to run again."""
-    for table, key in (("job_leads", "lead_id"), ("applications", "application_id")):
-        cur.execute(f"select {key}, job_url from {table} where job_url is not null")
-        for row_id, url in cur.fetchall():
-            clean = logic.job_link(url)
-            if clean != url:
-                cur.execute(f"update {table} set job_url = %s where {key} = %s", (clean, row_id))
-
-
-def _rekey_leads(cur) -> None:
-    """Dedupe keys made with the location (before 2026-10) become
-    company|title, so the same job from another site, with the place worded
-    differently, is caught. Two old rows that collapse to one key keep the
-    first; the other gets its id appended, so it stays but no longer stands
-    for the job. Safe to run again: afterwards no key has a location part."""
-    cur.execute("select lead_id, company, title from job_leads "
-                "where dedupe_key like '%|%|%' order by lead_id")
-    rows = cur.fetchall()
-    if not rows:
-        return
-    cur.execute("select dedupe_key from job_leads")
-    taken = {row[0] for row in cur.fetchall()}
-    for lead_id, company, title in rows:
-        key = logic.lead_key(company, title)
-        if key in taken:
-            key = f"{key}|{lead_id}"
-        taken.add(key)
-        cur.execute("update job_leads set dedupe_key = %s where lead_id = %s", (key, lead_id))
-
-
-def _rescore_leads_without_pay(cur) -> None:
-    """Leads rated on pay before pay was known are scored again without it
-    (2026-10: unknown pay used to count as a 5). Safe to run again: afterwards
-    no lead without pay carries a pay rating."""
-    cur.execute("""
-        select lead_id, fit_detail from job_leads
-        where salary_min is null and salary_max is null and fit_detail ? 'ratings'
-          and fit_detail -> 'ratings' ? 'pay'
-    """)
-    for lead_id, detail in cur.fetchall():
-        if isinstance(detail, str):
-            detail = json.loads(detail)
-        score, detail = logic.without_pay(detail)
-        cur.execute("update job_leads set fit_score = %s, fit_detail = %s::jsonb "
-                    "where lead_id = %s", (score, json.dumps(detail), lead_id))
 
 
 def _read(query: str, params=None) -> pd.DataFrame:
@@ -796,10 +739,6 @@ def resume_sources() -> pd.DataFrame:
                bytes is not null as has_file
         from resume_sources order by uploaded_on desc, source_id desc
     """)
-
-
-def resume_source(source_id: int) -> dict | None:
-    return _one("select * from resume_sources where source_id = %s", (source_id,))
 
 
 def resume_source_texts() -> dict[str, str]:
