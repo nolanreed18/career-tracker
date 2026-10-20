@@ -56,8 +56,10 @@ database, hosted free on Streamlit Community Cloud.
   (roles, bullets, which bullets print, education, skills, projects) and
   download it as a Word file in your own layout; a role or project prints
   only when at least one of its bullets is ticked **On master**. Under
-  **Tailor** you pick an open application, paste its job posting (also on
-  the application's **Posting** section), and one click has Claude choose
+  **Resume Builder** you pick an open application, get its job posting from
+  the posting link in one click (LinkedIn hands it over; Indeed and Glassdoor
+  don't, so those you paste, also on the application's **Posting** section),
+  and one click has Claude choose
   and reword the master's bullets for that posting, write the cover
   letter, mark which of the posting's keywords the resume shows, and list
   every change with its reason. Each click is a new version; you edit the

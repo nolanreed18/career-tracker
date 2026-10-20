@@ -111,6 +111,11 @@ AI_MODEL = "claude-opus-5-5"
 AI_PRICES = {"claude-opus-5-5": (4.0, 20.0)}
 AI_MAX_TOKENS = 32000          # thinking counts against it; a cut-off answer is an error
 
+# A job posting read from its link (app/posting.py): shorter than this
+# and the page gave no description; longer is cut, the tail is boilerplate.
+POSTING_MIN_CHARS = 200
+POSTING_MAX_CHARS = 20000
+
 # Where a piece of the master resume came from (resume_sources.kind, also a
 # CHECK in schema.sql): the resume itself, a project history, a projects
 # spreadsheet, or anything else worth reading.

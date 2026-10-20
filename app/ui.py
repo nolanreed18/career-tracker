@@ -9,6 +9,7 @@ import streamlit as st
 import config
 import data
 import logic
+import posting
 import theme
 
 # Icons for places that can't show a badge: selectbox options, table cells.
@@ -118,6 +119,26 @@ def done(message: str, counter: str | None = None) -> None:
         st.session_state[counter] = st.session_state.get(counter, 0) + 1
     st.session_state["flash"] = message
     st.rerun()
+
+
+def posting_button(app: dict, key: str) -> None:
+    """A button that reads the job posting from the application's link
+    (posting.fetch) and saves it as the application's posting. Shown only
+    when there is a link; the main action while the posting is empty."""
+    if not logic.value(app.get("job_url")):
+        return
+    if st.button("Get the posting from the link", key=f"fetch_posting_{key}",
+                 icon=":material/download:",
+                 type="secondary" if logic.value(app.get("posting")) else "primary"):
+        try:
+            found = posting.fetch(app["job_url"])
+        except posting.PostingError as problem:
+            st.error(str(problem))
+        else:
+            data.update_application(int(app["application_id"]), posting=found.as_text())
+            done(f"Read the posting: {found.title or 'untitled'} at "
+                 f"{found.company or 'an unnamed employer'}, {len(found.text):,} characters. "
+                 "Check it, then tailor.")
 
 
 def card(key: str):

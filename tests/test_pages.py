@@ -567,12 +567,12 @@ def test_building_the_master_lands_on_the_master_section(monkeypatch):
 
 def test_tailor_section_waits_for_a_master_and_an_open_application():
     at = run(RESUME)
-    widget(at.radio, "Section").set_value("Tailor").run()
+    widget(at.radio, "Section").set_value("Resume Builder").run()
     assert any("No master resume yet" in h.value for h in at.get("html"))
     import docx_fixture
     data.save_resume_master(docx_fixture.SAMPLE, TODAY)
     at = run(RESUME)
-    widget(at.radio, "Section").set_value("Tailor").run()
+    widget(at.radio, "Section").set_value("Resume Builder").run()
     assert any("No open applications" in h.value for h in at.get("html"))
 
 
@@ -602,7 +602,7 @@ def test_tailor_section_makes_a_version_with_both_downloads_and_saves_edits(monk
     app_id = data.add_application(data.company_id_for("Acme Corp.", TODAY), "Analyst", "saved",
                                   TODAY)
     at = run(RESUME)
-    widget(at.radio, "Section").set_value("Tailor").run()
+    widget(at.radio, "Section").set_value("Resume Builder").run()
     assert widget(at.button, "Tailor with Claude").disabled          # no posting yet
     widget(at.text_area, "Job posting").set_value("We need SQL and Tableau.")
     click(at, "Save posting")
@@ -645,7 +645,7 @@ def test_a_tailored_version_longer_than_the_master_gets_a_warning():
         {"text": "A bullet " * 40, "original": "", "skills": []}]}]}
     data.add_tailored(app_id, logic.clean_tailored(long), None, "m", TODAY)
     at = run(RESUME)
-    widget(at.radio, "Section").set_value("Tailor").run()
+    widget(at.radio, "Section").set_value("Resume Builder").run()
     assert any("Longer than the master" in w.value for w in at.warning)
 
 
@@ -664,15 +664,55 @@ def test_the_tailor_section_keeps_its_application_across_sections():
     first = data.add_application(data.company_id_for("Acme", TODAY), "Analyst", "saved", TODAY)
     second = data.add_application(data.company_id_for("Beta", TODAY), "PM", "saved", TODAY)
     at = run(RESUME)
-    widget(at.radio, "Section").set_value("Tailor").run()
+    widget(at.radio, "Section").set_value("Resume Builder").run()
     widget(at.selectbox, "Application").set_value(first).run()
     assert widget(at.selectbox, "Application").value == first
     widget(at.radio, "Section").set_value("Master").run()
-    widget(at.radio, "Section").set_value("Tailor").run()
+    widget(at.radio, "Section").set_value("Resume Builder").run()
     assert widget(at.selectbox, "Application").value == first      # not back to the newest
     at.session_state["tailor_application"] = second                 # sent from Applications
-    widget(at.radio, "Section").set_value("Tailor").run()
+    widget(at.radio, "Section").set_value("Resume Builder").run()
     assert widget(at.selectbox, "Application").value == second
+
+
+def test_the_posting_can_be_read_from_the_link_or_the_error_says_to_paste(monkeypatch):
+    import docx_fixture
+    import posting
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")        # so only the posting gates Tailor
+    data.save_resume_master(docx_fixture.SAMPLE, TODAY)
+    app_id = data.add_application(data.company_id_for("Acme", TODAY), "Analyst", "saved", TODAY,
+                                  job_url="https://www.linkedin.com/jobs/view/123/")
+    monkeypatch.setattr(posting, "fetch", lambda url: posting.Posting(
+        "Analyst II", "Acme Corp", "Denver, CO", "We need SQL. " * 20))
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Resume Builder").run()
+    assert widget(at.button, "Tailor with Claude").disabled
+    click(at, "Get the posting from the link")
+    saved = data.application(app_id)["posting"]
+    assert saved.startswith("Analyst II — Acme Corp · Denver, CO\n\nWe need SQL.")
+    assert any("Read the posting: Analyst II at Acme Corp, 260 characters." in s.value
+               for s in at.success)
+    assert widget(at.text_area, "Job posting").value == saved
+    assert not widget(at.button, "Tailor with Claude").disabled
+
+    def refused(url):
+        raise posting.PostingError("Indeed doesn't let the app read its postings: paste it.")
+    monkeypatch.setattr(posting, "fetch", refused)
+    click(at, "Get the posting from the link")
+    assert at.error[0].value.startswith("Indeed doesn't let the app read")
+    assert data.application(app_id)["posting"] == saved                   # kept
+
+
+def test_the_posting_section_offers_the_link_only_when_there_is_one():
+    app_id = seed()                                                        # no job link
+    at = new_app(APPS)
+    at.session_state["open_application"] = app_id
+    at.run()
+    widget(at.radio, "Section").set_value("Posting").run()
+    assert not any(b.label == "Get the posting from the link" for b in at.button)
+    data.update_application(app_id, job_url="https://www.linkedin.com/jobs/view/9/")
+    at.run()
+    assert any(b.label == "Get the posting from the link" for b in at.button)
 
 
 def test_the_posting_section_saves_the_job_posting():

@@ -16,7 +16,19 @@ import config
 import data
 import docx_io
 import logic
-from ui import badge, bump_round, card, delete_button, done, empty, md, round_key, sections, setup
+from ui import (
+    badge,
+    bump_round,
+    card,
+    delete_button,
+    done,
+    empty,
+    md,
+    posting_button,
+    round_key,
+    sections,
+    setup,
+)
 
 setup("Resume", "Your master resume as data: built from your files, tailored per job",
       wide=True)
@@ -26,7 +38,7 @@ today = data.today()
 
 if goto := st.session_state.pop("resume_goto", None):   # an action that moves the eye
     st.session_state["section_resume"] = goto
-section = sections("resume", ["Master", "Tailor", "Build from files"])
+section = sections("resume", ["Master", "Resume Builder", "Build from files"])
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 # ---- master ---------------------------------------------------------------------
@@ -224,7 +236,7 @@ def tailored_roles(tailored: dict, kind: str, tailor_id: int) -> list[dict]:
     return edited
 
 
-if section == "Tailor":
+if section == "Resume Builder":
     master = data.resume_master()
     content = None if master is None else master["content"]
     apps = data.applications()
@@ -248,9 +260,11 @@ if section == "Tailor":
                               key="tailor_pick")
         st.session_state["tailor_pick_kept"] = picked
         app = data.application(picked)
+        posting_button(app, "resume")
         with st.form(f"posting_{picked}"):
             posting = st.text_area("Job posting", value=app["posting"] or "", height=200,
-                                   help="Paste the whole posting: Claude tailors to its words.")
+                                   help="Read it from the link above, or paste the whole "
+                                        "posting: Claude tailors to its words.")
             if st.form_submit_button("Save posting"):
                 data.update_application(picked, posting=posting)
                 done("Posting saved.")
@@ -282,7 +296,7 @@ if section == "Tailor":
         if not ai.ready():
             st.caption("Needs the Claude key (see Build from files).")
         elif not app["posting"]:
-            st.caption("Paste and save the job posting first.")
+            st.caption("Get the posting from the link, or paste and save it, first.")
         else:
             st.caption("One Claude call picks and rewords the master's bullets for this "
                        "posting, writes the cover letter and lists what it changed. About "
