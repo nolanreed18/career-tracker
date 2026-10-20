@@ -36,7 +36,7 @@ database, hosted free on Streamlit Community Cloud.
   updates (status changes or plain notes), set the next step, add interviews,
   edit, and see its full history. **Add** on a lead saves it here, reads the
   posting from its link and has Claude search for the same posting on the
-  employer's own careers site (about 5 cents), so the application opens with
+  employer's own careers site (about 10 cents), so the application opens with
   **Apply on the employer's site** and never needs LinkedIn's Easy Apply;
   **Applied today** logs the application in one tap.
 - **Interviews**: upcoming and past, with prep notes, "how it went" and a 1–5

@@ -208,8 +208,11 @@ def test_find_posting_searches_the_web_resumes_a_pause_and_counts_the_searches(m
     assert (usage.input_tokens, usage.output_tokens, usage.searches) == (6000, 1000, 2)
     assert usage.cost_usd == round(6000 * 4 / 1e6 + 1000 * 20 / 1e6 + 2 * 0.01, 4)
     first, second = messages.calls
-    assert first["tools"] == [{"type": "web_search_20260209", "name": "web_search",
-                               "max_uses": config.AI_SEARCH_MAX}]
+    assert first["tools"] == [
+        {"type": "web_search_20260209", "name": "web_search", "max_uses": config.AI_SEARCH_MAX,
+         "blocked_domains": config.JOB_BOARDS},                   # no job-board results
+        {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": config.AI_FETCH_MAX,
+         "max_content_tokens": config.AI_FETCH_TOKENS}]           # it can open the careers site
     assert first["system"] == ai.FIND_SYSTEM and first["max_tokens"] == config.AI_FIND_MAX_TOKENS
     prompt = first["messages"][0]["content"]
     assert 'employer="bp"' in prompt and 'location="Denver, CO"' in prompt
