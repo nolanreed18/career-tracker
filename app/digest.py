@@ -23,6 +23,7 @@ ATTENTION = {"overdue": (RED, "Overdue"), "due": (ORANGE, "Due today"),
              "interview": (BLUE, "Interview"), "follow_up": (ORANGE, "Follow up"),
              "stale_saved": (GRAY, "Saved")}
 WARNING = "&#9888;&#xFE0E;"          # a text-style warning sign, coloured by its span
+TEXT_FULL = 10                       # leads written out in full (with links) in the text version
 
 STYLE = f"""
 body{{margin:0;padding:0;background:{BG}}}
@@ -35,6 +36,11 @@ table{{border-collapse:separate}}
 .bd{{padding:14px 16px 14px 0;vertical-align:top;font-size:15px;line-height:22px}}
 .n{{display:inline-block;min-width:34px;text-align:center;padding:6px 8px;border-radius:10px;font-size:17px;font-weight:700;color:#ffffff}}
 .p{{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}}
+.pg{{color:{GREEN};background:#ecfdf5}}
+.pn{{color:{TEXT2};background:#f1f5f9}}
+.pr{{color:{RED};background:#fff1f2}}
+.py{{color:{YELLOW_TEXT};background:{YELLOW_BG}}}
+.pd{{color:#ffffff;background:{RED}}}
 .m{{color:{MUTED};font-size:13px}}
 .r{{margin-top:6px;color:{TEXT2};font-size:14px}}
 .ch{{margin-top:8px;line-height:22px}}
@@ -78,14 +84,20 @@ def tiers(leads: list[dict]) -> dict[str, list[dict]]:
 
 # ---- pieces -----------------------------------------------------------------
 
-def pill(text: str, color: str, background: str) -> str:
-    return f'<span class="p" style="color:{color};background:{background}">{text}</span>'
+def pill(text: str, kind: str) -> str:
+    """A rounded label: kind g (good), n (neutral), r (bad), y (unverified), d (deal-breaker)."""
+    return f'<span class="p p{kind}">{text}</span>'
+
+
+def solid_pill(text: str, color: str) -> str:
+    """A white-on-colour label (the few attention rows; inline so any colour works)."""
+    return f'<span class="p" style="color:#ffffff;background:{color}">{text}</span>'
 
 
 def score_pill(score) -> str:
     tier = logic.fit_tier(score)
     if tier is None:
-        return pill("–", GRAY, "#f1f5f9")
+        return pill("–", "n")
     return f'<span class="n" style="background:{TIERS[tier][0]}">{logic.fit_text(score)}</span>'
 
 
@@ -96,7 +108,7 @@ def pay_html(lead: dict) -> str:
         return f'<span style="font-weight:600">{e(text)}</span>'
     label = f"{WARNING} {e(text)}" + (" (estimate)" if state == "estimated" else "")
     note = lead.get("pay_note") if state == "estimated" else None
-    return pill(label, YELLOW_TEXT, YELLOW_BG) + (
+    return pill(label, "y") + (
         f' <span class="m">{e(note)}</span>' if logic.value(note) else "")
 
 
@@ -110,12 +122,10 @@ def rating_chips(detail) -> str:
         if key not in ratings:
             continue
         n = ratings[key]
-        color, background = ((GREEN, "#ecfdf5") if n >= config.STRONG_FIT
-                             else (TEXT2, "#f1f5f9") if n >= config.MAYBE_FIT
-                             else (RED, "#fff1f2"))
-        chips.append(pill(f"{e(label.split(' ')[0])} {n}", color, background))
+        kind = "g" if n >= config.STRONG_FIT else "n" if n >= config.MAYBE_FIT else "r"
+        chips.append(pill(f"{e(label.split(' ')[0])} {n}", kind))
     if detail.get("deal_breaker"):
-        chips.insert(0, pill("Deal-breaker", "#ffffff", RED))
+        chips.insert(0, pill("Deal-breaker", "d"))
     return f'<div class="ch">{" ".join(chips)}</div>'
 
 
@@ -143,8 +153,8 @@ def lead_card(lead: dict) -> str:
             + rating_chips(lead.get("fit_detail")) + "</td></tr></table>")
 
 
-def compact_row(lead: dict) -> str:
-    url = logic.job_link(lead.get("job_url"))
+def compact_row(lead: dict, link: bool = True) -> str:
+    url = logic.job_link(lead.get("job_url")) if link else None
     title = e(lead.get("title"))
     if url:
         title = f'<a href="{e(url)}" style="color:{TEXT2}">{title}</a>'
@@ -153,6 +163,17 @@ def compact_row(lead: dict) -> str:
             f'{logic.fit_text(lead.get("fit_score")) or "–"}</strong> &nbsp;{title} — '
             f'{e(lead.get("company"))}'
             + (f" · {e(location)}" if logic.value(location) else "") + "</td></tr>")
+
+
+def rows_table(leads: list[dict], link: bool, what: str, url: str) -> str:
+    """One-line rows for up to DIGEST_ROWS leads, then a count of the rest
+    with a link to the app, so a big day can't make a huge email."""
+    rows = "".join(compact_row(lead, link) for lead in leads[:config.DIGEST_ROWS])
+    if len(leads) > config.DIGEST_ROWS:
+        rows += (f'<tr><td class="wk f">…and {len(leads) - config.DIGEST_ROWS} more {what} '
+                 f'<a href="{e(url)}" style="color:{CYAN}">in the app</a></td></tr>')
+    return ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
+            + rows + "</table>")
 
 
 def section(title: str, color: str, body: str) -> str:
@@ -177,7 +198,7 @@ def attention_rows(items: list[logic.Attention]) -> str:
     rows = []
     for item in items:
         color, label = ATTENTION.get(item.kind, (GRAY, item.kind))
-        rows.append(f'<tr><td class="at f">{pill(label, "#ffffff", color)} '
+        rows.append(f'<tr><td class="at f">{solid_pill(label, color)} '
                     f'<strong>{e(item.headline)}</strong><br>'
                     f'<span class="co" style="font-size:13px">{e(item.detail)}</span></td></tr>')
     return ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
@@ -253,16 +274,24 @@ def render(today: date, leads: list[dict], attention: list[logic.Attention], app
                     f'<div class="k" style="color:{ORANGE}">Still waiting · '
                     f'{logic.plural(len(waiting), "strong lead")} from earlier this week</div>'
                     f'<div style="margin-top:4px">{names}{more}</div></td></tr></table></td></tr>')
+    budget = config.DIGEST_CARDS                   # full cards, best first; the rest are rows
+
+    def tier_body(tier_leads: list[dict], what: str) -> str:
+        nonlocal budget
+        as_cards, as_rows = tier_leads[:budget], tier_leads[budget:]
+        budget -= len(as_cards)
+        return ("".join(lead_card(lead) for lead in as_cards)
+                + (rows_table(as_rows, True, what, leads_url) if as_rows else ""))
+
     if strong:
         rows.append(section(f"Strong fits ({config.STRONG_FIT}+)", GREEN,
-                            "".join(lead_card(lead) for lead in strong)))
+                            tier_body(strong, "strong fits")))
     if maybe:
         rows.append(section(f"Worth a look ({config.MAYBE_FIT}–{config.STRONG_FIT - 0.1:g})", BLUE,
-                            "".join(lead_card(lead) for lead in maybe)))
+                            tier_body(maybe, "worth a look")))
     if weak:
         rows.append(section(f"Weak or unscored ({len(weak)}, hidden in the app until asked)", GRAY,
-                            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
-                            + "".join(compact_row(lead) for lead in weak) + "</table>"))
+                            rows_table(weak, False, "weak or unscored", leads_url)))
     if attention:
         rows.append(section("On your plate today", ORANGE, attention_rows(attention)))
 
@@ -279,7 +308,7 @@ def render(today: date, leads: list[dict], attention: list[logic.Attention], app
                 + f'Scores are weighted averages of 1–10 ratings against <a href="{e(leads_url)}" '
                 f'style="color:{CYAN}">what you\'re looking for</a>: {weights}. A deal-breaker '
                 f'caps the score at {config.DEAL_BREAKER_CAP:g}. '
-                f'{pill(f"{WARNING} pay", YELLOW_TEXT, YELLOW_BG)} marks an estimate or missing '
+                f'{pill(f"{WARNING} pay", "y")} marks an estimate or missing '
                 f'pay; pay the review couldn\'t find is left out of the score.</td></tr>')
 
     html_out = (f'<!DOCTYPE html><html><head><meta charset="utf-8">'
@@ -309,7 +338,10 @@ def render_text(today: date, leads: list[dict], attention: list[logic.Attention]
         lines.append("")
     if not leads:
         lines.append("Nothing new today.")
-    for lead in leads:
+    by_tier = tiers(leads)
+    full = by_tier["strong"][:TEXT_FULL]           # in full, with their links
+    others = by_tier["strong"][TEXT_FULL:] + by_tier["maybe"] + by_tier["weak"] + by_tier["unscored"]
+    for lead in full:
         state, pay = logic.pay_state(lead.get("salary_min"), lead.get("salary_max"),
                                      lead.get("pay_source"))
         if state == "estimated":
@@ -321,6 +353,13 @@ def render_text(today: date, leads: list[dict], attention: list[logic.Attention]
             lines.append(f"     {lead['fit_reason']}")
         if url := logic.job_link(lead.get("job_url")):
             lines.append(f"     {url}")
+        lines.append("")
+    for lead in others[:config.DIGEST_ROWS]:
+        lines.append(f"{logic.fit_text(lead.get('fit_score')) or '-'}  {lead.get('title')} — "
+                     f"{lead.get('company')} · {where(lead)}")
+    if len(others) > config.DIGEST_ROWS:
+        lines.append(f"…and {len(others) - config.DIGEST_ROWS} more in the app.")
+    if others:
         lines.append("")
     if attention:
         lines.append("On your plate today:")

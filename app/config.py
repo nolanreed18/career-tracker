@@ -100,6 +100,8 @@ PAY_RESEARCH = (
 # Fit scores (1-10) at or above this are a strong match: highlighted in the
 # app and listed first in the daily email.
 STRONG_FIT = 7
+DIGEST_CARDS = 20             # leads shown as full cards in the digest email, best first
+DIGEST_ROWS = 15              # one-line rows after that in each section; the rest is a count
 
 # Claude, for the resume tools (app/ai.py). Every call is a button the owner
 # clicks; nothing calls Claude on its own. The key is ANTHROPIC_API_KEY in the
