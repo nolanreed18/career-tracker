@@ -71,10 +71,20 @@ MIGRATIONS = [
     "update job_leads set pay_source = 'listed' where pay_source is null "
     "and (salary_min is not null or salary_max is not null)",
     # 2026-10: why and when a lead was dismissed; companies the review skips.
-    "alter table job_leads add column if not exists dismiss_reason text "
-    "check (dismiss_reason in ('wrong role', 'location', 'pay', 'company', "
-    "'already applied', 'other'))",
+    "alter table job_leads add column if not exists dismiss_reason text",
     "alter table job_leads add column if not exists dismissed_on date",
+    # 2026-10: "not enough experience" joins the dismiss reasons: the CHECK is
+    # remade (whatever it was called), so the live table takes the new list.
+    """do $$ declare found record; begin
+        for found in select conname from pg_constraint
+            where conrelid = 'job_leads'::regclass and contype = 'c'
+              and pg_get_constraintdef(oid) like '%dismiss_reason%' loop
+            execute format('alter table job_leads drop constraint %I', found.conname);
+        end loop;
+        alter table job_leads add constraint job_leads_dismiss_reason_check
+            check (dismiss_reason in ('wrong role', 'not enough experience', 'location', 'pay',
+                                      'company', 'already applied', 'other'));
+    end $$""",
     "alter table job_profile add column if not exists skip_companies text",
     # 2026-10: the job posting's text on an application, for tailoring the resume.
     "alter table applications add column if not exists posting text",

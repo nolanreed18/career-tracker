@@ -340,9 +340,13 @@ def test_google_without_allowed_emails_lets_nobody_in(google, monkeypatch):
 def test_leads_are_listed_best_fit_first_and_home_points_to_them():
     seed()
     at = run(LEADS)
+    assert widget(at.radio, "Show").value == "strong"      # opens on the strong ones
     titles = [m.value for m in at.markdown if "**" in m.value]
     assert "Analytics Engineer" in titles[0] and ":green-badge[9/10]" in titles[0]
-    assert "BI Developer" in titles[1]
+    assert not any("BI Developer" in t for t in titles)
+    widget(at.radio, "Show").set_value("today").run()
+    titles = [m.value for m in at.markdown if "**" in m.value]
+    assert "Analytics Engineer" in titles[0] and "BI Developer" in titles[1]
     home = run(HOME)
     assert any("2 leads in the inbox, 2 new today, 1 strong" in m.value for m in home.markdown)
 
@@ -362,6 +366,7 @@ def test_a_long_inbox_is_drawn_a_batch_at_a_time():
 def test_a_lead_shows_its_category_ratings_and_the_rules_are_explained():
     seed()
     at = run(LEADS)
+    widget(at.radio, "Show").set_value("today").run()
     assert any("Role\u00a05 · Industry\u00a03 · Location\u00a08" in c.value for c in at.caption)
     titles = [m.value for m in at.markdown if "BI Developer" in m.value]
     assert ":blue-badge[5.1/10]" in titles[0]
@@ -379,6 +384,7 @@ def test_a_lead_shows_listed_pay_plainly_and_a_warning_when_pay_is_missing_or_es
         "pay_note": "Levels.fyi range, Data Engineer, Denver",
         "fit": {"role": 6, "pay": 8}})[0]], TODAY)
     at = run(LEADS)
+    widget(at.radio, "Show").set_value("today").run()
     captions = [c.value for c in at.caption]
     assert any("Analytics Engineer" not in c and "\\$120,000\u2060–\u2060\\$140,000" in c
                for c in captions)
@@ -390,6 +396,7 @@ def test_a_lead_shows_listed_pay_plainly_and_a_warning_when_pay_is_missing_or_es
 def test_dismissing_a_lead_asks_why_and_restore_brings_it_back():
     seed()
     at = run(LEADS)
+    widget(at.radio, "Show").set_value("today").run()
     widget(at.selectbox, "Dismiss", 1).select("wrong role").run()
     assert not at.exception, [e.message for e in at.exception]
     assert data.job_leads("new")["title"].tolist() == ["Analytics Engineer"]
@@ -413,10 +420,12 @@ def test_todays_leads_are_marked_new_and_old_ones_go_stale():
     at = run(LEADS)
     assert any("3 new leads: 2 today, 2 strong" in c.value and "1 stale under Stale" in c.value
                for c in at.caption)
+    assert widget(at.radio, "Show").value == "strong"      # the strong ones come up first
     shown = [m.value for m in at.markdown if "**" in m.value and "—" in m.value]
-    assert widget(at.radio, "Show").value == "today"       # today's batch comes up first
+    assert len(shown) == 2 and not any("Forgotten Engineer" in m for m in shown)
+    widget(at.radio, "Show").set_value("today").run()
+    shown = [m.value for m in at.markdown if "**" in m.value and "—" in m.value]
     assert len(shown) == 2 and all(":blue-badge[New]" in m for m in shown)
-    assert not any("Forgotten Engineer" in m for m in shown)
     widget(at.radio, "Show").set_value("all").run()
     shown = [m.value for m in at.markdown if "**" in m.value and "—" in m.value]
     assert len(shown) == 3 and sum(":blue-badge[New]" in m for m in shown) == 2
@@ -526,8 +535,9 @@ def test_weak_leads_are_hidden_until_asked_for():
         "source": "Indeed", "title": "Excel Reporting Clerk", "company": "Epsilon",
         "fit_score": 2, "fit_reason": "Pure Excel reporting: a deal-breaker."})[0]], TODAY)
     at = run(LEADS)
-    assert any("3 new leads: 3 today, 1 strong (fit 7+), 1 weak (under 4)." in c.value
+    assert any("3 new leads: 3 today, 1 strong (fit 8+), 1 weak (under 4)." in c.value
                for c in at.caption)
+    widget(at.radio, "Show").set_value("today").run()
     shown = " ".join(m.value for m in at.markdown)           # New today: weak ones wait
     assert "Analytics Engineer" in shown and "BI Developer" in shown
     assert "Excel Reporting Clerk" not in shown

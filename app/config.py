@@ -45,7 +45,8 @@ LEAD_STATUSES = ["new", "moved", "dismissed"]
 
 # Why a lead was dismissed. The daily review reads the recent ones as a hint
 # of what the owner doesn't want.
-DISMISS_REASONS = ["wrong role", "location", "pay", "company", "already applied", "other"]
+DISMISS_REASONS = ["wrong role", "not enough experience", "location", "pay", "company",
+                   "already applied", "other"]
 
 # A lead still in the inbox this many days after it arrived is stale: shown
 # under its own view, out of the way (a posting that old is usually gone).
@@ -96,8 +97,10 @@ PAY_RESEARCH = (
 )
 
 # Fit scores (1-10) at or above this are a strong match: highlighted in the
-# app and listed first in the daily email.
-STRONG_FIT = 7
+# app, listed first in the daily email, and what the Job Leads inbox opens on.
+# 8 while only exceptional roles are worth the owner's time (7 was the
+# rubric's own bar; the review's scoring doesn't change with this).
+STRONG_FIT = 8
 HOME_FIT_MARKS = (8.0, 9.0)   # Home counts the inbox leads at or above each of these
 DIGEST_CARDS = 20             # leads shown as full cards in the digest email, best first
 DIGEST_ROWS = 15              # one-line rows after that in each section; the rest is a count

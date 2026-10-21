@@ -143,7 +143,9 @@ if section == "Inbox":
         SHOW = {"today": "New today", "maybe": f"Worth a look ({config.MAYBE_FIT}+, any day)",
                 "strong": f"Strong only ({config.STRONG_FIT}+)", "all": "All"}
         # The radio forgets its choice while another section is open; keep it ourselves.
-        kept = st.session_state.get("leads_show_kept", "today" if fresh.any() else "maybe")
+        # It opens on the strong ones when there are any: the rest can wait.
+        kept = st.session_state.get("leads_show_kept", "strong" if strong.any()
+                                    else "today" if fresh.any() else "maybe")
         show = st.radio("Show", list(SHOW), horizontal=True, format_func=SHOW.get,
                         index=list(SHOW).index(kept), key="leads_show",
                         label_visibility="collapsed")

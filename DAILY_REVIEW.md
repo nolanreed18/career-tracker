@@ -64,7 +64,9 @@ the inbox, never in this public repository.
    `profile` is what the owner is looking for, plus `skip_companies` (drop
    every job from those employers before anything else; a name matches when
    it appears in the employer's name) and `dismissed_recently` (jobs the
-   owner dismissed lately and why: `wrong role`, `location`, `pay`,
+   owner dismissed lately and why: `wrong role`, `not enough experience`
+   (the posting wanted more years or seniority than the owner has: rate
+   Level low for postings asking that much again), `location`, `pay`,
    `company`, `already applied` or `other`; treat each as a hint of what
    they don't want, so a job much like a dismissed one rates lower on that
    category). `rubric` gives `today` (the owner's date; the session's clock

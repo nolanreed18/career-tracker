@@ -147,7 +147,8 @@ create table if not exists job_leads (
     fit_detail      jsonb,             -- {"ratings": {category: 1-10}, "deal_breaker": bool}
     fit_reason      text,
     status          text not null check (status in ('new', 'moved', 'dismissed')),
-    dismiss_reason  text check (dismiss_reason in ('wrong role', 'location', 'pay', 'company',
+    dismiss_reason  text check (dismiss_reason in ('wrong role', 'not enough experience',
+                                                   'location', 'pay', 'company',
                                                    'already applied', 'other')),
     dismissed_on    date,
     application_id  bigint references applications on delete set null,
