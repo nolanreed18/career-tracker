@@ -212,8 +212,14 @@ def test_migrate_brings_an_older_job_leads_table_up_to_date(database):
         conn.execute("alter table job_leads drop column pay_source")
         conn.execute("alter table job_leads drop column pay_note")
         conn.execute("alter table job_leads alter column fit_score type smallint")
+        conn.execute("""alter table job_leads drop constraint job_leads_dismiss_reason_check,
+                        add constraint job_leads_dismiss_reason_check
+                            check (dismiss_reason in ('wrong role', 'other'))""")
     data.migrate()
     data.migrate()                                                   # safe to run again
+    data.add_leads(leads({"title": "Analyst"}), TODAY)
+    data.set_lead_status(int(data.job_leads()["lead_id"][0]), "dismissed",
+                         "not enough experience", TODAY)             # the CHECK was remade
     with psycopg.connect(database, autocommit=True) as conn:
         columns = dict(conn.execute("""
             select column_name, data_type from information_schema.columns
@@ -253,7 +259,7 @@ def test_every_dismiss_reason_is_allowed_by_the_schema_and_nothing_else():
 
 def test_recent_dismissals_and_strong_leads_still_waiting():
     data.add_leads(leads({"title": "Old strong", "fit_score": 8}), date(2026, 9, 1))  # stale
-    data.add_leads(leads({"title": "Waiting", "fit_score": 7.5}), date(2026, 10, 12))
+    data.add_leads(leads({"title": "Waiting", "fit_score": 8.5}), date(2026, 10, 12))
     data.add_leads(leads({"title": "Weak", "fit_score": 5}), date(2026, 10, 12))
     data.add_leads(leads({"title": "Today", "fit_score": 9}), TODAY)
     data.add_leads(leads({"title": "Gone", "fit_score": 9}), date(2026, 10, 13))
