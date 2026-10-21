@@ -116,8 +116,8 @@ def test_a_big_day_still_makes_a_small_email():
     cards = html.count(f'style="{digest.CARD_STYLE};margin:0 0 10px 0"')
     assert cards == config.DIGEST_CARDS                      # 20 cards, best first
     assert "Role 0" in html and "Role 99" not in html          # the tail is a count
-    assert "Role 19" in html and ">Role 34<" in html             # 20 cards, then 15 rows
-    assert ">Role 35<" not in html                               # then a count
+    assert "Role 19" in html and "Role 34 —" in html             # 20 cards, then 15 rows
+    assert "Role 35 —" not in html                               # then a count
     assert "…and 28 more worth a look" in html and "…and 22 more weak or unscored" in html
     assert "trk=xxx" not in html and "trk=xxx" not in text    # 600-char links: left to the app
     assert "…and 75 more in the app." in text
