@@ -219,7 +219,7 @@ def test_migrate_brings_an_older_job_leads_table_up_to_date(database):
     data.migrate()                                                   # safe to run again
     data.add_leads(leads({"title": "Analyst"}), TODAY)
     data.set_lead_status(int(data.job_leads()["lead_id"][0]), "dismissed",
-                         "not enough experience", TODAY)             # the CHECK was remade
+                         ["not enough experience", "too much travel"], TODAY)   # the CHECK was remade
     with psycopg.connect(database, autocommit=True) as conn:
         columns = dict(conn.execute("""
             select column_name, data_type from information_schema.columns
@@ -253,8 +253,14 @@ def test_every_dismiss_reason_is_allowed_by_the_schema_and_nothing_else():
     lead_id = int(data.job_leads()["lead_id"][0])
     for reason in config.DISMISS_REASONS:
         data.set_lead_status(lead_id, "dismissed", reason, TODAY)
+    data.set_lead_status(lead_id, "dismissed", ["wrong role", "too much travel"], TODAY)
+    assert data.lead(lead_id)["dismiss_reason"] == "wrong role, too much travel"   # several
     with pytest.raises(psycopg.errors.CheckViolation):
         data.set_lead_status(lead_id, "dismissed", "meh", TODAY)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        data.set_lead_status(lead_id, "dismissed", ["wrong role", "meh"], TODAY)
+    data.set_lead_status(lead_id, "dismissed", [], TODAY)
+    assert data.lead(lead_id)["dismiss_reason"] is None                          # none given
 
 
 def test_recent_dismissals_and_strong_leads_still_waiting():

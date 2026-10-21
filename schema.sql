@@ -147,9 +147,10 @@ create table if not exists job_leads (
     fit_detail      jsonb,             -- {"ratings": {category: 1-10}, "deal_breaker": bool}
     fit_reason      text,
     status          text not null check (status in ('new', 'moved', 'dismissed')),
-    dismiss_reason  text check (dismiss_reason in ('wrong role', 'not enough experience',
-                                                   'location', 'pay', 'company',
-                                                   'already applied', 'other')),
+    -- One reason or several, comma-separated, each from the list.
+    dismiss_reason  text check (string_to_array(dismiss_reason, ', ') <@ array[
+                        'wrong role', 'not enough experience', 'too much travel', 'location',
+                        'pay', 'company', 'already applied', 'other']::text[]),
     dismissed_on    date,
     application_id  bigint references applications on delete set null,
     dedupe_key      text not null,             -- company|title (logic.lead_key)

@@ -73,8 +73,8 @@ MIGRATIONS = [
     # 2026-10: why and when a lead was dismissed; companies the review skips.
     "alter table job_leads add column if not exists dismiss_reason text",
     "alter table job_leads add column if not exists dismissed_on date",
-    # 2026-10: "not enough experience" joins the dismiss reasons: the CHECK is
-    # remade (whatever it was called), so the live table takes the new list.
+    # 2026-10: more dismiss reasons, and several per lead (comma-separated): the
+    # CHECK is remade (whatever it was called), so the live table takes the list.
     """do $$ declare found record; begin
         for found in select conname from pg_constraint
             where conrelid = 'job_leads'::regclass and contype = 'c'
@@ -82,8 +82,9 @@ MIGRATIONS = [
             execute format('alter table job_leads drop constraint %I', found.conname);
         end loop;
         alter table job_leads add constraint job_leads_dismiss_reason_check
-            check (dismiss_reason in ('wrong role', 'not enough experience', 'location', 'pay',
-                                      'company', 'already applied', 'other'));
+            check (string_to_array(dismiss_reason, ', ') <@ array['wrong role',
+                   'not enough experience', 'too much travel', 'location', 'pay', 'company',
+                   'already applied', 'other']::text[]);
     end $$""",
     "alter table job_profile add column if not exists skip_companies text",
     # 2026-10: the job posting's text on an application, for tailoring the resume.
@@ -609,12 +610,14 @@ def known_lead_keys() -> set[str]:
         return {row[0] for row in cur.fetchall()}
 
 
-def set_lead_status(lead_id: int, status: str, reason: str | None = None,
+def set_lead_status(lead_id: int, status: str, reason: str | list[str] | None = None,
                     on: date | None = None) -> None:
-    """Dismiss a lead (with why, and when), or bring a dismissed one back as
-    new, which clears both."""
+    """Dismiss a lead (with why, one reason or several, and when), or bring a
+    dismissed one back as new, which clears both."""
     if status != "dismissed":
         reason, on = None, None
+    elif not isinstance(reason, str):
+        reason = ", ".join(reason or []) or None
     with _cursor() as cur:
         cur.execute("""
             update job_leads set status = %s, dismiss_reason = %s, dismissed_on = %s
