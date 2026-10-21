@@ -51,7 +51,7 @@ def pay_line(lead) -> str:
 
 def lead_card(lead) -> None:
     """One lead: score, title (opens the posting), where, pay, ratings and
-    reason, then Add and a "Dismiss…" pick that asks why."""
+    reason, then Add and a "Dismiss…" pick that asks why (one reason or several)."""
     lead_id = int(lead.lead_id)
     with card(f"lead-{lead_id}"):
         fit = fit_badge(lead.fit_score)
@@ -77,14 +77,16 @@ def lead_card(lead) -> None:
             st.session_state["flash"] = " ".join(["Added to Applications as Saved."] + notes)
             st.session_state["open_application"] = application_id
             st.switch_page("pages/2_Applications.py")
-        reason = dismiss_col.selectbox(
-            "Dismiss", config.DISMISS_REASONS, index=None, placeholder="Dismiss…",
+        reasons = dismiss_col.multiselect(
+            "Dismiss", config.DISMISS_REASONS, placeholder="Dismiss…",
             key=f"dismiss_{lead_id}_{round_key('leads')}", label_visibility="collapsed",
-            help="Dismiss this lead, and say why: the daily review reads recent reasons")
-        if reason:
-            data.set_lead_status(lead_id, "dismissed", reason, today)
+            help="Pick why, one reason or several, then tap Dismiss: the daily review "
+                 "reads recent reasons")
+        if reasons and st.button(f"Dismiss: {', '.join(reasons)}", key=f"dismiss_go_{lead_id}",
+                                 width="stretch"):
+            data.set_lead_status(lead_id, "dismissed", reasons, today)
             bump_round("leads")
-            done(f"Dismissed {lead.title} — {lead.company} ({reason}).")
+            done(f"Dismissed {lead.title} — {lead.company} ({', '.join(reasons)}).")
 
 
 def in_batches(frame, key: str, draw) -> None:
@@ -107,7 +109,7 @@ def dismissed_card(lead) -> None:
         fit = fit_badge(lead.fit_score)
         why = ""
         if logic.value(lead.dismiss_reason):
-            why = badge("gray", lead.dismiss_reason)
+            why = " ".join(badge("gray", r) for r in logic.dismiss_reasons(lead.dismiss_reason))
             if logic.value(lead.dismissed_on):
                 why += f" dismissed {logic.when(lead.dismissed_on, today)}"
             why += "  \n"

@@ -66,10 +66,10 @@ the inbox, never in this public repository.
    it appears in the employer's name) and `dismissed_recently` (jobs the
    owner dismissed lately and why: `wrong role`, `not enough experience`
    (the posting wanted more years or seniority than the owner has: rate
-   Level low for postings asking that much again), `location`, `pay`,
-   `company`, `already applied` or `other`; treat each as a hint of what
-   they don't want, so a job much like a dismissed one rates lower on that
-   category). `rubric` gives `today` (the owner's date; the session's clock
+   Level low for postings asking that much again), `too much travel`,
+   `location`, `pay`, `company`, `already applied` or `other`, one reason
+   or several, comma-separated; treat each as a hint of what they don't
+   want, so a job much like a dismissed one rates lower on that category). `rubric` gives `today` (the owner's date; the session's clock
    is UTC, which can be a day ahead), the scoring categories with their
    weights and what each one means, and the pay rules. `known` lists the
    jobs already stored as `company|title` (lower-case, punctuation

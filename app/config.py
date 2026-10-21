@@ -43,10 +43,10 @@ CAREER_KINDS = ["win", "skill", "certification", "feedback", "learning"]
 # Job leads from alert emails. "moved" means it became an application.
 LEAD_STATUSES = ["new", "moved", "dismissed"]
 
-# Why a lead was dismissed. The daily review reads the recent ones as a hint
-# of what the owner doesn't want.
-DISMISS_REASONS = ["wrong role", "not enough experience", "location", "pay", "company",
-                   "already applied", "other"]
+# Why a lead was dismissed: one reason or several (stored comma-separated).
+# The daily review reads the recent ones as a hint of what the owner doesn't want.
+DISMISS_REASONS = ["wrong role", "not enough experience", "too much travel", "location",
+                   "pay", "company", "already applied", "other"]
 
 # A lead still in the inbox this many days after it arrived is stale: shown
 # under its own view, out of the way (a posting that old is usually gone).

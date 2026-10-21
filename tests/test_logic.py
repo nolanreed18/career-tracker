@@ -527,3 +527,8 @@ def test_a_job_board_link_is_told_from_an_employers_own_site():
     assert logic.is_job_board("https://www.indeed.com/viewjob?jk=1") and logic.is_job_board("https://builtin.com/job/1")
     assert not logic.is_job_board("https://bp.wd3.myworkdayjobs.com/en-US/bpx/job/R1")
     assert not logic.is_job_board("https://boards.greenhouse.io/acme/jobs/1") and not logic.is_job_board(None)
+
+
+def test_dismiss_reasons_are_split_from_their_stored_form():
+    assert logic.dismiss_reasons("wrong role, too much travel") == ["wrong role", "too much travel"]
+    assert logic.dismiss_reasons("pay") == ["pay"] and logic.dismiss_reasons(None) == []

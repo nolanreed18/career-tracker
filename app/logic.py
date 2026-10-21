@@ -432,6 +432,11 @@ def skips_company(company, skip: list[str]) -> bool:
     return any(entry == name or f" {entry} " in f" {name} " for entry in skip)
 
 
+def dismiss_reasons(text) -> list[str]:
+    """A lead's dismiss reasons, stored comma-separated, as a list."""
+    return [part for part in str(text or "").split(", ") if part]
+
+
 def dismissal_notes(dismissed: pd.DataFrame) -> list[dict]:
     """Recent dismissals as plain records for the daily review: title,
     company, location, reason and date."""

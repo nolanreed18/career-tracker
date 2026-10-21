@@ -397,13 +397,17 @@ def test_dismissing_a_lead_asks_why_and_restore_brings_it_back():
     seed()
     at = run(LEADS)
     widget(at.radio, "Show").set_value("today").run()
-    widget(at.selectbox, "Dismiss", 1).select("wrong role").run()
+    assert not any(b.label.startswith("Dismiss:") for b in at.button)   # nothing picked yet
+    widget(at.multiselect, "Dismiss", 1).select("wrong role").select("too much travel").run()
     assert not at.exception, [e.message for e in at.exception]
+    assert len(data.job_leads("new")) == 2                               # picking doesn't dismiss
+    click(at, "Dismiss: wrong role, too much travel")
     assert data.job_leads("new")["title"].tolist() == ["Analytics Engineer"]
     gone = data.job_leads("dismissed").iloc[0]
-    assert (gone["dismiss_reason"], gone["dismissed_on"]) == ("wrong role", TODAY)
+    assert (gone["dismiss_reason"], gone["dismissed_on"]) == ("wrong role, too much travel", TODAY)
     widget(at.radio, "Section").set_value("Dismissed").run()
-    assert any(":gray-badge[wrong role] dismissed today" in m.value for m in at.markdown)
+    assert any(":gray-badge[wrong role] :gray-badge[too much travel] dismissed today" in m.value
+               for m in at.markdown)
     click(at, "Restore")
     assert len(data.job_leads("new")) == 2
     assert data.lead(int(gone["lead_id"]))["dismiss_reason"] is None
