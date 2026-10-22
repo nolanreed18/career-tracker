@@ -11,6 +11,7 @@ import data
 import logic
 from ui import (
     STATUS_HELP,
+    badge,
     bump_round,
     delete_button,
     disclosure,
@@ -112,13 +113,17 @@ if view.empty:
     empty("filter_alt", "Nothing matches", hint)
 else:
     st.dataframe(
-        logic.for_display(view.assign(status=view["status"].map(status_label))[
-            ["company", "role", "status", "applied_on", "next_action_on", "last_update_on"]],
+        logic.for_display(view.assign(status=view["status"].map(status_label),
+                                      resume=view["tailored"] > 0)[
+            ["company", "role", "status", "resume", "applied_on", "next_action_on",
+             "last_update_on"]],
             dates=("applied_on", "next_action_on", "last_update_on")),
         hide_index=True, width="stretch",
         column_config={
             "company": "Company", "status": st.column_config.TextColumn("Status", width=105),
             "role": st.column_config.TextColumn("Role", width="large"),
+            "resume": st.column_config.CheckboxColumn("Resume", width=70, disabled=True,
+                                                      help="A tailored resume exists"),
             "applied_on": st.column_config.DateColumn("Applied", format="MMM D"),
             "next_action_on": st.column_config.DateColumn("Next step", format="MMM D"),
             "last_update_on": st.column_config.DateColumn("Updated", format="MMM D"),
@@ -159,6 +164,10 @@ if salary := logic.salary_range(app["salary_min"], app["salary_max"]):
     facts.append(salary)
 facts += logic.place(app["location"], app["work_mode"]) + ([app["source"]] if app["source"] else [])
 st.markdown(f"{status_badge(app['status'])} {md(' · '.join(facts))}")
+if app["tailored"]:
+    st.markdown(f"{badge('green', 'Resume ready')} "
+                f"{logic.plural(int(app['tailored']), 'tailored version')} with cover letter, "
+                "on Resume Builder")
 if app["next_action"] or app["next_action_on"]:
     due = f" — due {logic.when(app['next_action_on'], today)}" if app["next_action_on"] else ""
     st.markdown(f"**Next step:** {md(app['next_action'] or 'Next step')}{md(due)}")
@@ -175,7 +184,13 @@ if app["apply_note"]:
                   else f"Not found on the employer's site: {app['apply_note']}"))
 if app["notes"]:
     st.caption(md(app["notes"]))
-applied_col, find_col = st.columns(2)
+resume_col, applied_col, find_col = st.columns(3)
+if resume_col.button("Resume Builder", icon=":material/auto_awesome:", width="stretch",
+                     type="secondary" if app["tailored"] else "primary",
+                     help="Tailor the resume and cover letter to this job"):
+    st.session_state["tailor_application"] = picked
+    st.session_state["resume_goto"] = "Resume Builder"
+    st.switch_page("pages/8_Resume.py")
 if app["status"] == "saved" and applied_col.button(
         "Applied today", icon=":material/send:", width="stretch",
         help="Marks it Applied as of today and starts the follow-up clock"):

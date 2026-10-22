@@ -112,8 +112,11 @@ def needs_attention(apps: pd.DataFrame, interviews: pd.DataFrame, today: date,
 
 def application_labels(apps: pd.DataFrame) -> dict[int, str]:
     """{application_id: "Company — Role"} for a dropdown (plain ints: the
-    database driver doesn't take numpy's)."""
-    return {int(r.application_id): f"{r.company} — {r.role}" for r in apps.itertuples()}
+    database driver doesn't take numpy's), marked "· resume ready" when the
+    frame says a tailored resume exists."""
+    ready = apps["tailored"] > 0 if "tailored" in apps.columns else [False] * len(apps)
+    return {int(r.application_id): f"{r.company} — {r.role}" + (" · resume ready" if done else "")
+            for r, done in zip(apps.itertuples(), ready)}
 
 
 def pipeline(apps: pd.DataFrame) -> pd.DataFrame:
