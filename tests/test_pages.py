@@ -789,6 +789,24 @@ def test_the_posting_section_offers_the_link_only_when_there_is_one():
     assert any(b.label == "Get the posting from the link" for b in at.button)
 
 
+def test_an_application_shows_its_resume_flag_and_opens_resume_builder():
+    app_id = seed()
+    at = new_app(APPS)
+    at.session_state["open_application"] = app_id
+    at.run()
+    table = at.dataframe[0].value
+    assert "resume" in table.columns and not table["resume"].any()
+    assert not any("Resume ready" in m.value for m in at.markdown)
+    data.add_tailored(app_id, {"roles": [], "cover_letter": "Dear"}, None, "m", TODAY)
+    at.run()
+    assert at.dataframe[0].value.set_index("role").loc["Data Analyst", "resume"]
+    assert any(":green-badge[Resume ready] 1 tailored version with cover letter" in m.value
+               for m in at.markdown)
+    widget(at.button, "Resume Builder").click().run()     # the page switch itself is outside AppTest
+    assert at.session_state["tailor_application"] == app_id
+    assert at.session_state["resume_goto"] == "Resume Builder"
+
+
 def test_the_posting_section_saves_the_job_posting():
     app_id = seed()
     at = new_app(APPS)

@@ -36,7 +36,7 @@ database, hosted free on Streamlit Community Cloud.
   updates (status changes or plain notes), set the next step, add interviews,
   edit, and see its full history. **Add** on a lead saves it here, reads the
   posting from its link and has Claude search for the same posting on the
-  employer's own careers site (about 10 cents), so the application opens with
+  employer's own careers site (about 15 cents), so the application opens with
   **Apply on the employer's site** and never needs LinkedIn's Easy Apply;
   **Applied today** logs the application in one tap.
 - **Interviews**: upcoming and past, with prep notes, "how it went" and a 1–5
@@ -68,7 +68,8 @@ database, hosted free on Streamlit Community Cloud.
   letter, mark which of the posting's keywords the resume shows, and list
   every change with its reason. Each click is a new version; you edit the
   bullets and the letter, and download both as Word files in your layout. Every Claude call is a
-  button you click, costs about 30 cents, and is counted on the page.
+  button you click, costs about 45 cents (30 to build the master), and is
+  counted on the page.
 
 Settings you might want to change (the 14-day follow-up, the 7-day interview
 window, the status list, the Claude model) are in `app/config.py`.

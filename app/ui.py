@@ -205,7 +205,7 @@ def find_posting_button(app: dict, key: str) -> None:
     if st.button("Find it on the employer's site", key=f"find_posting_{key}",
                  icon=":material/travel_explore:", width="stretch",
                  help="Claude searches the web for this posting on the employer's own "
-                      "careers site, so you can apply there (about 10 cents)"):
+                      "careers site, so you can apply there (about 15 cents)"):
         with st.spinner("Searching the employer's site…"):
             notes = find_company_posting(app, data.today())
         done(" ".join(notes))

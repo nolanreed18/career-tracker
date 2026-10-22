@@ -315,14 +315,16 @@ _APPLICATIONS = """
                      where e.application_id = a.application_id),
                     a.created_on) as last_update_on,
            (select count(*) from interviews i
-            where i.application_id = a.application_id) as interviews
+            where i.application_id = a.application_id) as interviews,
+           (select count(*) from tailored_resumes t
+            where t.application_id = a.application_id) as tailored
     from applications a join companies co using (company_id)
 """
 
 
 def applications() -> pd.DataFrame:
     """Every application, newest first, with its company name, the date of its
-    latest update and how many interviews it has."""
+    latest update, how many interviews it has and how many tailored resumes."""
     return _read(_APPLICATIONS + """
         order by coalesce(a.applied_on, a.created_on) desc, a.application_id desc
     """)

@@ -109,14 +109,17 @@ DIGEST_ROWS = 15              # one-line rows after that in each section; the re
 # clicks; nothing calls Claude on its own. The key is ANTHROPIC_API_KEY in the
 # app's secrets (or .env locally); the model is pinned here.
 AI_MODEL = "claude-opus-5-5"
+# The employer-site search reads a lot of web pages for a small answer: a
+# cheaper model does it, and the app checks the link against the ATS feed.
+AI_FIND_MODEL = "claude-sonnet-5-5"
 # Dollars per million input / output tokens, for the running cost shown in
 # the app (thinking counts as output).
-AI_PRICES = {"claude-opus-5-5": (4.0, 20.0)}
+AI_PRICES = {"claude-opus-5-5": (4.0, 20.0), "claude-sonnet-5-5": (2.0, 10.0)}
 AI_MAX_TOKENS = 32000          # thinking counts against it; a cut-off answer is an error
 AI_SEARCH_PRICE = 0.01         # dollars per web search ($10 per 1,000), on top of the tokens
-AI_SEARCH_MAX = 10             # searches one "find it on the employer's site" call may make
-AI_FETCH_MAX = 5               # pages it may open (the careers site itself; no charge)
-AI_FETCH_TOKENS = 12000        # the most of one page it reads
+AI_SEARCH_MAX = 8              # searches one "find it on the employer's site" call may make
+AI_FETCH_MAX = 4               # pages it may open (the careers site itself; no charge)
+AI_FETCH_TOKENS = 8000         # the most of one page it reads (every page is input tokens)
 AI_FIND_MAX_TOKENS = 16000     # that call's answer is a few lines, but each search and
                                # page costs output tokens too (thinking counts as well)
 POSTING_PROMPT_CHARS = 3000    # how much of the posting that call is shown

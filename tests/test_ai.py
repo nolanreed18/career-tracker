@@ -207,8 +207,10 @@ def test_find_posting_searches_the_web_resumes_a_pause_and_counts_the_searches(m
     assert found["title"] == "Senior Development Systems Engineer"
     assert found["location"] == "Houston, TX"
     assert (usage.input_tokens, usage.output_tokens, usage.searches) == (6000, 1000, 2)
-    assert usage.cost_usd == round(6000 * 4 / 1e6 + 1000 * 20 / 1e6 + 2 * 0.01, 4)
+    assert usage.model == config.AI_FIND_MODEL == "claude-sonnet-5-5"       # the cheaper model
+    assert usage.cost_usd == round(6000 * 2 / 1e6 + 1000 * 10 / 1e6 + 2 * 0.01, 4)
     first, second = messages.calls
+    assert first["model"] == config.AI_FIND_MODEL
     assert first["tools"] == [
         {"type": "web_search_20260209", "name": "web_search", "max_uses": config.AI_SEARCH_MAX,
          "blocked_domains": config.JOB_BOARDS},                   # no job-board results

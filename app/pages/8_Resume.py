@@ -300,7 +300,7 @@ if section == "Resume Builder":
         else:
             st.caption("One Claude call picks and rewords the master's bullets for this "
                        "posting, writes the cover letter and lists what it changed. About "
-                       "30 cents. Each click adds a version; earlier ones stay.")
+                       "45 cents. Each click adds a version; earlier ones stay.")
 
         versions = data.tailored_versions(picked)
         if versions.empty:

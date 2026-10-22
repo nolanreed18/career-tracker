@@ -532,3 +532,9 @@ def test_a_job_board_link_is_told_from_an_employers_own_site():
 def test_dismiss_reasons_are_split_from_their_stored_form():
     assert logic.dismiss_reasons("wrong role, too much travel") == ["wrong role", "too much travel"]
     assert logic.dismiss_reasons("pay") == ["pay"] and logic.dismiss_reasons(None) == []
+
+
+def test_application_labels_mark_the_ones_with_a_tailored_resume():
+    apps = pd.DataFrame({"application_id": [1, 2], "company": ["Acme", "Beta"],
+                         "role": ["Analyst", "PM"], "tailored": [2, 0]})
+    assert logic.application_labels(apps) == {1: "Acme — Analyst · resume ready", 2: "Beta — PM"}

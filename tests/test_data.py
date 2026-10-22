@@ -376,6 +376,8 @@ def test_a_posting_and_tailored_versions_live_with_the_application():
     second = data.add_tailored(app_id, {"roles": [1]}, "lead with SQL", "m-1", TODAY)
     versions = data.tailored_versions(app_id)
     assert versions["version"].tolist() == [2, 1]
+    assert data.applications().set_index("application_id").loc[app_id, "tailored"] == 2
+    assert data.application(app_id)["tailored"] == 2
     assert versions["tailor_id"].tolist() == [second, first]
     assert versions["notes"].iloc[0] == "lead with SQL" and versions["notes"].isna().tolist() == [
         False, True]

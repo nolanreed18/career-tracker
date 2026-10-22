@@ -282,11 +282,12 @@ def find_posting(company: str, title: str, location, source, posting: str) -> tu
               "blocked_domains": config.JOB_BOARDS},
              {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": config.AI_FETCH_MAX,
               "max_content_tokens": config.AI_FETCH_TOKENS}]
-    model, tokens_in, tokens_out, searches = config.AI_MODEL, 0, 0, 0
+    model, tokens_in, tokens_out, searches = config.AI_FIND_MODEL, 0, 0, 0
     for _ in range(4):
         try:
             response = client().messages.create(
-                model=config.AI_MODEL, max_tokens=config.AI_FIND_MAX_TOKENS, system=FIND_SYSTEM,
+                model=config.AI_FIND_MODEL, max_tokens=config.AI_FIND_MAX_TOKENS,
+                system=FIND_SYSTEM,
                 messages=messages, tools=tools, output_config={"effort": "medium"})
         except anthropic.APIError as exc:
             spent = Usage(model, tokens_in, tokens_out, searches) if tokens_in else None

@@ -26,8 +26,8 @@ only they can do (accounts, secrets, clicking merge).
   A new `leads.py` command also goes in `.claude/settings.json`.
 - Claude inside the app is `app/ai.py` only: the key is `ANTHROPIC_API_KEY`
   in secrets (or `.env`), never printed; every call sits behind a button the
-  owner clicks and is logged to `ai_usage` with its cost (`config.AI_MODEL`,
-  `AI_PRICES`); nothing calls Claude on its own. Structured output goes
+  owner clicks and is logged to `ai_usage` with its cost (`config.AI_MODEL`;
+  the employer-site search runs on the cheaper `AI_FIND_MODEL`; `AI_PRICES`); nothing calls Claude on its own. Structured output goes
   through `resume_schema` (pydantic, every field required): `Resume` for
   the master, `Tailored` for one application's version (`tailored_resumes`,
   one row per click, never overwritten by a new click). Word files are
