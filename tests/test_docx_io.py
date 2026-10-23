@@ -1,9 +1,12 @@
 """Reading a Word file as text, and writing the master back in its layout."""
 
+import io
+
 import pytest
+from docx import Document
 from docx.enum.text import WD_TAB_ALIGNMENT
 from docx.oxml.ns import qn
-from docx.shared import Twips
+from docx.shared import Pt, Twips
 from docx.text.paragraph import Paragraph
 
 import docx_fixture
@@ -92,7 +95,6 @@ def test_weights_tabs_and_indents_follow_the_template():
 
 
 def test_a_template_without_the_needed_examples_is_refused():
-    import io
 
     from docx import Document
     doc = Document()
@@ -145,3 +147,14 @@ def test_a_letter_keeps_the_header_in_one_column():
     page = doc.sections[-1]
     assert [(stop.alignment, stop.position) for stop in stops] == [
         (WD_TAB_ALIGNMENT.RIGHT, page.page_width - page.left_margin - page.right_margin)]
+
+
+def test_a_bullets_line_width_comes_from_the_templates_column_and_font_size():
+    assert docx_io.line_chars(docx_fixture.template()) == 69       # 6840 - 720 twips at 11pt
+    doc = Document(io.BytesIO(docx_fixture.template()))
+    for p in doc.paragraphs:
+        if p.style.name == "List Paragraph":
+            p.runs[0].font.size = Pt(10)
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    assert docx_io.line_chars(buffer.getvalue()) == 76              # the owner's: 10pt Cambria

@@ -30,7 +30,11 @@ only they can do (accounts, secrets, clicking merge).
   the employer-site search runs on the cheaper `AI_FIND_MODEL`; `AI_PRICES`); nothing calls Claude on its own. Structured output goes
   through `resume_schema` (pydantic, every field required): `Resume` for
   the master, `Tailored` for one application's version (`tailored_resumes`,
-  one row per click, never overwritten by a new click). Word files are
+  one row per click, never overwritten by a new click; the page keeps it to
+  one page with `logic.fit_column`, the master's printed roles measured in
+  lines by `logic.column_lines` at `docx_io.line_chars(template)` a line:
+  the template's left column holds the roles, so that is the yardstick,
+  and the prompt's `<limits>` give the master's size column by column). Word files are
   `app/docx_io.py`: the writer clones paragraphs from the owner's own resume
   (the template), never styles anything itself; `build` prints a resume,
   `letter` a cover letter. Tests stand the API in (`tests/test_ai.py`); no

@@ -25,6 +25,9 @@ DATE_RANGE = re.compile(r"\b(?:19|20)\d{2}\b.*?(?:-|–|—).*?(?:\b(?:19|20)\d{
 DEFAULT_COLUMN_TWIPS = 6840          # the left column's width when the template doesn't say
 DEFAULT_TEXT_WIDTH_TWIPS = 10620     # margin to margin, when the template doesn't say
 TWIPS_PER_SPACE = 50                 # a typed space of 10-11pt text, as a paragraph indent
+BULLET_INDENT_TWIPS = 720            # Word's list indent: a bullet's text starts this far in
+CHAR_EMS = 0.4                       # an average character of body text, in ems
+DEFAULT_HALF_POINTS = 22             # 11pt, when a bullet's run doesn't say its size
 
 
 @dataclass(frozen=True)
@@ -234,6 +237,24 @@ def _header(header, name: str, contact: str, width: int):
         Paragraph(new, None).paragraph_format.tab_stops.add_tab_stop(
             Twips(width), WD_TAB_ALIGNMENT.RIGHT)
     return new
+
+
+def _half_points(p) -> int:
+    """The font size of a paragraph's first run, in half-points."""
+    run = p.find(qn("w:r"))
+    size = None if run is None else run.find(f"{qn('w:rPr')}/{qn('w:sz')}")
+    value = None if size is None else size.get(qn("w:val"))
+    return int(value) if value and value.isdigit() else DEFAULT_HALF_POINTS
+
+
+def line_chars(template: bytes) -> int:
+    """About how many characters one line of a bullet holds in the
+    template's left column: its width less the list indent, over an average
+    character at the bullet's font size (a half-point is ten twips)."""
+    doc, paras = _paragraphs(template)
+    bullet = next((p for p in paras[1:] if _bullet(p)), None)
+    char = (DEFAULT_HALF_POINTS if bullet is None else _half_points(bullet)) * 10 * CHAR_EMS
+    return max(20, int((_column_width(doc.element.body) - BULLET_INDENT_TWIPS) / char))
 
 
 def _text_width(*sections) -> int:

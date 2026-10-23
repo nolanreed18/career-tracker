@@ -716,11 +716,17 @@ def test_a_tailored_version_longer_than_the_master_gets_a_warning():
     app_id = data.add_application(data.company_id_for("Acme Corp.", TODAY), "Analyst", "saved",
                                   TODAY, posting="We need SQL.")
     long = {**TAILORED, "roles": [{**TAILORED["roles"][0], "bullets": [
-        {"text": "A bullet " * 40, "original": "", "skills": []}]}]}
-    data.add_tailored(app_id, logic.clean_tailored(long), None, "m", TODAY)
+        {"text": f"Bullet {n} " * 12, "original": "", "skills": []} for n in range(3)]}]}
+    tailor_id = data.add_tailored(app_id, logic.clean_tailored(long), None, "m", TODAY)
     at = run(RESUME)
     widget(at.radio, "Section").set_value("Resume Builder").run()
-    assert any("Longer than the master" in w.value for w in at.warning)
+    assert any("Longer than the master" in w.value for w in at.warning)   # 8 lines against 6
+    click(at, "Trim to one page")
+    assert any("Trimmed to one page: 1 bullet left off." in s.value for s in at.success)
+    assert not at.warning
+    saved = data.tailored(tailor_id)["content"]
+    assert [b["text"][:8] for b in saved["roles"][0]["bullets"]] == ["Bullet 0", "Bullet 1"]
+    assert saved["changes"][-1].startswith("Left off the last bullet under Acme Energy")
 
 
 def test_the_header_doesnt_repeat_a_remote_location():

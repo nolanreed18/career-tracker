@@ -64,9 +64,12 @@ Rules:
 - person gives the name to sign the letter with and today's date: count
   years of experience and whether a degree is finished from that date,
   never from a guess.
-- One page, like the master: limits gives how many bullets the master
-  prints and how many characters they total; stay within both, trimming
-  words before dropping a bullet.
+- One page, like the master, which prints in two columns: the roles fill
+  the left column to its last line, education, skills and projects the
+  right. limits gives how many bullets the master prints under its roles
+  and how many characters they total, and the same for its projects: stay
+  within both for the roles and both for the projects (anything longer
+  spills onto a second page), trimming words before dropping a bullet.
 - Within a role keep the tense the master's printed bullets use there,
   and end bullets as the master ends them (no full stop when it has none).
 - skill_groups: the master's groups with the relevant skills first; keep
@@ -259,7 +262,10 @@ def tailor(master: dict, posting: str, company: str, role: str, today: date,
         raise AIError("Paste the job posting first: Claude tailors to its words.")
     budget = logic.master_budget(master)
     prompt = (f"<person name=\"{master.get('name', '')}\" today=\"{logic.long_date(today)}\"/>\n"
-              f"<limits bullets=\"{budget['bullets']}\" characters=\"{budget['characters']}\"/>\n\n"
+              f"<limits><roles bullets=\"{budget['roles']['bullets']}\" "
+              f"characters=\"{budget['roles']['characters']}\"/>"
+              f"<projects bullets=\"{budget['projects']['bullets']}\" "
+              f"characters=\"{budget['projects']['characters']}\"/></limits>\n\n"
               f"<master>\n{json.dumps(master_for_prompt(master), indent=1)}\n</master>\n\n"
               f"<posting company=\"{company}\" role=\"{role}\">\n{posting.strip()}\n</posting>\n\n")
     if notes.strip():
