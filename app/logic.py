@@ -5,6 +5,7 @@ no Streamlit, so all of it is tested directly.
 
 import calendar
 import copy
+import math
 import re
 from dataclasses import dataclass
 from datetime import date, time, timedelta
@@ -205,6 +206,15 @@ def for_display(frame: pd.DataFrame, dates: tuple[str, ...] = ()) -> pd.DataFram
 
 def plural(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def shorten(text: str, limit: int) -> str:
+    """The text cut to limit characters at a word, with an ellipsis."""
+    text = " ".join(str(text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0] if " " in text[:limit] else text[:limit]
+    return cut.rstrip(",;:") + "…"
 
 
 def when(d: date, today: date) -> str:
@@ -829,8 +839,9 @@ def long_date(d: date) -> str:
 
 
 MONTHS = {name.lower(): n for n, name in enumerate(calendar.month_abbr) if name}
-PAGE_SLACK = 1.05                    # a tailored version this much longer than the master
-                                     # (in characters of bullets) risks a second page
+LINE_CHARS = 75                      # characters a bullet's line holds when the template can't say
+EMPLOYER_LINES = 1                   # the employer line above its roles
+ROLE_LINES = 1                       # a role's title-and-dates line
 
 
 def parse_month(text) -> date | None:
@@ -858,17 +869,67 @@ def _printed(master: dict) -> list[str]:
             for b in role.get("bullets", []) if b.get("in_master")]
 
 
+def printed_roles(items: list[dict]) -> list[dict]:
+    """The master's roles (or projects) as they print: in_master bullets
+    only, and only the roles that have one."""
+    out = []
+    for role in items:
+        bullets = [b for b in role.get("bullets", []) if b.get("in_master")]
+        if bullets:
+            out.append({**role, "bullets": bullets})
+    return out
+
+
 def master_budget(master: dict) -> dict:
-    """What the printed master holds: bullets and their characters together,
-    the one-page budget a tailored version has to fit."""
-    printed = _printed(master)
-    return {"bullets": len(printed), "characters": sum(len(t) for t in printed)}
+    """What the printed master holds, column by column: the roles' bullets
+    and their characters (the left column of the page) and the projects'
+    (the right), the one-page budget a tailored version has to fit."""
+    def measure(items: list[dict]) -> dict:
+        texts = [b["text"] for role in printed_roles(items) for b in role["bullets"]]
+        return {"bullets": len(texts), "characters": sum(len(t) for t in texts)}
+    return {"roles": measure(list(master.get("roles", []))),
+            "projects": measure(list(master.get("projects", [])))}
 
 
-def tailored_chars(tailored: dict) -> int:
-    """Characters of bullets a tailored version prints."""
-    return sum(len(b["text"]) for role in list(tailored.get("roles", []))
-               + list(tailored.get("projects", [])) for b in role.get("bullets", []))
+def column_lines(roles: list[dict], line_chars: int = LINE_CHARS) -> int:
+    """About how many lines a column of roles takes: an employer line above
+    each run of roles there, a title line each, and every bullet's lines at
+    line_chars characters a line. Every bullet given counts (the master's
+    go through printed_roles first)."""
+    lines, last = 0, None
+    for role in roles:
+        bullets = role.get("bullets", [])
+        if not bullets:
+            continue
+        if role.get("employer") != last:
+            lines += EMPLOYER_LINES
+            last = role.get("employer")
+        lines += ROLE_LINES + sum(math.ceil(len(b["text"]) / line_chars) for b in bullets)
+    return lines
+
+
+def fit_column(tailored: dict, master: dict, line_chars: int = LINE_CHARS) -> dict:
+    """The tailored version cut to the master's experience column (the
+    master's printed roles fit the page; its lines are the yardstick): while
+    the tailored roles need more, the last bullet goes from the role with
+    the most (its least relevant, the way Claude orders them), and changes
+    says so. The first role keeps a bullet; a role left with none goes."""
+    out = copy.deepcopy(tailored)
+    out.setdefault("changes", [])
+    roles = out.setdefault("roles", [])
+    limit = column_lines(printed_roles(list(master.get("roles", []))), line_chars)
+    while column_lines(roles, line_chars) > limit:
+        spare = [r for n, r in enumerate(roles) if len(r.get("bullets", [])) > (n == 0)]
+        if not spare:
+            break
+        role = max(spare, key=lambda r: len(r["bullets"]))
+        dropped = role["bullets"].pop()
+        out["changes"].append(f"Left off the last bullet under {role.get('employer', '')} "
+                              f"(“{shorten(dropped['text'], 60)}”): the experience column "
+                              "was full.")
+        if not role["bullets"]:
+            roles.remove(role)
+    return out
 
 
 def match_endings(tailored: dict, master: dict) -> dict:

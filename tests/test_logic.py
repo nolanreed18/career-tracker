@@ -498,10 +498,10 @@ def test_a_tailored_version_is_measured_against_the_master_and_ends_bullets_its_
                                      {"text": "Did y.", "in_master": True},
                                      {"text": "Pool bullet", "in_master": False}]}],
               "projects": [{"bullets": [{"text": "Made z", "in_master": True}]}]}
-    assert logic.master_budget(master) == {"bullets": 3, "characters": 18}
+    assert logic.master_budget(master) == {"roles": {"bullets": 2, "characters": 12},
+                                           "projects": {"bullets": 1, "characters": 6}}
     tailored = {"roles": [{"bullets": [{"text": "Did x for finance"}, {"text": "Did y."}]}],
                 "projects": [{"bullets": [{"text": "Made z!"}]}]}
-    assert logic.tailored_chars(tailored) == 30
     ended = logic.match_endings(tailored, master)                  # most master bullets end "."
     assert [b["text"] for b in ended["roles"][0]["bullets"]] == ["Did x for finance.", "Did y."]
     assert ended["projects"][0]["bullets"][0]["text"] == "Made z!"
@@ -538,3 +538,52 @@ def test_application_labels_mark_the_ones_with_a_tailored_resume():
     apps = pd.DataFrame({"application_id": [1, 2], "company": ["Acme", "Beta"],
                          "role": ["Analyst", "PM"], "tailored": [2, 0]})
     assert logic.application_labels(apps) == {1: "Acme — Analyst · resume ready", 2: "Beta — PM"}
+
+
+def test_a_column_of_roles_is_counted_in_lines_the_way_the_template_lays_it_out():
+    roles = [{"employer": "A", "title": "T1", "bullets": [{"text": "x" * 150}, {"text": "y" * 76}]},
+             {"employer": "A", "title": "T2", "bullets": [{"text": "z" * 75}]},
+             {"employer": "B", "title": "T3", "bullets": []}]
+    # A once, two title lines, 2 + 2 + 1 lines of bullets; B prints nothing
+    assert logic.column_lines(roles, 75) == 1 + 1 + 4 + 1 + 1
+    assert logic.column_lines([], 75) == 0
+    assert logic.printed_roles([{"employer": "A", "bullets": [
+        {"text": "on", "in_master": True}, {"text": "pool", "in_master": False}]},
+        {"employer": "B", "bullets": [{"text": "pool", "in_master": False}]}]) == [
+        {"employer": "A", "bullets": [{"text": "on", "in_master": True}]}]
+
+
+def test_a_tailored_version_is_trimmed_to_the_masters_experience_column():
+    master = {"roles": [
+        {"employer": "A", "title": "T1", "bullets": [{"text": "a" * 150, "in_master": True},
+                                                     {"text": "b" * 150, "in_master": True},
+                                                     {"text": "pool", "in_master": False}]},
+        {"employer": "B", "title": "T2", "bullets": [{"text": "c" * 60, "in_master": True}]}]}
+    assert logic.column_lines(logic.printed_roles(master["roles"]), 75) == 9
+    over = {"roles": [
+        {"employer": "A", "title": "T1", "bullets": [{"text": "Kept first " * 13},
+                                                     {"text": "Kept second " * 12},
+                                                     {"text": "The least relevant bullet " * 5}]},
+        {"employer": "B", "title": "T2", "bullets": [{"text": "d" * 60}]}],
+        "changes": ["Reworded a bullet."]}
+    assert logic.column_lines(over["roles"], 75) == 11
+    fitted = logic.fit_column(over, master, 75)
+    assert [len(r["bullets"]) for r in fitted["roles"]] == [2, 1]           # A's last went
+    assert fitted["changes"] == ["Reworded a bullet.", "Left off the last bullet under A "
+                                 "(“The least relevant bullet The least relevant bullet The…”): "
+                                 "the experience column was full."]
+    assert [len(r["bullets"]) for r in over["roles"]] == [3, 1]             # the input untouched
+    assert logic.fit_column(fitted, master, 75) == fitted                   # fits: unchanged
+    # the first role keeps a bullet however long; a role left with none goes
+    tall = {"roles": [{"employer": "A", "title": "T1", "bullets": [{"text": "e" * 300}]},
+                      {"employer": "B", "title": "T2", "bullets": [{"text": "f" * 300}]}]}
+    assert [r["employer"] for r in logic.fit_column(tall, master, 75)["roles"]] == ["A"]
+    assert logic.fit_column({"roles": tall["roles"][:1]}, master, 75)["roles"] == tall["roles"][:1]
+    assert logic.fit_column({}, master, 75) == {"changes": [], "roles": []}
+
+
+def test_shorten_cuts_at_a_word():
+    assert logic.shorten("Built and manage the system", 12) == "Built and…"
+    assert logic.shorten("Built and manage the system", 40) == "Built and manage the system"
+    assert logic.shorten("  spaced   out  ", 40) == "spaced out"
+    assert logic.shorten("Unbroken" * 3, 10) == "UnbrokenUn…"

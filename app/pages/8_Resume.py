@@ -260,6 +260,8 @@ if section == "Resume Builder":
                               key="tailor_pick")
         st.session_state["tailor_pick_kept"] = picked
         app = data.application(picked)
+        template = data.resume_template()
+        line_chars = logic.LINE_CHARS if template is None else docx_io.line_chars(template)
         posting_button(app, "resume")
         with st.form(f"posting_{picked}"):
             posting = st.text_area("Job posting", value=app["posting"] or "", height=200,
@@ -284,7 +286,9 @@ if section == "Resume Builder":
                                           problem.usage.output_tokens, problem.usage.cost_usd,
                                           today)
                 else:
-                    tailored = logic.clean_tailored(logic.match_endings(result, content))
+                    tailored = logic.fit_column(          # one page: the master's column
+                        logic.clean_tailored(logic.match_endings(result, content)), content,
+                        line_chars)
                     data.add_tailored(picked, tailored, steer, usage.model, today)
                     data.log_ai_usage("tailor", usage.model, usage.input_tokens,
                                       usage.output_tokens, usage.cost_usd, today)
@@ -323,12 +327,21 @@ if section == "Resume Builder":
             st.caption(f"{logic.plural(counts['bullets'], 'bullet')}: {counts['kept']} as on the "
                        f"master, {counts['reworded']} reworded{unmatched} · {counts['covered']} "
                        f"of {counts['keywords']} keywords covered · {row['model']}.")
-            budget, length = logic.master_budget(content), logic.tailored_chars(tailored)
-            if length > budget["characters"] * logic.PAGE_SLACK:
-                st.warning(f"Longer than the master ({length:,} characters of bullets against "
-                           f"{budget['characters']:,}): it may run onto a second page. Trim a "
-                           "bullet or two below, or tailor again with the steer “shorter”.")
-            template = data.resume_template()
+            lines = logic.column_lines(tailored.get("roles", []), line_chars)
+            limit = logic.column_lines(logic.printed_roles(content.get("roles", [])), line_chars)
+            if lines > limit:
+                st.warning(f"Longer than the master: the experience runs about "
+                           f"{logic.plural(lines - limit, 'line')} past what the master's "
+                           "column holds, so Word can push Education and Skills onto a "
+                           "second page. "
+                           "Trim to one page drops the last bullet of the longest role until "
+                           "it fits; or trim below yourself, or tailor again with the steer "
+                           "“shorter”.")
+                if st.button("Trim to one page", key=f"fit_{tailor_id}"):
+                    fitted = logic.fit_column(tailored, content, line_chars)
+                    data.save_tailored(tailor_id, fitted)
+                    gone = len(fitted["changes"]) - len(tailored.get("changes", []))
+                    done(f"Trimmed to one page: {logic.plural(gone, 'bullet')} left off.")
             name = content.get("name", "")
             if template is None:
                 st.caption("Downloads need the master resume's Word file as the template "

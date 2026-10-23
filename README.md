@@ -67,7 +67,13 @@ database, hosted free on Streamlit Community Cloud.
   and reword the master's bullets for that posting, write the cover
   letter, mark which of the posting's keywords the resume shows, and list
   every change with its reason. Each click is a new version; you edit the
-  bullets and the letter, and download both as Word files in your layout. Every Claude call is a
+  bullets and the letter, and download both as Word files in your layout.
+  A version stays one page: Claude gets the master's size column by column
+  (the roles fill the left one, education, skills and projects the right),
+  and a version whose experience would still run past the master's is
+  trimmed, last bullet of the longest role first, with a line under
+  **Changes** saying so (a **Trim to one page** button does the same to an
+  older version). Every Claude call is a
   button you click, costs about 45 cents (30 to build the master), and is
   counted on the page.
 

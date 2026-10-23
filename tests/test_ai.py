@@ -154,7 +154,8 @@ def test_tailor_sends_the_master_the_posting_and_the_steer(monkeypatch):
     assert '"employer": "Acme"' in sent and "s@example.com" not in sent and "conflicts" not in sent
     assert "<notes" in sent and "lead with SQL" in sent
     assert '<person name="Sample" today="October 20, 2026"/>' in sent
-    assert '<limits bullets="1" characters="5"/>' in sent              # the printed master
+    assert ('<limits><roles bullets="1" characters="5"/>'                 # the printed master,
+            '<projects bullets="0" characters="0"/></limits>' in sent)      # column by column
     with pytest.raises(ai.AIError, match="Paste the job posting"):
         ai.tailor(master, "   ", "Acme", "Analyst", date(2026, 10, 20))
 
