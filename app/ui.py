@@ -146,6 +146,11 @@ def find_company_posting(app: dict, today) -> list[str]:
     call logged (a failed one too). Returns what to tell the owner."""
     import ai  # here, not at the top: the SDK is slow to import and only this needs it
 
+    app_id = int(app["application_id"])
+    # The state is on the row from the start, so the application says where the
+    # search stands even when the owner leaves the page while it runs.
+    data.update_application(app_id, apply_state="looking",
+                            apply_note=f"Looking since {data.now():%-I:%M %p}.")
     try:
         found, usage = ai.find_posting(app["company"], app["role"], app.get("location"),
                                        app.get("source"), app.get("posting") or "")
@@ -154,7 +159,12 @@ def find_company_posting(app: dict, today) -> list[str]:
             data.log_ai_usage("find posting (failed)", problem.usage.model,
                               problem.usage.input_tokens, problem.usage.output_tokens,
                               problem.usage.cost_usd, today)
+        data.update_application(app_id, apply_state="failed", apply_note=str(problem))
         return [f"Couldn't look for it on the employer's site: {problem}"]
+    except BaseException:
+        data.update_application(app_id, apply_state="failed",
+                                apply_note="The search stopped partway.")
+        raise
     data.log_ai_usage("find posting", usage.model, usage.input_tokens, usage.output_tokens,
                       usage.cost_usd, today)
     title, location, note = found["title"], found["location"], found["note"]
@@ -165,7 +175,8 @@ def find_company_posting(app: dict, today) -> list[str]:
             data.update_application(int(app["application_id"]), posting=checked.as_text())
     if found["url"] and location:
         note = f"Listed there as {title or app['role']} in {location}. {note}".strip()
-    data.update_application(int(app["application_id"]), apply_url=found["url"], apply_note=note)
+    data.update_application(app_id, apply_url=found["url"], apply_note=note,
+                            apply_state="found" if found["url"] else "missing")
     if found["url"]:
         return [f"Found it on the employer's site: {title or app['role']}"
                 + (f", {location}" if location else "") + f" (${usage.cost_usd:.2f})."]
@@ -193,6 +204,28 @@ def prepare_application(application_id: int, today) -> list[str]:
     if ai.ready():
         notes += find_company_posting(app, today)
     return notes
+
+
+def apply_status(app: dict) -> None:
+    """One line saying where the employer-site search stands for this
+    application (applications.apply_state), with what to do next."""
+    import ai
+
+    state, note = app.get("apply_state"), md(app.get("apply_note") or "")
+    if state == "found":
+        st.caption(note)
+    elif state == "looking":
+        st.caption(f"{badge('blue', 'Looking on the employer’s site')} {note} It usually "
+                   "takes a minute or two, and this line updates itself. Much longer than "
+                   "that: tap Find it on the employer's site to start again.")
+    elif state == "missing":
+        st.caption(f"{badge('orange', 'Not on the employer’s site')} {note} Apply through "
+                   "the posting, or paste the employer's link under Edit if you find it.")
+    elif state == "failed":
+        st.caption(f"{badge('red', 'Search didn’t finish')} {note} Tap Find it on the "
+                   "employer's site to try again.")
+    elif ai.ready():
+        st.caption("Not looked for on the employer's site yet.")
 
 
 def find_posting_button(app: dict, key: str) -> None:

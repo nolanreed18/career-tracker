@@ -44,7 +44,10 @@ only they can do (accounts, secrets, clicking merge).
   searches priced by `AI_SEARCH_PRICE`) runs inside the Add tap on a lead and
   behind "Find it on the employer's site" (`ui.prepare_application`,
   `ui.find_company_posting`): still one click, one call, logged like the rest.
-  `applications.apply_url` / `apply_note` hold what it found.
+  `applications.apply_url` / `apply_note` / `apply_state` (`config.APPLY_STATES`,
+  null = not looked for) hold what it found and where the search stands:
+  `ui.apply_status` says so on the application, and the state is written
+  before the call, so leaving the page mid-search loses nothing.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no

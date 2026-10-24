@@ -45,6 +45,9 @@ LEAD_STATUSES = ["new", "moved", "dismissed"]
 
 # Why a lead was dismissed: one reason or several (stored comma-separated).
 # The daily review reads the recent ones as a hint of what the owner doesn't want.
+# Where the employer-site search for an application stands (applications.apply_state;
+# null: not looked for yet). Repeated in schema.sql's CHECK.
+APPLY_STATES = ["looking", "found", "missing", "failed"]
 DISMISS_REASONS = ["wrong role", "not enough experience", "too much travel", "location",
                    "pay", "company", "already applied", "other"]
 

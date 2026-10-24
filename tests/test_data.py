@@ -234,6 +234,22 @@ def test_migrate_brings_an_older_job_leads_table_up_to_date(database):
 
 
 
+def test_migrate_reads_the_search_state_of_applications_searched_before_it_existed(database):
+    company = data.company_id_for("Acme", TODAY)
+    found = data.add_application(company, "A", "saved", TODAY)
+    missing = data.add_application(company, "B", "saved", TODAY)
+    untouched = data.add_application(company, "C", "saved", TODAY)
+    data.update_application(found, apply_url="https://acme.com/jobs/1", apply_note="Same title.")
+    data.update_application(missing, apply_note="Only on LinkedIn.")
+    with psycopg.connect(database, autocommit=True) as conn:
+        conn.execute("alter table applications drop column apply_state")
+    data.migrate()
+    data.migrate()
+    states = {app_id: data.application(app_id)["apply_state"]
+              for app_id in (found, missing, untouched)}
+    assert states == {found: "found", missing: "missing", untouched: None}
+
+
 def test_a_dismissed_lead_stays_dismissed_when_seen_again():
     data.add_leads(leads({"title": "Analyst"}), TODAY)
     lead_id = int(data.job_leads()["lead_id"][0])
@@ -372,6 +388,12 @@ def test_a_posting_and_tailored_versions_live_with_the_application():
     assert data.application(app_id)["apply_url"] == "https://acme.com/jobs/1"
     data.update_application(app_id, apply_url="", apply_note="Not found.")
     assert data.application(app_id)["apply_url"] is None               # blank is none
+    assert data.application(app_id)["apply_state"] is None             # never looked for
+    for state in config.APPLY_STATES:
+        data.update_application(app_id, apply_state=state)
+    assert data.application(app_id)["apply_state"] == "failed"
+    with pytest.raises(psycopg.errors.CheckViolation):
+        data.update_application(app_id, apply_state="meh")
     first = data.add_tailored(app_id, {"roles": [], "cover_letter": "Dear"}, "  ", "m-1", TODAY)
     second = data.add_tailored(app_id, {"roles": [1]}, "lead with SQL", "m-1", TODAY)
     versions = data.tailored_versions(app_id)
