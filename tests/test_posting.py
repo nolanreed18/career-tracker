@@ -126,9 +126,50 @@ def test_greenhouse_and_lever_links_are_read_from_their_feeds(monkeypatch):
     assert found.text == "Remote role.\n\nRequirements\n• Python\n• SQL"
 
 
+def test_any_other_employer_page_is_read_from_its_job_posting_data(monkeypatch):
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: JSON_LD)
+    found = posting.employer_posting("https://targa.example-ats.com/jobs/4079")
+    assert (found.title, found.location) == ("Analyst", "Omaha, NE")
+    assert found.text == "Build dashboards.\n• SQL"
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: PLAIN)
+    assert posting.employer_posting("https://careers.beta.com/jobs/1") is None  # loose text: no
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: "")
+    assert posting.employer_posting("https://careers.beta.com/jobs/1") is None  # an empty page
+
+
+def test_an_applications_links_are_read_employer_first(monkeypatch):
+    long_ld = JSON_LD.replace("Build <b>dashboards</b>.", "Build <b>dashboards</b>. " * 30)
+    asked = []
+
+    def get(url, accept=None):
+        asked.append(url)
+        if "linkedin" in url:
+            return LINKEDIN.replace("We build\nthings.", "We build things. " * 20)
+        return {"https://careers.acme.com/1": long_ld,
+                "https://careers.beta.com/1": PLAIN.replace("<p>Needs Python.</p>",
+                                                            "<p>Needs Python.</p>" * 20)}[url]
+    monkeypatch.setattr(posting, "_get", get)
+    found, link = posting.from_links("https://www.linkedin.com/jobs/view/7/",
+                                     "https://careers.acme.com/1")
+    assert (found.title, link, asked) == ("Analyst", "https://careers.acme.com/1",
+                                          ["https://careers.acme.com/1"])
+    asked.clear()                     # no data on the employer's page: the job link, then the page
+    found, link = posting.from_links("https://www.linkedin.com/jobs/view/7/",
+                                     "https://careers.beta.com/1")
+    assert (found.title, link) == ("Senior Analyst", "https://www.linkedin.com/jobs/view/7/")
+    found, link = posting.from_links("https://www.glassdoor.com/partner/jobListing.htm?"
+                                     "jobListingId=1", "https://careers.beta.com/1")
+    assert (found.title, link) == ("Data Engineer", "https://careers.beta.com/1")  # Glassdoor refused
+    with pytest.raises(posting.PostingError, match="Glassdoor doesn't let"):
+        posting.from_links("https://www.glassdoor.com/partner/jobListing.htm?jobListingId=1",
+                           "https://www.indeed.com/viewjob?jk=1")   # the job link's reason
+    with pytest.raises(posting.PostingError, match="no posting link"):
+        posting.from_links(None, "")
+
+
 def test_other_links_and_unreadable_feeds_give_nothing_without_an_error(monkeypatch):
     monkeypatch.setattr(posting, "_get", lambda url, accept=None: pytest.fail("fetched"))
-    assert posting.employer_posting("https://careers.acme.com/jobs/1") is None
+    assert posting.employer_posting("not a link") is None
     assert posting.employer_posting(None) is None
     monkeypatch.setattr(posting, "_get", lambda url, accept=None: "<html>not json</html>")
     assert posting.employer_posting("https://boards.greenhouse.io/acme/jobs/1") is None

@@ -116,7 +116,13 @@ Rules:
    "title": "the title as that site shows it, or \"\"",
    "location": "the location as that site lists it, or \"\"",
    "note": "a sentence or two: how sure you are and why, anything that differs
-            from the job board's copy; when nothing fits, where you looked"}
+            from the job board's copy; when nothing fits, where you looked",
+   "description": "see below; \"\" unless asked for"}
+- description: only when the message says the posting's text is missing
+  and you opened the posting's page: its description copied word for word
+  from that page (position summary, duties, qualifications, pay, benefits),
+  each heading and bullet on its own line, nothing reworded, summarised or
+  added. Otherwise "".
 """
 
 
@@ -283,6 +289,9 @@ def find_posting(company: str, title: str, location, source, posting: str) -> tu
     prompt = (f"<posting employer=\"{company}\" title=\"{title}\" location=\"{location or ''}\" "
               f"seen_on=\"{source or ''}\">\n{posting.strip()[:config.POSTING_PROMPT_CHARS]}\n"
               "</posting>\n\nFind this posting on the employer's own site.")
+    if not posting.strip():           # the job board wouldn't hand it over: Claude reads it there
+        prompt += (" The posting's text is missing: when you open its page, copy the "
+                   "description too.")
     messages = [{"role": "user", "content": prompt}]
     tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": config.AI_SEARCH_MAX,
               "blocked_domains": config.JOB_BOARDS},
@@ -320,6 +329,6 @@ def find_posting(company: str, title: str, location, source, posting: str) -> tu
     result = parsed.model_dump()
     url = result["url"].strip()
     if url and (not url.startswith("http") or logic.is_job_board(url)):
-        result = {**result, "url": "",
+        result = {**result, "url": "", "description": "",
                   "note": f"Found only on a job board ({url}). {result['note']}".strip()}
     return result, usage

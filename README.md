@@ -38,6 +38,9 @@ database, hosted free on Streamlit Community Cloud.
   posting from its link and has Claude search for the same posting on the
   employer's own careers site (about 15 cents), so the application opens with
   **Apply on the employer's site** and never needs LinkedIn's Easy Apply;
+  when the job board won't hand the posting over (Indeed, Glassdoor), the
+  description comes from the employer's site instead (the page's own job
+  data, or Claude's word-for-word copy, flagged for you to check);
   **Applied today** logs the application in one tap. That search takes a
   minute or two and keeps going if you leave the page: a line on the
   application says where it stands (looking, found, not on the employer's

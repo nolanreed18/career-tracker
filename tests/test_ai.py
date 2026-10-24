@@ -196,7 +196,7 @@ class FakeSearchMessages:
 
 FOUND = ('Here it is.\n{"url": "https://bp.wd3.myworkdayjobs.com/en-US/bpx/job/Denver/R123", '
          '"title": "Senior Development Systems Engineer", "location": "Houston, TX", '
-         '"note": "Same title on bp\'s Workday site; listed in Houston."}')
+         '"note": "Same title on bp\'s Workday site; listed in Houston.", "description": ""}')
 
 
 def test_find_posting_searches_the_web_resumes_a_pause_and_counts_the_searches(monkeypatch):
@@ -221,18 +221,25 @@ def test_find_posting_searches_the_web_resumes_a_pause_and_counts_the_searches(m
     prompt = first["messages"][0]["content"]
     assert 'employer="bp"' in prompt and 'location="Denver, CO"' in prompt
     assert len(prompt) < config.POSTING_PROMPT_CHARS + 300                 # the posting is trimmed
+    assert "copy the description" not in prompt                            # it has the posting
     assert second["messages"][1]["role"] == "assistant"                   # resumed where it paused
 
 
 def test_find_posting_treats_a_job_board_link_as_not_found_and_checks_the_shape(monkeypatch):
-    fake_client(monkeypatch, messages=FakeSearchMessages(
+    messages = FakeSearchMessages(
         '{"url": "https://www.linkedin.com/jobs/view/1/", "title": "Analyst", '
-        '"location": "", "note": "Only on LinkedIn."}', searches=3))
+        '"location": "", "note": "Only on LinkedIn.", "description": "LinkedIn\'s copy"}',
+        searches=3)
+    fake_client(monkeypatch, messages=messages)
     found, usage = ai.find_posting("Acme", "Analyst", None, None, "")
     assert found["url"] == "" and found["note"].startswith("Found only on a job board")
+    assert found["description"] == ""                                   # not the employer's
     assert usage.searches == 3
+    assert messages.calls[0]["messages"][0]["content"].endswith(
+        "The posting's text is missing: when you open its page, copy the description too.")
     fake_client(monkeypatch, messages=FakeSearchMessages('{"url": "", "title": "", "location": "", '
-                                                         '"note": "Nothing on Acme\'s site."}'))
+                                                         '"note": "Nothing on Acme\'s site.", '
+                                                         '"description": ""}'))
     assert ai.find_posting("Acme", "Analyst", "", "", "")[0]["url"] == ""
     fake_client(monkeypatch, messages=FakeSearchMessages("No JSON at all"))
     with pytest.raises(ai.AIError, match="didn't fit") as caught:
