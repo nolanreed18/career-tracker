@@ -54,6 +54,8 @@ create table if not exists applications (
     posting         text,              -- the job posting's text, for tailoring
     apply_url       text,              -- the posting on the employer's own site, to apply there
     apply_note      text,              -- how that was found, or why it wasn't
+    apply_state     text check (apply_state in ('looking', 'found', 'missing', 'failed')),
+                                       -- where that search stands (null: not looked for yet)
     created_on      date not null,
     check (salary_min is null or salary_max is null or salary_max >= salary_min)
 );

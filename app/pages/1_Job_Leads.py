@@ -72,7 +72,8 @@ def lead_card(lead) -> None:
                                 "have Claude find it on the employer's own site to apply there"):
             application_id = data.move_lead_to_applications(lead_id, today)
             with st.spinner("Saved. Reading the posting and looking for it on the employer's "
-                            "site…"):
+                            "site (a minute or two; leaving the page doesn't stop it, the "
+                            "application will say how it went)…"):
                 notes = prepare_application(application_id, today)
             st.session_state["flash"] = " ".join(["Added to Applications as Saved."] + notes)
             st.session_state["open_application"] = application_id

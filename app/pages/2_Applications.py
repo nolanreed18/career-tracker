@@ -11,6 +11,7 @@ import data
 import logic
 from ui import (
     STATUS_HELP,
+    apply_status,
     badge,
     bump_round,
     delete_button,
@@ -179,9 +180,13 @@ if app["apply_url"]:
         open_col.link_button("Open the posting", app["job_url"], width="stretch")
 elif app["job_url"]:
     st.link_button("Open job posting", app["job_url"])
-if app["apply_note"]:
-    st.caption(md(app["apply_note"] if app["apply_url"]
-                  else f"Not found on the employer's site: {app['apply_note']}"))
+apply_status(app)
+if app["apply_state"] == "looking":
+    @st.fragment(run_every=5)
+    def still_looking() -> None:    # a search started elsewhere: redraw when it ends
+        if data.application(picked)["apply_state"] != "looking":
+            st.rerun()
+    still_looking()
 if app["notes"]:
     st.caption(md(app["notes"]))
 resume_col, applied_col, find_col = st.columns(3)
@@ -280,6 +285,9 @@ if section == "Edit":
         e_role = st.text_input("Role", value=app["role"])
         e_applied = st.date_input("Applied on", value=app["applied_on"])
         e_url = st.text_input("Job posting link", value=app["job_url"] or "")
+        e_apply = st.text_input("Employer's apply link", value=app["apply_url"] or "",
+                                help="The same posting on the employer's own careers site, "
+                                     "when you found it yourself")
         location_col, mode_col = st.columns(2)
         e_location = location_col.text_input("Location", value=app["location"] or "")
         modes = optional(config.WORK_MODES)
@@ -299,10 +307,15 @@ if section == "Edit":
             st.error("“Salary to” is below “Salary from”.")
         else:
             company_id = int(companies.loc[companies["name"] == e_company, "company_id"].iloc[0])
+            pasted = {}
+            if (e_apply.strip() or None) != app["apply_url"]:         # the link changed by hand
+                pasted = {"apply_url": e_apply,
+                          "apply_state": "found" if e_apply.strip() else None,
+                          "apply_note": "Link pasted by you." if e_apply.strip() else None}
             data.update_application(
                 picked, company_id=company_id, role=e_role, applied_on=e_applied,
                 job_url=e_url, location=e_location, work_mode=e_mode or None, source=e_source,
-                salary_min=e_low, salary_max=e_high, notes=e_notes)
+                salary_min=e_low, salary_max=e_high, notes=e_notes, **pasted)
             done("Saved.", "edit_round")
 
     st.divider()

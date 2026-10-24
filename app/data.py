@@ -50,6 +50,11 @@ def today() -> date:
     return datetime.now(db.LOCAL_TZ).date()
 
 
+def now() -> datetime:
+    """The time of day in the owner's zone, for a note; never for SQL."""
+    return datetime.now(db.LOCAL_TZ)
+
+
 # ---- connection -------------------------------------------------------------
 
 # Changes to tables that already existed on the live database, each safe to
@@ -92,6 +97,15 @@ MIGRATIONS = [
     # 2026-10: where to apply on the employer's own site, looked up when a lead is added.
     "alter table applications add column if not exists apply_url text",
     "alter table applications add column if not exists apply_note text",
+    # 2026-10: where that search stands, so the application can say; rows searched
+    # before the column existed are read from what they hold.
+    """alter table applications add column if not exists apply_state text
+           check (apply_state in ('looking', 'found', 'missing', 'failed'))""",
+    """update applications
+          set apply_state = case when coalesce(apply_url, '') <> '' then 'found'
+                                 else 'missing' end
+        where apply_state is null
+          and (coalesce(apply_url, '') <> '' or coalesce(apply_note, '') <> '')""",
 ]
 
 
@@ -307,7 +321,8 @@ def delete_contact(contact_id: int) -> None:
 
 APPLICATION_FIELDS = {"company_id", "role", "job_url", "location", "work_mode", "salary_min",
                       "salary_max", "source", "applied_on", "next_action", "next_action_on",
-                      "contact_id", "notes", "posting", "apply_url", "apply_note"}
+                      "contact_id", "notes", "posting", "apply_url", "apply_note",
+                      "apply_state"}
 
 _APPLICATIONS = """
     select a.*, co.name as company,

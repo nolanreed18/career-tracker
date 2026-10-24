@@ -38,7 +38,11 @@ database, hosted free on Streamlit Community Cloud.
   posting from its link and has Claude search for the same posting on the
   employer's own careers site (about 15 cents), so the application opens with
   **Apply on the employer's site** and never needs LinkedIn's Easy Apply;
-  **Applied today** logs the application in one tap.
+  **Applied today** logs the application in one tap. That search takes a
+  minute or two and keeps going if you leave the page: a line on the
+  application says where it stands (looking, found, not on the employer's
+  site, didn't finish, or not looked for yet), and **Edit** takes the
+  employer's link when you find it yourself.
 - **Interviews**: upcoming and past, with prep notes, "how it went" and a 1–5
   rating.
 - **Companies & Contacts**: companies (added for you with each application),

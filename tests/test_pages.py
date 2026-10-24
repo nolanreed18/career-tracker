@@ -492,6 +492,7 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
     assert saved["apply_note"] == ("Listed there as Analytics Engineer II in Denver, CO. Read from "
                                    "the employer's site. Same title on Gamma's Greenhouse board.")
     assert saved["posting"].startswith("Analytics Engineer — Gamma")   # LinkedIn's copy kept
+    assert saved["apply_state"] == "found"
     assert at.session_state["flash"].endswith(
         "Posting read (260 characters). Found it on the employer's site: Analytics Engineer II, "
         "Denver, CO ($0.04).")
@@ -509,8 +510,10 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
     click(at, "Find it on the employer's site")
     assert at.success[0].value == ("Not found on the employer's site: Only on LinkedIn, as an "
                                    "Easy Apply posting. ($0.06).")
-    assert data.application(int(app["application_id"]))["apply_url"] is None
-    assert any(c.value.startswith("Not found on the employer's site: Only on LinkedIn")
+    missing = data.application(int(app["application_id"]))
+    assert (missing["apply_url"], missing["apply_state"]) == (None, "missing")
+    assert any(c.value.startswith(":orange-badge[Not on the employer’s site] Only on LinkedIn, "
+                                  "as an Easy Apply posting. Apply through the posting")
                for c in at.caption)
     click(at, "Applied today")
     assert at.success[0].value == "Marked as applied today."
@@ -518,6 +521,53 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
     assert (after["status"], after["applied_on"]) == ("applied", TODAY)
     assert data.events(int(app["application_id"]))["note"].tolist()[-1] == "Applied"
     assert not any(b.label == "Applied today" for b in at.button)        # only while Saved
+
+
+def test_the_application_says_where_the_employer_site_search_stands(monkeypatch):
+    import ai
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    app_id = data.add_application(data.company_id_for("Acme", TODAY), "Analyst", "saved", TODAY)
+    at = new_app(APPS)
+    at.session_state["open_application"] = app_id
+    at.run()
+    assert any(c.value == "Not looked for on the employer's site yet." for c in at.caption)
+
+    data.update_application(app_id, apply_state="looking", apply_note="Looking since 9:49 AM.")
+    at = new_app(APPS)
+    at.session_state["open_application"] = app_id
+    at.run()                                                   # a search running elsewhere
+    assert any(c.value.startswith(":blue-badge[Looking on the employer’s site] Looking since "
+                                  "9:49 AM. It usually takes a minute or two") for c in at.caption)
+
+    monkeypatch.setattr(ai, "find_posting", lambda *args: (_ for _ in ()).throw(
+        ai.AIError("Claude is rate-limiting this key; try again in a minute.")))
+    click(at, "Find it on the employer's site")
+    assert at.success[0].value == ("Couldn't look for it on the employer's site: Claude is "
+                                   "rate-limiting this key; try again in a minute.")
+    failed = data.application(app_id)
+    assert (failed["apply_state"], failed["apply_note"]) == (
+        "failed", "Claude is rate-limiting this key; try again in a minute.")
+    assert any(c.value.startswith(":red-badge[Search didn’t finish] Claude is rate-limiting")
+               for c in at.caption)
+
+    widget(at.radio, "Section").set_value("Edit").run()        # found it yourself: paste it
+    widget(at.text_input, "Employer's apply link").set_value("https://acme.com/careers/7")
+    click(at, "Save changes")
+    pasted = data.application(app_id)
+    assert (pasted["apply_url"], pasted["apply_state"], pasted["apply_note"]) == (
+        "https://acme.com/careers/7", "found", "Link pasted by you.")
+    assert any(b.label == "Apply on Acme's site" for b in at.get("link_button"))
+    assert any(c.value == "Link pasted by you." for c in at.caption)
+    widget(at.radio, "Section").set_value("Edit").run()
+    widget(at.text_input, "Role").set_value("Senior Analyst")  # other edits leave it alone
+    click(at, "Save changes")
+    assert data.application(app_id)["apply_state"] == "found"
+    widget(at.radio, "Section").set_value("Edit").run()
+    widget(at.text_input, "Employer's apply link").set_value("")
+    click(at, "Save changes")
+    cleared = data.application(app_id)
+    assert (cleared["apply_url"], cleared["apply_state"], cleared["apply_note"]) == (
+        None, None, None)
 
 
 def test_the_profile_form_saves():
