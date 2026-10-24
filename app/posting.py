@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 import httpx
+import lxml.etree
 import lxml.html
 
 import config
@@ -103,10 +104,13 @@ LEVER = re.compile(r"^https://jobs\.lever\.co/([^/?#]+)/([0-9a-f-]{36})")
 
 
 def employer_posting(url) -> Posting | None:
-    """The posting as the employer's applicant-tracking system has it, when
-    the link is a Workday, Greenhouse or Lever one and its data can be read;
-    None otherwise (the link is still worth keeping)."""
+    """The posting as the employer's site has it, from data rather than a
+    page's loose text: a Workday, Greenhouse or Lever feed, or any other
+    page's JobPosting data. None when there is none, or it can't be read
+    (the link is still worth keeping)."""
     url = str(url or "").strip()
+    if not url.startswith("http") or logic.is_job_board(url):   # a board is not the employer
+        return None
     try:
         if match := WORKDAY.match(url):
             tenant, _, site, rest = match.groups()
@@ -133,9 +137,30 @@ def employer_posting(url) -> Posting | None:
             return Posting(str(data.get("text") or ""), "",
                            str((data.get("categories") or {}).get("location") or ""),
                            "\n\n".join(p for p in parts if p.strip())[:config.POSTING_MAX_CHARS])
-    except (PostingError, ValueError, AttributeError, TypeError):
+        return _structured(lxml.html.fromstring(_get(url)))
+    except (PostingError, ValueError, AttributeError, TypeError, lxml.etree.ParserError):
         return None
-    return None
+
+
+def from_links(job_url, apply_url) -> tuple[Posting, str]:
+    """The posting from an application's links, and the link it came from:
+    the employer's own data first (employer_posting), then the job link
+    (fetch), then the employer's page read as a page. Raises the job link's
+    PostingError (the employer page's, without one) when none gives a
+    description."""
+    links = [link for link in (logic.job_link(apply_url), logic.job_link(job_url)) if link]
+    if not links:
+        raise PostingError("This application has no posting link: paste the posting instead.")
+    if links[0] == logic.job_link(apply_url) and (found := employer_posting(links[0])):
+        if len(found.text) >= config.POSTING_MIN_CHARS:
+            return found, links[0]
+    problems = []
+    for link in reversed(links):                     # the job link, then the employer's page
+        try:
+            return fetch(link), link
+        except PostingError as problem:
+            problems.append(problem)
+    raise problems[0]
 
 
 def _workday_place(text) -> str:
@@ -176,6 +201,19 @@ def parse_page(html: str) -> Posting:
     """Any other job page: its JobPosting data when it publishes some, else
     the page's main text under its heading."""
     doc = lxml.html.fromstring(html)
+    if (found := _structured(doc)) is not None:
+        return found
+    title = _first(doc, "//h1", "//title")
+    for tag in DROP:
+        for element in doc.xpath(f"//{tag}"):
+            element.drop_tree()
+    main = doc.xpath("//main") or doc.xpath("//article") or doc.xpath("//body") or [doc]
+    return Posting(title=title, company="", location="", text=text_of(main[0]))
+
+
+def _structured(doc) -> Posting | None:
+    """A page's JobPosting data (JSON-LD), as search engines read it; None
+    when the page publishes none."""
     for script in doc.xpath('//script[contains(@type, "ld+json")]'):
         if (job := _job_posting(script.text)) is not None:
             organisation = job.get("hiringOrganization")
@@ -193,12 +231,7 @@ def parse_page(html: str) -> Posting:
                                    if address.get(k)),
                 text=text_of(lxml.html.fromstring(f"<div>{job.get('description') or ''}</div>")),
             )
-    title = _first(doc, "//h1", "//title")
-    for tag in DROP:
-        for element in doc.xpath(f"//{tag}"):
-            element.drop_tree()
-    main = doc.xpath("//main") or doc.xpath("//article") or doc.xpath("//body") or [doc]
-    return Posting(title=title, company="", location="", text=text_of(main[0]))
+    return None
 
 
 def _job_posting(text) -> dict | None:

@@ -47,7 +47,12 @@ only they can do (accounts, secrets, clicking merge).
   `applications.apply_url` / `apply_note` / `apply_state` (`config.APPLY_STATES`,
   null = not looked for) hold what it found and where the search stands:
   `ui.apply_status` says so on the application, and the state is written
-  before the call, so leaving the page mid-search loses nothing.
+  before the call, so leaving the page mid-search loses nothing. An empty
+  posting is filled from the employer's site: `posting.employer_posting`
+  (an ATS feed, else the page's JSON-LD JobPosting; never loose page text),
+  else Claude's word-for-word `description` (asked for only when the
+  posting is missing). "Get the posting from the link" is
+  `posting.from_links`: employer data, then the job link, then the employer page.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no

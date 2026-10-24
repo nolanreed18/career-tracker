@@ -122,23 +122,25 @@ def done(message: str, counter: str | None = None) -> None:
 
 
 def posting_button(app: dict, key: str) -> None:
-    """A button that reads the job posting from the application's link
-    (posting.fetch) and saves it as the application's posting. Shown only
-    when there is a link; the main action while the posting is empty."""
-    if not logic.value(app.get("job_url")):
+    """A button that reads the job posting from the application's links
+    (posting.from_links: the employer's site first, then the job link) and
+    saves it as the application's posting. Shown only when there is a link;
+    the main action while the posting is empty."""
+    if not (logic.value(app.get("job_url")) or logic.value(app.get("apply_url"))):
         return
     if st.button("Get the posting from the link", key=f"fetch_posting_{key}",
                  icon=":material/download:",
                  type="secondary" if logic.value(app.get("posting")) else "primary"):
         try:
-            found = posting.fetch(app["job_url"])
+            found, link = posting.from_links(app.get("job_url"), app.get("apply_url"))
         except posting.PostingError as problem:
             st.error(str(problem))
         else:
             data.update_application(int(app["application_id"]), posting=found.as_text())
-            done(f"Read the posting: {found.title or 'untitled'} at "
-                 f"{found.company or 'an unnamed employer'}, {len(found.text):,} characters. "
-                 "Check it, then tailor.")
+            where = (f"{app['company']}'s site" if link == logic.job_link(app.get("apply_url"))
+                     else "the job link")
+            done(f"Read the posting from {where}: {found.title or app['role']}, "
+                 f"{len(found.text):,} characters. Check it, then tailor.")
 
 
 def find_company_posting(app: dict, today) -> list[str]:
@@ -168,18 +170,27 @@ def find_company_posting(app: dict, today) -> list[str]:
     data.log_ai_usage("find posting", usage.model, usage.input_tokens, usage.output_tokens,
                       usage.cost_usd, today)
     title, location, note = found["title"], found["location"], found["note"]
-    if found["url"] and (checked := posting.employer_posting(found["url"])):
+    checked = posting.employer_posting(found["url"]) if found["url"] else None
+    if checked:
         title, location = checked.title or title, checked.location or location   # as listed there
         note = f"Read from the employer's site. {note}".strip()
-        if checked.text and not logic.value(app.get("posting")):
-            data.update_application(int(app["application_id"]), posting=checked.as_text())
+    copied = ""                      # the job board wouldn't give the posting: take the employer's
+    if found["url"] and not logic.value(app.get("posting")):
+        if checked and len(checked.text) >= config.POSTING_MIN_CHARS:
+            data.update_application(app_id, posting=checked.as_text())
+            copied = " Posting read from there."
+        elif len(found["description"].strip()) >= config.POSTING_MIN_CHARS:
+            text = found["description"].strip()[:config.POSTING_MAX_CHARS]
+            data.update_application(app_id, posting=posting.Posting(
+                title or app["role"], app["company"], location, text).as_text())
+            copied = " Posting copied from there by Claude: check it before tailoring."
     if found["url"] and location:
         note = f"Listed there as {title or app['role']} in {location}. {note}".strip()
     data.update_application(app_id, apply_url=found["url"], apply_note=note,
                             apply_state="found" if found["url"] else "missing")
     if found["url"]:
         return [f"Found it on the employer's site: {title or app['role']}"
-                + (f", {location}" if location else "") + f" (${usage.cost_usd:.2f})."]
+                + (f", {location}" if location else "") + f" (${usage.cost_usd:.2f})." + copied]
     return [f"Not found on the employer's site: {note} (${usage.cost_usd:.2f})."]
 
 
@@ -191,18 +202,20 @@ def prepare_application(application_id: int, today) -> list[str]:
     import ai
 
     app = data.application(application_id)
-    notes = []
+    notes, unread = [], None
     if logic.value(app.get("job_url")) and not logic.value(app.get("posting")):
         try:
             found = posting.fetch(app["job_url"])
         except posting.PostingError as problem:
-            notes.append(f"Posting not read: {problem}")
+            unread = f"Posting not read: {problem}"
         else:
             app["posting"] = found.as_text()
             data.update_application(application_id, posting=app["posting"])
             notes.append(f"Posting read ({len(found.text):,} characters).")
     if ai.ready():
         notes += find_company_posting(app, today)
+    if unread and not logic.value(data.application(application_id)["posting"]):
+        notes.insert(0, unread)          # said only when the employer's site didn't fill it
     return notes
 
 

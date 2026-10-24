@@ -478,7 +478,7 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
     asked = []
     monkeypatch.setattr(ai, "find_posting", lambda *args: asked.append(args) or (
         {"url": "https://boards.greenhouse.io/gamma/jobs/7", "title": "Analytics Engineer",
-         "location": "", "note": "Same title on Gamma's Greenhouse board."},
+         "location": "", "note": "Same title on Gamma's Greenhouse board.", "description": ""},
         ai.Usage("claude-opus-5-5", 3000, 500, 2)))
     monkeypatch.setattr(posting, "employer_posting", lambda url: posting.Posting(
         "Analytics Engineer II", "", "Denver, CO", "Gamma's own words. " * 20))
@@ -505,7 +505,7 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
     # The application: Apply on the employer's site, Applied today, and a new search.
     monkeypatch.setattr(ai, "find_posting", lambda *args: (
         {"url": "", "title": "", "location": "",
-         "note": "Only on LinkedIn, as an Easy Apply posting."},
+         "note": "Only on LinkedIn, as an Easy Apply posting.", "description": ""},
         ai.Usage("claude-opus-5-5", 3000, 500, 4)))
     click(at, "Find it on the employer's site")
     assert at.success[0].value == ("Not found on the employer's site: Only on LinkedIn, as an "
@@ -521,6 +521,49 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
     assert (after["status"], after["applied_on"]) == ("applied", TODAY)
     assert data.events(int(app["application_id"]))["note"].tolist()[-1] == "Applied"
     assert not any(b.label == "Applied today" for b in at.button)        # only while Saved
+
+
+def test_a_glassdoor_lead_gets_its_posting_from_the_employers_site(monkeypatch):
+    import ai
+    import posting
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    data.add_leads([logic.clean_lead({
+        "source": "Glassdoor", "title": "Analytics Enablement Lead", "company": "Targa",
+        "fit_score": 9, "job_url": "https://www.glassdoor.com/partner/jobListing.htm?"
+                                   "jobListingId=1010305411219"})[0]], TODAY)
+    asked = []
+    monkeypatch.setattr(ai, "find_posting", lambda *args: asked.append(args) or (
+        {"url": "https://targa.example-ats.com/jobs/4079", "title": "Analytics Enablement Lead",
+         "location": "Houston, Texas", "note": "Same title on Targa's careers site.",
+         "description": "POSITION SUMMARY\nTarga is seeking a lead. " * 10},
+        ai.Usage("claude-sonnet-5-5", 24000, 2500, 3)))
+    monkeypatch.setattr(posting, "employer_posting", lambda url: None)   # no data on the page
+    at = run(LEADS)
+    widget(at.button, "Add").click().run()
+    assert asked[0][4] == ""                                  # Glassdoor gave nothing to send
+    app = data.applications().query("company == 'Targa'").iloc[0]
+    saved = data.application(int(app["application_id"]))
+    assert saved["posting"].startswith("Analytics Enablement Lead — Targa · Houston, Texas\n\n"
+                                       "POSITION SUMMARY\nTarga is seeking a lead.")
+    flash = at.session_state["flash"]
+    assert "Posting not read" not in flash                     # the employer's site filled it
+    assert flash.endswith("Posting copied from there by Claude: check it before tailoring.")
+
+    # Data on the employer's page wins over Claude's copy; a posting on hand is never replaced.
+    monkeypatch.setattr(posting, "employer_posting", lambda url: posting.Posting(
+        "Analytics Enablement Lead", "", "Houston, TX", "Targa's own words. " * 20))
+    data.update_application(int(app["application_id"]), posting="")
+    notes = ui_find(app["application_id"])
+    assert notes[0].endswith("Posting read from there.")
+    assert data.application(int(app["application_id"]))["posting"].startswith(
+        "Analytics Enablement Lead · Houston, TX\n\nTarga's own words.")
+    notes = ui_find(app["application_id"])
+    assert not notes[0].endswith("Posting read from there.")  # already had one: left alone
+
+
+def ui_find(application_id) -> list[str]:
+    import ui
+    return ui.find_company_posting(data.application(int(application_id)), TODAY)
 
 
 def test_the_application_says_where_the_employer_site_search_stands(monkeypatch):
@@ -820,7 +863,7 @@ def test_the_posting_can_be_read_from_the_link_or_the_error_says_to_paste(monkey
     click(at, "Get the posting from the link")
     saved = data.application(app_id)["posting"]
     assert saved.startswith("Analyst II — Acme Corp · Denver, CO\n\nWe need SQL.")
-    assert any("Read the posting: Analyst II at Acme Corp, 260 characters." in s.value
+    assert any("Read the posting from the job link: Analyst II, 260 characters." in s.value
                for s in at.success)
     assert widget(at.text_area, "Job posting").value == saved
     assert not widget(at.button, "Tailor with Claude").disabled
@@ -832,6 +875,15 @@ def test_the_posting_can_be_read_from_the_link_or_the_error_says_to_paste(monkey
     assert at.error[0].value.startswith("Indeed doesn't let the app read")
     assert data.application(app_id)["posting"] == saved                   # kept
 
+    # With the employer's link found, the employer's own data comes first.
+    data.update_application(app_id, apply_url="https://acme.wd1.myworkdayjobs.com/x/job/D/A_1")
+    monkeypatch.setattr(posting, "employer_posting", lambda url: posting.Posting(
+        "Analyst II", "", "Omaha, NE", "Acme's own words. " * 20))
+    click(at, "Get the posting from the link")
+    assert data.application(app_id)["posting"].startswith("Analyst II · Omaha, NE\n\nAcme's own")
+    assert any("Read the posting from Acme's site: Analyst II, 360 characters." in s.value
+               for s in at.success)
+
 
 def test_the_posting_section_offers_the_link_only_when_there_is_one():
     app_id = seed()                                                        # no job link
@@ -840,7 +892,7 @@ def test_the_posting_section_offers_the_link_only_when_there_is_one():
     at.run()
     widget(at.radio, "Section").set_value("Posting").run()
     assert not any(b.label == "Get the posting from the link" for b in at.button)
-    data.update_application(app_id, job_url="https://www.linkedin.com/jobs/view/9/")
+    data.update_application(app_id, apply_url="https://acme.com/careers/9")   # the employer's
     at.run()
     assert any(b.label == "Get the posting from the link" for b in at.button)
 

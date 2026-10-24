@@ -90,3 +90,4 @@ class CompanyPosting(BaseModel):
     title: str              # the title as that site shows it; "" when not found
     location: str           # the location as that site lists it; "" when not found
     note: str               # a sentence or two: how sure, what differs, or why not
+    description: str        # the posting's text copied from that page when asked; "" otherwise
