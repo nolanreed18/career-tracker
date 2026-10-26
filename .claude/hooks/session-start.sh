@@ -8,6 +8,15 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
 fi
 
 cd "$CLAUDE_PROJECT_DIR"
+# Some cloud images carry Debian's own cryptography (41), which pip can't
+# remove (no install record), and Authlib needs 45 or newer: the install
+# below then failed and the session started without the packages. Put the
+# newer one over it first; with a new enough one already there, skip it.
+if ! python3 -c "import sys, cryptography; sys.exit(int(cryptography.__version__.split('.')[0]) < 45)" \
+    2>/dev/null; then
+  python3 -m pip install --quiet --disable-pip-version-check --ignore-installed \
+    "cryptography>=45.0.1"
+fi
 python3 -m pip install --quiet --disable-pip-version-check -r requirements-dev.txt
 
 # The tests need TEST_DATABASE_URL pointing at a database they may wipe.
