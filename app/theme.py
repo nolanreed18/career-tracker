@@ -166,13 +166,25 @@ CLAUDE_MARK = _claude_mark()
 CLAUDE_KEY = "claude_"            # a widget key starting with this gets the mark (ui.claude_button)
 
 
+# On a phone the sub-page pills stay on one row, a little smaller, and slide
+# sideways when there are more than fit.
+PHONE_SECTIONS = """
+[class*="st-key-sections-"] [role="radiogroup"] { flex-wrap: nowrap; overflow-x: auto;
+    scrollbar-width: none; }
+[class*="st-key-sections-"] [role="radiogroup"]::-webkit-scrollbar { display: none; }
+[class*="st-key-sections-"] [data-testid="stRadioOption"] { flex-shrink: 0; padding: 6px 11px; }
+[class*="st-key-sections-"] [data-testid="stRadioOption"] p { font-size: 0.8rem;
+    white-space: nowrap; }"""
+
+
 def layout_css(phone: bool) -> str:
     """The part of the stylesheet that differs by device: a phone's menu
-    leaves out the computer-only pages; a computer's page stops at a
-    comfortable width."""
+    leaves out the computer-only pages and its sub-page pills keep to one
+    row; a computer's page stops at a comfortable width."""
     if phone:
         return "\n".join(f'[data-testid="stSidebarNavItems"] li:has(a[href$="/{name}"]) '
-                          "{ display: none; }" for name in knobs.PHONE_HIDDEN_PAGES)
+                          "{ display: none; }" for name in knobs.PHONE_HIDDEN_PAGES
+                          ) + PHONE_SECTIONS
     return ('[data-testid="stMainBlockContainer"] { margin: 0 auto; max-width: '
             f"{knobs.COMPUTER_MAX_WIDTH}px; }}")
 
@@ -184,7 +196,6 @@ def stylesheet(mode: str, phone: bool = False) -> str:
     t = TOKENS[mode]
     tokens = " ".join(f"--ct-{k}: {v};" for k, v in t.items())
     return f"""<style>
-{layout_css(phone)}
 :root {{ {tokens} --ct-mono: {MONO}; --ct-ease: 0.2s ease; }}
 
 /* Less empty space above the page head (the header bar is 3.75rem). */
@@ -264,9 +275,9 @@ def stylesheet(mode: str, phone: bool = False) -> str:
     background-color: #fff; background-size: 78%; border-radius: 50%;
     box-shadow: 0 0 0 1.5px #fff; }}   /* on the gradient: a white disc behind the mark */
 
-/* Horizontal radios become a segmented control: one of a few, all visible. */
+/* Horizontal radios become pills: one of a few, all visible. */
 [data-testid="stRadio"] [role="radiogroup"] {{ gap: 6px; flex-wrap: wrap; }}
-[data-testid="stRadioOption"] {{ margin: 0; padding: 5px 12px; border-radius: 6px;
+[data-testid="stRadioOption"] {{ margin: 0; padding: 5px 12px; border-radius: 999px;
     background: var(--ct-card); border: 1px solid var(--ct-border); color: var(--ct-text2);
     font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; }}
 [data-testid="stRadioOption"] > div > div > div:not([data-testid]) {{ display: none; }}  /* the dot */
@@ -277,10 +288,19 @@ def stylesheet(mode: str, phone: bool = False) -> str:
     border-color: var(--ct-selected-border); color: var(--ct-text);
     box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.15); }}
 
-/* Sub-pages (ui.sections): bigger pills, a hairline under the row. */
-[class*="st-key-sections-"] {{ border-bottom: 1px solid var(--ct-border); padding-bottom: 0.6rem;
-    margin-bottom: 0.2rem; }}
-[class*="st-key-sections-"] [data-testid="stRadioOption"] {{ padding: 7px 14px; }}
+/* Sub-pages (ui.sections): a pill selector, the choices in one rounded track
+   (a rounded box if a phone wraps it onto two rows). */
+[class*="st-key-sections-"] {{ margin-bottom: 0.4rem; }}
+[class*="st-key-sections-"] [role="radiogroup"] {{ display: inline-flex; width: fit-content;
+    max-width: 100%; gap: 2px; padding: 4px; border-radius: 22px;
+    background: var(--ct-card-hover); border: 1px solid var(--ct-border); }}
+[class*="st-key-sections-"] [data-testid="stRadioOption"] {{ padding: 7px 16px;
+    background: transparent; border-color: transparent; }}
+[class*="st-key-sections-"] [data-testid="stRadioOption"]:hover {{ background: var(--ct-card); }}
+[class*="st-key-sections-"] [data-testid="stRadioOption"][data-selected="true"],
+[class*="st-key-sections-"] [data-testid="stRadioOption"]:has(input:checked) {{
+    background: var(--ct-selected); border-color: var(--ct-selected-border);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12); }}
 [class*="st-key-sections-"] [data-testid="stRadioOption"] p {{ font-size: 0.85rem; }}
 
 /* No "Press Enter to submit form" hint inside inputs: it sits on the value. */
@@ -313,6 +333,9 @@ def stylesheet(mode: str, phone: bool = False) -> str:
     overflow-wrap: anywhere; }}
 
 @media (prefers-reduced-motion: reduce) {{ * {{ transition: none !important; }} }}
+
+/* The device's own rules, last so they win. */
+{layout_css(phone)}
 </style>"""
 
 
