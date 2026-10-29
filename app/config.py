@@ -11,9 +11,6 @@ FOLLOW_UP_DAYS = 14
 # Home lists interviews from today through this many days ahead.
 INTERVIEW_LOOKAHEAD_DAYS = 7
 
-# Weeks shown in the "applications per week" chart.
-STATS_WEEKS = 12
-
 # Pipeline order. The first five are open; the rest close an application.
 STATUSES = [
     "saved",          # interesting, not applied yet
@@ -48,7 +45,7 @@ DISMISS_REASONS = ["wrong role", "not enough experience", "too much travel", "lo
 
 # A lead still in the inbox this many days after it arrived is stale: shown
 # under its own view, out of the way (a posting that old is usually gone).
-LEAD_STALE_DAYS = 14
+LEAD_STALE_DAYS = 7
 
 # How far back the daily review looks at dismissals, and how many it reads.
 DISMISSAL_DAYS = 30
@@ -86,11 +83,15 @@ PAY_SOURCES = ["listed", "estimated"]
 
 # How the daily review looks for pay when the alert doesn't give it, shown
 # under "How scoring works" and printed by `leads.py rubric`.
+# The review looks up missing pay only for a job whose role and location would
+# both rate this or more: the rest aren't worth the searches.
+PAY_RESEARCH_FIT = 6
 PAY_RESEARCH = (
     "When the alert gives no pay, the review opens the posting for its own range, or "
     "searches the web for a recent range for that title at that company (or that "
-    "title in that area) and stores it as an estimate, saying where it came from. Jobs that are a "
-    "poor fit on role or location are left unresearched. Estimates and missing pay "
+    "title in that area) and stores it as an estimate, saying where it came from. It "
+    f"only looks for jobs that rate {PAY_RESEARCH_FIT} or more on both role and location; "
+    "the rest stay Pay not listed. Estimates and missing pay "
     "are marked with a yellow warning, so a listed range is never confused with a guess."
 )
 
@@ -166,11 +167,8 @@ MAYBE_FIT = 4
 # long inbox stays quick to draw on a phone.
 LEADS_SHOWN = 25
 
-# Phone or computer: the app picks from the browser (logic.device_from_agent);
-# the sidebar's Layout switch overrides it for the session. On a computer
-# pages use the full width, up to this many pixels.
-LAYOUT_CHOICES = ["Auto", "Phone", "Computer"]
+# Phone or computer: the app picks from the browser (logic.device_from_agent).
+# On a computer pages use the full width, up to this many pixels.
 COMPUTER_MAX_WIDTH = 1440
-PHONE_HIDDEN_PAGES = ["Import"]      # pages left out of the phone's menu
 HOME_TOP_LEADS = 3                   # a computer's Home lists the best few waiting leads
 BULK_ADD_MAX = 5                     # leads added at once from the table (each runs a site search)

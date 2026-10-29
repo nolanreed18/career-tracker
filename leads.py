@@ -59,6 +59,7 @@ def main(argv: list[str]) -> int:
             "score": "weighted average of the ratings, to one decimal; a category not "
                      "rated is left out",
             "pay": {"sources": config.PAY_SOURCES, "research": config.PAY_RESEARCH,
+                    "research_fit": config.PAY_RESEARCH_FIT,
                     "rule": "rate pay only when a salary is given (listed, or your "
                             "estimate with a pay_note); otherwise leave pay out of fit"},
             "deal_breaker_cap": config.DEAL_BREAKER_CAP,

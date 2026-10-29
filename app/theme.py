@@ -172,13 +172,10 @@ PHONE_PILLS = """
 
 
 def layout_css(phone: bool) -> str:
-    """The part of the stylesheet that differs by device: a phone's menu
-    leaves out the computer-only pages and its pills are a little smaller;
-    a computer's page stops at a comfortable width."""
+    """The part of the stylesheet that differs by device: a phone's pills
+    are a little smaller; a computer's page stops at a comfortable width."""
     if phone:
-        return "\n".join(f'[data-testid="stSidebarNavItems"] li:has(a[href$="/{name}"]) '
-                          "{ display: none; }" for name in knobs.PHONE_HIDDEN_PAGES
-                          ) + PHONE_PILLS
+        return PHONE_PILLS
     return ('[data-testid="stMainBlockContainer"] { margin: 0 auto; max-width: '
             f"{knobs.COMPUTER_MAX_WIDTH}px; }}")
 

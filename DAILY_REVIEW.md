@@ -75,9 +75,10 @@ the inbox, never in this public repository.
    jobs already stored as `company|title` (lower-case, punctuation
    dropped). Skip jobs already there, and count how many you skipped.
 
-5. **Find the pay** for each new job whose email gave none, unless the job is
-   plainly weak (its role or location would rate 3 or under against the
-   profile: leave those unresearched).
+5. **Find the pay** for each new job whose email gave none, but only when
+   its role and location would both rate at least the rubric's
+   `pay.research_fit` against the profile. Leave the rest unresearched:
+   they are saved without pay and show as Pay not listed.
    - First open the job link itself with the web fetch tool and read the
      posting: a range the employer states there is `"listed"` pay, exactly
      like one from the email (Colorado postings must state one). A job

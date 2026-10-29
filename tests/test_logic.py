@@ -1,6 +1,6 @@
 """The pure calculations: needs attention, stats, formatting, CSV import."""
 
-from datetime import date, time
+from datetime import date, time, timedelta
 
 import pandas as pd
 import pytest
@@ -111,11 +111,7 @@ def test_a_recent_past_interview_counts_as_an_update():
     assert [i.kind for i in logic.needs_attention(quiet, old, TODAY)] == ["follow_up"]
 
 
-# ---- stats ------------------------------------------------------------------
-
-def events(*rows) -> pd.DataFrame:
-    return pd.DataFrame(rows, columns=["application_id", "status"])
-
+# ---- pipeline ---------------------------------------------------------------
 
 def test_pipeline_counts_every_status_in_order():
     pipe = logic.pipeline(apps({"status": "applied"}, {"status": "applied"},
@@ -134,91 +130,6 @@ def test_weekly_counts_by_monday_with_zero_weeks():
     assert weekly["applications"].tolist() == [1, 0, 2]
 
 
-def test_response_rate_counts_anything_that_reached_a_screen():
-    frame = apps({"status": "rejected"}, {"status": "applied"}, {"status": "interviewing"},
-                 {"status": "saved"})
-    # 1 was screened before being rejected; 4 is only saved and isn't counted.
-    assert logic.response_rate(frame, events((1, "applied"), (1, "screening"),
-                                             (1, "rejected"))) == (2, 3)
-    assert logic.response_rate(apps(), events()) == (0, 0)
-    # 2 never had a screening event but an interview is on record: a response
-    # (1 was screened, 3 is interviewing, so all three sent ones responded).
-    interviews = pd.DataFrame({"application_id": [2]})
-    assert logic.response_rate(frame, events((1, "screening")), interviews) == (3, 3)
-    assert logic.by_source(frame, events(), interviews)["responded"].sum() == 2    # 2 and 3
-
-
-def test_by_source():
-    frame = apps({"source": "LinkedIn", "status": "applied"},
-                 {"source": "LinkedIn", "status": "screening"},
-                 {"source": "Referral", "status": "offer"},
-                 {"source": None, "status": "applied"})
-    table = logic.by_source(frame, events())
-    assert table.values.tolist() == [
-        ["LinkedIn", 2, 1, 0.5], ["(not set)", 1, 0, 0.0], ["Referral", 1, 1, 1.0]]
-
-
-# ---- formatting -------------------------------------------------------------
-
-def test_salary_range():
-    assert logic.salary_range(90000, 110000) == "$90,000–$110,000"
-    assert logic.salary_range(90000, None) == "$90,000+"
-    assert logic.salary_range(float("nan"), 120000) == "up to $120,000"
-    assert logic.salary_range(None, None) == ""
-
-
-def test_when_and_clock():
-    assert logic.when(TODAY, TODAY) == "today"
-    assert logic.when(date(2026, 10, 20), TODAY) == "Tue Oct 20"
-    assert logic.clock(time(0, 5)) == "12:05 am"
-    assert logic.clock(time(12, 0)) == "12:00 pm"
-
-
-# ---- import -----------------------------------------------------------------
-
-def test_import_matches_loose_headers_and_reads_values():
-    frame = pd.DataFrame([{
-        "Company Name": " Acme ", "Job_Title": "Data Analyst", "Stage": "Phone Screen",
-        "Date Applied": "10/01/2026", "Salary": "$90k - $110K", "Work-Mode": "Remote (US)",
-        "Notes": "", "Unrelated": "x",
-    }])
-    rows, problems = logic.map_import(frame)
-    assert problems == []
-    assert rows == [{
-        "company": "Acme", "role": "Data Analyst", "status": "screening",
-        "applied_on": date(2026, 10, 1), "job_url": None, "location": None,
-        "work_mode": "remote", "source": None, "salary_min": 90000, "salary_max": 110000,
-        "notes": None,
-    }]
-
-
-def test_import_explains_what_it_skipped_or_guessed():
-    frame = pd.DataFrame([
-        {"Company": "Acme", "Role": "", "Status": "applied", "Applied": ""},
-        {"Company": "Beta", "Role": "PM", "Status": "maybe?", "Applied": "not a date"},
-        {"Company": "", "Role": "", "Status": "", "Applied": ""},
-    ])
-    rows, problems = logic.map_import(frame)
-    assert [(r["company"], r["status"], r["applied_on"]) for r in rows] == [
-        ("Beta", "saved", None)]
-    assert problems == [
-        "Row 2: skipped — needs both a company and a role.",
-        "Row 3: couldn't read the date “not a date”; left blank.",
-        "Row 3: unknown status “maybe?”; set to saved.",
-    ]
-
-
-def test_import_needs_company_and_role_columns():
-    rows, problems = logic.map_import(pd.DataFrame([{"Name": "x"}]))
-    assert rows == [] and len(problems) == 2
-
-
-def test_parse_salary():
-    assert logic.parse_salary("95,500") == (95500, None)
-    assert logic.parse_salary("120k") == (120000, None)
-    assert logic.parse_salary("competitive") == (None, None)
-
-
 # ---- job leads --------------------------------------------------------------
 
 def test_the_same_job_gets_the_same_key_whatever_the_site_or_city():
@@ -235,7 +146,9 @@ def test_the_same_job_gets_the_same_key_whatever_the_site_or_city():
 
 def test_stale_leads_are_the_old_ones_still_sitting_there():
     today = date(2026, 10, 19)
-    assert logic.is_stale(date(2026, 10, 4), today) and not logic.is_stale(date(2026, 10, 5), today)
+    days = config.LEAD_STALE_DAYS
+    assert logic.is_stale(today - timedelta(days=days + 1), today)
+    assert not logic.is_stale(today - timedelta(days=days), today)
     assert not logic.is_stale(None, today)
     frame = pd.DataFrame({"title": ["old", "new"], "found_on": [date(2026, 9, 1), today]})
     fresh, stale = logic.split_stale(frame, today)
@@ -385,14 +298,6 @@ def test_pay_state_tells_listed_estimated_and_unknown_apart():
     assert logic.pay_state(120000, None, "estimated") == ("estimated", "~$120,000+")
     assert logic.pay_state(None, None, None) == ("unknown", "Pay not listed")
     assert logic.pay_state(None, float("nan"), "listed") == ("unknown", "Pay not listed")
-
-
-def test_without_pay_rescores_a_lead_rated_before_its_pay_was_known():
-    detail = {"ratings": {"role": 8, "industry": 4, "pay": 5}, "deal_breaker": False}
-    assert logic.without_pay(detail) == (6.5, {"ratings": {"role": 8, "industry": 4},
-                                               "deal_breaker": False})
-    assert logic.without_pay({"ratings": {"pay": 5}})[0] is None
-    assert logic.without_pay({"ratings": {"role": 9, "pay": 2}, "deal_breaker": True})[0] == 3
 
 
 def test_a_projects_spreadsheet_becomes_text_for_claude():

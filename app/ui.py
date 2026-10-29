@@ -38,15 +38,8 @@ SIGNED_IN = "signed_in"
 THEME_SETTING = "theme"
 
 
-LAYOUT_KEY = "layout_choice"
-
-
 def device() -> str:
-    """"phone" or "computer": the sidebar's Layout switch when it says so,
-    else what the browser says it is."""
-    choice = st.session_state.get(LAYOUT_KEY, "Auto")
-    if choice in ("Phone", "Computer"):
-        return choice.lower()
+    """"phone" or "computer", from what the browser says it is."""
     try:
         agent = st.context.headers.get("User-Agent", "")
     except Exception:                                  # no browser: a test or a script
@@ -105,8 +98,6 @@ def appearance() -> None:
         st.session_state["theme_shown"] = mode
     with st.sidebar:
         dark = st.toggle("Dark mode", key="dark_mode")
-        st.selectbox("Layout", config.LAYOUT_CHOICES, key=LAYOUT_KEY,
-                     help="Auto picks the phone or computer layout from your browser")
         _account()
     picked = theme.DARK if dark else theme.LIGHT
     if picked != mode:

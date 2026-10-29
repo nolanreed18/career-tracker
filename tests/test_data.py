@@ -64,7 +64,7 @@ def test_deleting_an_application_takes_its_history_and_interviews_along():
     app_id = data.add_application(acme, "A", "applied", TODAY)
     data.add_interview(app_id, TODAY)
     data.delete_application(app_id)
-    assert data.all_events().empty and data.interviews().empty
+    assert data.events(app_id).empty and data.interviews().empty
     assert data.companies()["applications"].tolist() == [0]
 
 
@@ -96,23 +96,6 @@ def test_interviews_come_back_in_date_and_time_order():
     assert frame["round"].tolist() == ["Screen", "First", "Second"]
     assert frame["company"].tolist() == ["Acme"] * 3
     assert data.interviews()["round"].tolist() == ["Screen", "First", "Second"]
-
-
-def test_import_adds_everything_once():
-    rows = [{"company": "Acme", "role": "A", "status": "applied", "applied_on": date(2026, 10, 1),
-             "notes": "hi"},
-            {"company": "acme", "role": "B", "status": "saved", "applied_on": None}]
-    assert data.import_applications(rows, TODAY) == (2, 0)
-    assert data.import_applications(rows, TODAY) == (0, 2)
-    assert len(data.companies()) == 1 and len(data.applications()) == 2
-
-
-def test_a_failed_import_adds_nothing():
-    rows = [{"company": "Acme", "role": "A", "status": "applied", "applied_on": None},
-            {"company": "Beta", "role": "B", "status": "nonsense", "applied_on": None}]
-    with pytest.raises(psycopg.errors.CheckViolation):
-        data.import_applications(rows, TODAY)
-    assert data.applications().empty and data.companies().empty
 
 
 def test_a_closed_connection_is_reopened():

@@ -23,9 +23,10 @@ database, hosted free on Streamlit Community Cloud.
   shows its ratings, and **How scoring works** on the What I'm looking for
   section lists the categories, weights and pay rules (they live in
   `app/config.py`). Today's arrivals carry a **New** badge and the **New
-  today** view shows just them; weak matches (under 4) are hidden until you
-  choose **All** or **Weak** (on a computer, tick them all at once to
-  dismiss); a lead nobody touches for 14 days moves to **Stale**. All of
+  today** view (where the inbox opens) shows just them; weak matches
+  (under 4) are hidden until you choose **All** or **Weak** (on a computer,
+  tick them all at once to dismiss); a lead nobody touches for 7 days moves
+  to **Stale**. All of
   them stay stored, so the same job (company and title) never comes back
   from any site. **Add** makes one a Saved application; **Dismiss…** asks
   why (wrong role, location, pay, company, already applied, other) and the
@@ -34,8 +35,9 @@ database, hosted free on Streamlit Community Cloud.
   deal-breakers and **companies to skip** the scores are based on. Home
   shows how many new leads are waiting.
 - **Applications**: add one, filter and search, then for each application log
-  updates (status changes or plain notes), set the next step, add interviews,
-  edit, and see its full history. **Add** on a lead saves it here, reads the
+  updates (status changes or plain notes), set the next step, add interviews
+  (with prep notes, then "how it went" and a 1–5 rating), edit, and see its
+  full history. **Add** on a lead saves it here, reads the
   posting from its link and has Claude search for the same posting on the
   employer's own careers site (about 15 cents), so the application opens with
   **Apply on the employer's site** and never needs LinkedIn's Easy Apply;
@@ -83,12 +85,6 @@ database, hosted free on Streamlit Community Cloud.
   older version). Every Claude call is a
   button you click, costs about 45 cents (30 to build the master), and is
   counted on the page.
-- **Interviews**: upcoming and past, with prep notes, "how it went" and a 1–5
-  rating.
-- **Stats**: pipeline by stage, applications per week, and response rate by
-  source.
-- **Import**: bring in applications from a spreadsheet saved as CSV. Headers
-  are matched loosely, and importing the same file twice adds nothing.
 
 Settings you might want to change (the 14-day follow-up, the 7-day interview
 window, the status list, the Claude model) are in `app/config.py`.
@@ -96,21 +92,20 @@ window, the status list, the Claude model) are in `app/config.py`.
 **Look and feel.** The app opens in a light look; the **Dark mode** switch in
 the sidebar (tap ≫ at the top left on a phone) flips it, and the choice is
 saved in the database, so every device follows. Every row of choices (a
-page's sections, the lead filters, Table or Cards, Open/Closed/All) is the same
+page's sections, the lead filters, Open/Closed/All) is the same
 pill selector: a grey track with the chosen one in the blue gradient. Both
 looks, and the fonts, badges, cards and that selector, are defined in
 `app/theme.py`; `.streamlit/config.toml`
 carries the light look so the first paint already matches.
 
 **Phone or computer.** The app tells from your browser whether it's on a
-phone, and the sidebar's **Layout** switch (Auto, Phone, Computer) overrides it
-for the session, e.g. on an iPad asking for the desktop site. A phone keeps to
+phone (an iPad counts as a computer). A phone keeps to
 the everyday tasks: triaging leads as cards, opening an application, applying,
 logging updates, interviews, Projects and Resume Builder downloads; the wide
 editing tables (the master's grids, a tailored version's grids, Build from
-files) say to use the computer, and Import leaves the phone's menu. A computer
+files) say to use the computer. A computer
 uses the full width: Home puts what needs attention beside your best waiting
-leads, the pipeline and this week's numbers; Job Leads opens as a sortable table
+leads, the pipeline and this week's numbers; Job Leads is a sortable table
 where you tick several leads and add (up to five at a time) or dismiss them
 together, their cards below; Applications and Projects show the list beside the
 open one, and a click on a row opens it.
@@ -214,8 +209,8 @@ and it's safe to run again: it never deletes anything.
 
 Job sites email alerts to the job-search Gmail. Every morning a scheduled
 Claude task follows [`DAILY_REVIEW.md`](DAILY_REVIEW.md): it reads the new
-alert emails, looks up pay for the jobs whose alert gave none, scores each
-job 1–10 against **Job Leads → What I'm looking for**, adds the new ones to
+alert emails, looks up pay for the promising jobs whose alert gave none,
+scores each job 1–10 against **Job Leads → What I'm looking for**, adds the new ones to
 the Job Leads page, emails the digest, and files the alert emails under the
 `job-alerts-reviewed` label.
 

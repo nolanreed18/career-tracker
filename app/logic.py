@@ -122,7 +122,7 @@ def needs_attention(apps: pd.DataFrame, interviews: pd.DataFrame, today: date,
     return sorted(items, key=lambda i: (ORDER[i.kind], i.on, i.headline))
 
 
-# ---- stats ------------------------------------------------------------------
+# ---- pipeline ---------------------------------------------------------------
 
 def application_labels(apps: pd.DataFrame) -> dict[int, str]:
     """{application_id: "Company — Role"} for a dropdown (plain ints: the
@@ -144,8 +144,7 @@ def week_start(d: date) -> date:
     return d - timedelta(days=d.weekday())          # Monday
 
 
-def weekly_applications(apps: pd.DataFrame, today: date,
-                        weeks: int = config.STATS_WEEKS) -> pd.DataFrame:
+def weekly_applications(apps: pd.DataFrame, today: date, weeks: int) -> pd.DataFrame:
     """Applications sent per week (by applied date), the last `weeks` weeks
     ending with this one, zeros included."""
     this_week = week_start(today)
@@ -155,52 +154,6 @@ def weekly_applications(apps: pd.DataFrame, today: date,
         if not blank(applied) and week_start(applied) in counts:
             counts[week_start(applied)] += 1
     return pd.DataFrame({"week": starts, "applications": [counts[s] for s in starts]})
-
-
-def responded_ids(apps: pd.DataFrame, events: pd.DataFrame,
-                  interviews: pd.DataFrame | None = None) -> set[int]:
-    """Applications that ever reached a screen or further, or had an
-    interview on record (an imported rejection often has the interview
-    without the screening step in its history)."""
-    reached = set()
-    if not events.empty:
-        reached |= set(events.loc[events["status"].isin(config.RESPONDED_STATUSES),
-                                  "application_id"].astype(int))
-    if not apps.empty:
-        reached |= set(apps.loc[apps["status"].isin(config.RESPONDED_STATUSES),
-                                "application_id"].astype(int))
-    if interviews is not None and not interviews.empty:
-        reached |= set(interviews["application_id"].astype(int))
-    return reached
-
-
-def response_rate(apps: pd.DataFrame, events: pd.DataFrame,
-                  interviews: pd.DataFrame | None = None) -> tuple[int, int]:
-    """(responded, applied): of the applications actually sent, how many got
-    as far as a screen or an interview. Rejections without one don't count."""
-    if apps.empty:
-        return 0, 0
-    sent = apps[apps["status"] != "saved"]
-    reached = responded_ids(apps, events, interviews)
-    return sum(int(i) in reached for i in sent["application_id"]), len(sent)
-
-
-def by_source(apps: pd.DataFrame, events: pd.DataFrame,
-              interviews: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Applications sent and responses, per source, most-used source first."""
-    columns = ["source", "applied", "responded", "rate"]
-    sent = apps[apps["status"] != "saved"] if not apps.empty else apps
-    if sent.empty:
-        return pd.DataFrame(columns=columns)
-    reached = responded_ids(apps, events, interviews)
-    rows = []
-    for source, group in sent.groupby(sent["source"].map(lambda s: value(s) or "(not set)")):
-        applied = len(group)
-        responded = sum(int(i) in reached for i in group["application_id"])
-        rows.append((source, applied, responded, responded / applied))
-    return (pd.DataFrame(rows, columns=columns)
-            .sort_values(["applied", "source"], ascending=[False, True])
-            .reset_index(drop=True))
 
 
 # ---- formatting -------------------------------------------------------------
@@ -260,57 +213,7 @@ def salary_range(low, high) -> str:
     return ""
 
 
-# ---- spreadsheet import -----------------------------------------------------
-
-# Spreadsheet headers each field is recognised by, compared lower-case with
-# underscores and dashes as spaces.
-ALIASES = {
-    "company": ["company", "company name", "employer", "organization", "organisation"],
-    "role": ["role", "title", "job title", "position", "job"],
-    "status": ["status", "stage"],
-    "applied_on": ["applied on", "applied", "date applied", "application date", "date"],
-    "job_url": ["job url", "url", "link", "job link", "posting", "job posting"],
-    "location": ["location", "city"],
-    "work_mode": ["work mode", "remote", "work type", "workplace", "on site"],
-    "source": ["source", "found via", "where found", "found on"],
-    "salary_min": ["salary min", "min salary", "salary from", "salary low"],
-    "salary_max": ["salary max", "max salary", "salary to", "salary high"],
-    "salary": ["salary", "salary range", "pay", "compensation"],
-    "notes": ["notes", "note", "comments"],
-}
-
-STATUS_WORDS = {
-    "saved": "saved", "wishlist": "saved", "interested": "saved", "to apply": "saved",
-    "bookmarked": "saved",
-    "applied": "applied", "submitted": "applied", "pending": "applied",
-    "no response": "applied", "waiting": "applied",
-    "screen": "screening", "screening": "screening", "phone screen": "screening",
-    "recruiter call": "screening", "recruiter screen": "screening",
-    "interview": "interviewing", "interviewing": "interviewing", "interviews": "interviewing",
-    "onsite": "interviewing", "final round": "interviewing",
-    "offer": "offer", "offered": "offer",
-    "accepted": "accepted", "hired": "accepted",
-    "rejected": "rejected", "declined": "rejected", "no": "rejected", "ghosted": "rejected",
-    "closed": "rejected",
-    "withdrawn": "withdrawn", "withdrew": "withdrawn",
-}
-
-
-def _norm(header: str) -> str:
-    return re.sub(r"[\s_\-]+", " ", str(header)).strip().lower()
-
-
-def match_columns(headers) -> dict[str, str]:
-    """{field: spreadsheet header} for every field a header was found for."""
-    by_norm = {_norm(h): h for h in headers}
-    found = {}
-    for field, names in ALIASES.items():
-        for name in names:
-            if name in by_norm and by_norm[name] not in found.values():
-                found[field] = by_norm[name]
-                break
-    return found
-
+# ---- pay and work mode ----------------------------------------------------
 
 def parse_money(text) -> int | None:
     """'$120k' -> 120000, '95,500' -> 95500; None if no number."""
@@ -344,72 +247,6 @@ def parse_work_mode(text) -> str | None:
     if "site" in t or "office" in t or "person" in t:
         return "onsite"
     return None
-
-
-def map_import(frame: pd.DataFrame) -> tuple[list[dict], list[str]]:
-    """Rows ready for data.import_applications, and a note for each problem.
-
-    A row needs a company and a role; one without is skipped. An unknown
-    status becomes "applied" when there is an applied date, else "saved".
-    Row numbers in the notes are spreadsheet rows (the header is row 1).
-    """
-    columns = match_columns(frame.columns)
-    problems = []
-    for needed in ("company", "role"):
-        if needed not in columns:
-            problems.append(f"No {needed} column found — expected a header like "
-                            f"“{ALIASES[needed][0].title()}”.")
-    if problems:
-        return [], problems
-
-    def cell(row, field):
-        header = columns.get(field)
-        return None if header is None else value(row[header])
-
-    rows = []
-    for index, row in frame.iterrows():
-        line = index + 2 if isinstance(index, int) else index
-        company, role = cell(row, "company"), cell(row, "role")
-        if company is None or role is None:
-            if any(not blank(v) for v in row.values):
-                problems.append(f"Row {line}: skipped — needs both a company and a role.")
-            continue
-
-        applied_on = None
-        raw_date = cell(row, "applied_on")
-        if raw_date is not None:
-            parsed = pd.to_datetime(raw_date, errors="coerce")
-            if pd.isna(parsed):
-                problems.append(f"Row {line}: couldn't read the date “{raw_date}”; left blank.")
-            else:
-                applied_on = parsed.date()
-
-        raw_status = cell(row, "status")
-        status = STATUS_WORDS.get(_norm(raw_status)) if raw_status is not None else None
-        if status is None:
-            status = "applied" if applied_on else "saved"
-            if raw_status is not None:
-                problems.append(f"Row {line}: unknown status “{raw_status}”; set to {status}.")
-
-        low, high = parse_salary(cell(row, "salary"))
-        if "salary_min" in columns:
-            low = parse_money(cell(row, "salary_min"))
-        if "salary_max" in columns:
-            high = parse_money(cell(row, "salary_max"))
-        if low is not None and high is not None and high < low:
-            low, high = high, low
-
-        mapped = {
-            "company": str(company).strip(), "role": str(role).strip(), "status": status,
-            "applied_on": applied_on,
-            "job_url": cell(row, "job_url"), "location": cell(row, "location"),
-            "work_mode": parse_work_mode(cell(row, "work_mode")),
-            "source": cell(row, "source"), "salary_min": low, "salary_max": high,
-            "notes": cell(row, "notes"),
-        }
-        rows.append({k: (str(v) if k in ("job_url", "location", "source", "notes")
-                         and v is not None else v) for k, v in mapped.items()})
-    return rows, problems
 
 
 # ---- job leads --------------------------------------------------------------
@@ -567,14 +404,6 @@ def fit_total(ratings: dict, deal_breaker: bool = False) -> float | None:
     return round(total, 1)
 
 
-def without_pay(detail: dict) -> tuple[float | None, dict]:
-    """A lead's (fit_score, fit_detail) with the pay rating dropped: for
-    leads rated on pay before it was known."""
-    ratings = {k: v for k, v in (detail.get("ratings") or {}).items() if k != "pay"}
-    deal_breaker = bool(detail.get("deal_breaker"))
-    return fit_total(ratings, deal_breaker), {**detail, "ratings": ratings,
-                                             "deal_breaker": deal_breaker}
-
 
 def pay_state(salary_min, salary_max, pay_source) -> tuple[str, str]:
     """('listed', '$120,000–$140,000'), ('estimated', '~$120,000–$140,000') or
@@ -663,6 +492,11 @@ PROJECT_COLUMNS = {
     "situation": ["situation"], "task": ["task"], "action": ["action"], "result": ["result"],
     "skills": ["hardskills", "hard skills", "skills", "tools"],
 }
+
+
+def _norm(header: str) -> str:
+    """A spreadsheet header lower-cased, with underscores and dashes as spaces."""
+    return re.sub(r"[\s_\-]+", " ", str(header)).strip().lower()
 
 
 def projects_text(frame: pd.DataFrame) -> str:

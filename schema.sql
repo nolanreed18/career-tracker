@@ -17,23 +17,6 @@ create table if not exists companies (
 -- One row per company, whatever the capitalisation.
 create unique index if not exists companies_name_key on companies (lower(name));
 
--- Contacts, the career log and job history (below) are no longer in the app;
--- their tables stay so nothing saved in them is lost.
-create table if not exists contacts (
-    contact_id         bigint generated always as identity primary key,
-    company_id         bigint references companies on delete set null,
-    name               text not null check (btrim(name) <> ''),
-    title              text,
-    kind               text check (kind in
-                         ('recruiter', 'hiring manager', 'referral', 'colleague', 'network')),
-    email              text,
-    phone              text,
-    linkedin           text,
-    notes              text,
-    last_contacted_on  date,
-    created_on         date not null
-);
-
 create table if not exists applications (
     application_id  bigint generated always as identity primary key,
     -- A company with applications cannot be deleted: delete those first.
@@ -51,7 +34,6 @@ create table if not exists applications (
     applied_on      date,
     next_action     text,
     next_action_on  date,
-    contact_id      bigint references contacts on delete set null,
     notes           text,
     posting         text,              -- the job posting's text, for tailoring
     apply_url       text,              -- the posting on the employer's own site, to apply there
@@ -88,31 +70,6 @@ create table if not exists interviews (
     rating          smallint check (rating between 1 and 5)  -- how it went
 );
 create index if not exists interviews_app on interviews (application_id);
-
--- The career log: wins, skills, certifications, feedback, things learned (unused).
-create table if not exists career_entries (
-    entry_id     bigint generated always as identity primary key,
-    kind         text not null check (kind in
-                   ('win', 'skill', 'certification', 'feedback', 'learning')),
-    title        text not null check (btrim(title) <> ''),
-    details      text,
-    happened_on  date not null,
-    tags         text
-);
-
--- Job history, with pay (unused).
-create table if not exists positions (
-    position_id  bigint generated always as identity primary key,
-    employer     text not null check (btrim(employer) <> ''),
-    title        text not null check (btrim(title) <> ''),
-    started_on   date not null,
-    ended_on     date,
-    base_salary  integer check (base_salary >= 0),
-    bonus        integer check (bonus >= 0),
-    other_comp   text,
-    notes        text,
-    check (ended_on is null or ended_on >= started_on)
-);
 
 -- What you're looking for. One row; the daily job-alert review scores every
 -- lead against it.

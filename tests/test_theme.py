@@ -75,8 +75,8 @@ def test_the_stylesheet_marks_claude_buttons_and_fits_the_device():
     computer = theme.stylesheet(theme.LIGHT)
     assert f'[class*="st-key-{theme.CLAUDE_KEY}"] button p::before' in computer
     assert theme.CLAUDE_MARK.startswith("data:image/svg+xml,") and "%23D97757" in theme.CLAUDE_MARK
-    assert "max-width: 1440px" in computer and 'href$="/Import"' not in computer
+    assert "max-width: 1440px" in computer and "padding: 6px 11px" not in computer
     phone = theme.stylesheet(theme.DARK, phone=True)
-    assert 'li:has(a[href$="/Import"]) { display: none; }' in phone
+    assert "padding: 6px 11px" in phone                        # smaller pills
     assert "max-width: 1440px" not in phone
 
