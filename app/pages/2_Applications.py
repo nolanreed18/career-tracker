@@ -95,7 +95,7 @@ if apps.empty:
 phone = on_phone()
 # A computer shows the list beside the open application; a phone, one under the other.
 list_area, detail_area = ((st.container(), st.container()) if phone
-                          else st.columns(2, gap="large"))
+                          else st.columns([7, 6], gap="large"))
 
 with list_area:
     st.subheader("Your applications")
@@ -127,10 +127,10 @@ with list_area:
             hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
             key=round_key("apps_table"),
             column_config={
-                "company": st.column_config.TextColumn("Company", width=125),
-                "role": st.column_config.TextColumn("Role", width=135),
-                "status": st.column_config.TextColumn("Status", width=108),
-                "resume": st.column_config.CheckboxColumn("Resume", width=62, disabled=True,
+                "company": st.column_config.TextColumn("Company", width=105),
+                "role": st.column_config.TextColumn("Role", width=210),
+                "status": st.column_config.TextColumn("Status", width=105),
+                "resume": st.column_config.CheckboxColumn("Resume", width=60, disabled=True,
                                                           help="A tailored resume exists"),
             })
         if table.selection.rows and table.selection.rows[0] < len(view):   # a click opens it
