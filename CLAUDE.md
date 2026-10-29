@@ -71,8 +71,11 @@ only they can do (accounts, secrets, clicking merge).
   `ui.card()`, `ui.empty()` and the badge helpers rather than emoji or raw
   HTML; colour means something (blue = in progress, green = good, orange =
   attention, red = overdue/closed, grey = neutral, yellow = unverified: an
-  estimate or missing pay, via `ui.pay_badge()`). Sub-pages are
-  `ui.sections()` pills, never `st.tabs` (tabs forget their place on rerun);
+  estimate or missing pay, via `ui.pay_badge()`). Every row of choices is a
+  horizontal `st.radio` (sub-pages: `ui.sections()`), which the stylesheet
+  draws as the one pill selector (a grey track, the chosen one a gradient
+  pill); never `st.tabs` (tabs forget their place on rerun), `st.pills`,
+  `st.segmented_control` or a row of buttons;
   every delete goes through `ui.delete_button()` (tick box first); a "pick
   one" dropdown whose options can change takes `ui.round_key()` and
   `ui.bump_round()` after a delete, or it keeps showing the old choice.
