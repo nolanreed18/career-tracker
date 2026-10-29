@@ -53,6 +53,13 @@ only they can do (accounts, secrets, clicking merge).
   else Claude's word-for-word `description` (asked for only when the
   posting is missing). "Get the posting from the link" is
   `posting.from_links`: employer data, then the job link, then the employer page.
+  The project bank (`career_projects`, Resume page → Projects) holds each work
+  and personal project in STAR detail; `logic.project_detail` scores it free
+  (`config.DETAIL_CHECKS`), `ai.review_project` (`ProjectReview`) rates it,
+  asks questions and drafts bullets from the person's facts only, and with
+  answers rewrites the four STAR fields (the old text kept in the review's
+  `before` for undo). `logic.add_to_master` puts a chosen bullet in the
+  master's pool (source "project", unticked).
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no
@@ -75,7 +82,7 @@ only they can do (accounts, secrets, clicking merge).
   lead has a salary, listed or estimated; `logic.clean_lead` refuses a pay
   rating without one, and unknown pay stays out of the score.
   **Status / kind lists are repeated in `schema.sql` CHECKs** (statuses,
-  kinds, lead statuses, `DISMISS_REASONS`, `RESUME_SOURCE_KINDS`): change
+  kinds, lead statuses, `DISMISS_REASONS`, `RESUME_SOURCE_KINDS`, `PROJECT_KINDS`): change
   both (tests fail if they drift). A lead's dedupe key is company|title (`logic.lead_key`); stale
   leads (`LEAD_STALE_DAYS`) are a view, not a status. Add a table → add it to `backup.TABLES` and the
   `TABLES` list in `conftest.py`.

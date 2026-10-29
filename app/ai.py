@@ -88,6 +88,36 @@ Rules:
 """
 
 
+PROJECT_SYSTEM = """You help a person write up one project from their career so it reads
+well on a resume. You get the project as they wrote it (situation, task,
+action, result, skills), sometimes their answers to your earlier questions,
+how their resume's bullets read, and the roles they're aiming for.
+Rules:
+- Facts come only from the project and the person's answers. Never add a
+  number, tool, scope, employer or result they didn't give. Where a figure
+  would make a bullet much stronger and none is given, write a placeholder
+  in square brackets, e.g. [X hours a week], and ask for it in questions.
+- strength: how it would read today to a hiring manager for those roles,
+  1 (vague, no outcome) to 10 (specific, quantified, clearly their own work).
+- verdict: a sentence or two, plain: what's strong and what's missing.
+- questions: the facts that would strengthen it most, specific to this
+  project, each answerable in a sentence (how many people used it, how much
+  time or money it saved, what they decided themselves, what changed after).
+  Never ask what the project or the answers already say. Up to five; fewer
+  when it's already strong; none when nothing important is missing.
+- bullets: two or three options, one sentence each, in the voice of the
+  sample bullets: about as long as the typical one and never longer than the
+  longest, starting with a strong verb (present tense only when the work is
+  ongoing), the outcome stated when there is one, and ending as the samples
+  end. Vary them: one leading with the result, one with the scope.
+- skills: the tools and skills the details show, as the person names them.
+- details: when answers are given, work each answer's facts into the field
+  it belongs to (situation, task, action or result), keeping every word the
+  person already wrote and adding the new facts as plain sentences; when no
+  answers are given, return the four fields exactly as given.
+"""
+
+
 FIND_SYSTEM = """You find where a job posting lives on the employer's own careers site, so
 the person can apply there rather than through a job board.
 Rules:
@@ -278,6 +308,33 @@ def tailor(master: dict, posting: str, company: str, role: str, today: date,
         prompt += f"<notes from=\"the person\">\n{notes.strip()}\n</notes>\n\n"
     prompt += "Tailor the master resume to this posting and write the cover letter."
     return _parse(TAILOR_SYSTEM, prompt, resume_schema.Tailored)
+
+
+def review_project(project: dict, answers: list[tuple[str, str]], style: dict,
+                   targets: str = "") -> tuple[dict, Usage]:
+    """Claude's review of one project in the bank (resume_schema.ProjectReview
+    as a dict: strength, verdict, questions, bullet options, skills, and the
+    four STAR fields with any answers worked in) and what the call cost. One
+    call. answers are (question, answer) pairs from the last review; style is
+    logic.bullet_style(master); targets the roles the person wants."""
+    fields = {key: "" if logic.blank(project.get(key)) else str(project[key]).strip()
+              for key in ("title", "employer", "period", "summary", "situation", "task",
+                          "action", "result", "skills")}
+    if not any(fields[key] for key in ("summary", "situation", "task", "action", "result")):
+        raise AIError("Write a line or two about the project first: Claude works from your "
+                      "own words.")
+    samples = "\n".join(f"- {text}" for text in style.get("samples", []))
+    prompt = (f"<project>\n{json.dumps(fields, indent=1)}\n</project>\n\n"
+              f"<style typical_length=\"{style.get('typical', 200)}\" "
+              f"longest=\"{style.get('longest', 300)}\">\n{samples}\n</style>\n\n")
+    if targets.strip():
+        prompt += f"<targets>\n{targets.strip()}\n</targets>\n\n"
+    answered = [(q, a.strip()) for q, a in answers if a and a.strip()]
+    if answered:
+        prompt += ("<answers>\n" + "\n\n".join(f"Q: {q}\nA: {a}" for q, a in answered)
+                   + "\n</answers>\n\n")
+    prompt += "Review this project and word its resume bullets."
+    return _parse(PROJECT_SYSTEM, prompt, resume_schema.ProjectReview)
 
 
 def find_posting(company: str, title: str, location, source, posting: str) -> tuple[dict, Usage]:

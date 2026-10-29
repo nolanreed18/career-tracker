@@ -144,6 +144,25 @@ RESUME_SOURCE_KINDS = ["resume", "history", "projects", "other"]
 # Bullet strength, 1 (filler) to 5 (quantified, big scope).
 BULLET_RANK_MAX = 5
 
+# The project bank (Resume page, Projects): every work and personal project in
+# full, scored for detail, with Claude to review and word it. Kinds are
+# repeated in schema.sql's CHECK.
+PROJECT_KINDS = ["work", "personal"]
+# The free detail score: what a strong project write-up has, each worth points
+# (out of 100), with what to say when it's missing. A field counts once it has
+# at least that many characters; "result_number" wants a figure in the result.
+DETAIL_CHECKS = [
+    ("situation", 60, 15, "the problem or why it mattered (Situation)"),
+    ("task", 30, 10, "what you were responsible for (Task)"),
+    ("action", 150, 25, "what you did and how (Action)"),
+    ("result", 40, 20, "how it turned out (Result)"),
+    ("result_number", 0, 15, "a number in the result: hours, $, %, users"),
+    ("skills", 2, 10, "at least two tools or skills"),
+    ("bullet", 40, 5, "a resume bullet"),
+]
+DETAIL_STRONG = 80                   # a score at or above: green, ready
+DETAIL_THIN = 50                     # at or above: orange, thin; below: red
+
 # Scores below this are weak matches: the Job Leads inbox hides them until
 # asked (they stay stored, so the same job never comes back).
 MAYBE_FIT = 4

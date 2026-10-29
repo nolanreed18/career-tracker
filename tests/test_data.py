@@ -371,6 +371,35 @@ def test_every_resume_source_kind_is_allowed_by_the_schema_and_nothing_else():
         data.add_resume_source("odd.txt", "diary", "x", None, TODAY)
 
 
+def test_the_project_bank_keeps_projects_and_their_reviews():
+    first = data.add_project(TODAY, kind="work", title="Rates", employer="Acme",
+                             situation="Rates came by email.", skills="Python")
+    data.add_project(TODAY, kind="personal", title="Budget app")
+    assert data.projects()["title"].tolist() == ["Rates", "Budget app"]       # work first
+    data.update_project(first, date(2026, 10, 20), result="6 hours to 20 minutes", bullet=" ")
+    saved = data.project(first)
+    assert (saved["result"], saved["bullet"], saved["updated_on"]) == (
+        "6 hours to 20 minutes", None, date(2026, 10, 20))
+    data.save_project_review(first, {"strength": 7, "questions": ["How many users?"]}, TODAY)
+    assert data.project(first)["review"] == {"strength": 7, "questions": ["How many users?"]}
+    assert data.project(first)["reviewed_on"] == TODAY
+    data.save_project_review(first, None, TODAY)
+    assert data.project(first)["review"] is None
+    with pytest.raises(ValueError, match="unknown project fields"):
+        data.add_project(TODAY, kind="work", title="X", review={})
+    with pytest.raises(ValueError, match="cannot update"):
+        data.update_project(first, TODAY, created_on=TODAY)
+    data.delete_project(first)
+    assert data.projects()["title"].tolist() == ["Budget app"]
+
+
+def test_every_project_kind_is_allowed_by_the_schema_and_nothing_else():
+    for kind in config.PROJECT_KINDS:
+        data.add_project(TODAY, kind=kind, title=kind)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        data.add_project(TODAY, kind="hobby", title="x")
+
+
 def test_claude_usage_adds_up_from_a_date():
     data.log_ai_usage("structure resume", "claude-opus-5-5", 6000, 8000, 0.184, TODAY)
     data.log_ai_usage("structure resume", "claude-opus-5-5", 1000, 1000, 0.024, date(2026, 9, 1))

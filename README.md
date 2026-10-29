@@ -66,7 +66,17 @@ database, hosted free on Streamlit Community Cloud.
   listed for you to settle. The **Master** section is where you edit it
   (roles, bullets, which bullets print, education, skills, projects) and
   download it as a Word file in your own layout; a role or project prints
-  only when at least one of its bullets is ticked **On master**. Under
+  only when at least one of its bullets is ticked **On master**.
+  **Projects** is where your work and personal projects live in full
+  (situation, task, action, result, skills, and the resume bullet you chose),
+  imported in one free click from your projects spreadsheet. Each gets a free
+  detail score out of 100 that lists what it's missing, weakest first. Claude
+  reviews one at a time (about 10 cents): it rates how it reads, asks the few
+  questions that would strengthen it, works your answers into the details
+  (your words stay, and one click undoes it) and offers bullets built only
+  from your facts, with a [bracketed] placeholder where a number would help.
+  The bullet you pick can go straight into the master's pool, where Resume
+  Builder chooses from it. Under
   **Resume Builder** you pick an open application, get its job posting from
   the posting link in one click (LinkedIn hands it over; Indeed and Glassdoor
   don't, so those you paste, also on the application's **Posting** section),
@@ -251,8 +261,8 @@ up automatically (`.claude/hooks/session-start.sh`).
 | `db.py` | Finds `DATABASE_URL` (in `.env`, or Streamlit secrets when online). |
 | `backup.py` | Dumps every table to CSV. |
 | `app/digest.py` | The daily digest email, built from the day's leads. |
-| `app/ai.py` | Claude, for the Resume page: the key, a connection check, and building the master from your files. |
+| `app/ai.py` | Claude, for the Resume page: the key, a connection check, building the master from your files, tailoring, finding postings and reviewing projects. |
 | `app/docx_io.py` | Reads Word files as text and writes the master resume back in your own layout. |
-| `app/resume_schema.py` | The shape of the master resume as data. |
+| `app/resume_schema.py` | The shape of the master resume as data, a tailored version and a project review. |
 | `leads.py` | How the daily job-alert review reads your profile, adds leads and builds the digest. |
 | `CLAUDE.md` | Rules for Claude when it works on this project. |

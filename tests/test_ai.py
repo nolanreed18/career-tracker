@@ -248,3 +248,44 @@ def test_find_posting_treats_a_job_board_link_as_not_found_and_checks_the_shape(
     fake_client(monkeypatch, messages=FakeSearchMessages("", stop_reasons=("refusal",)))
     with pytest.raises(ai.AIError, match="declined"):
         ai.find_posting("Acme", "Analyst", "", "", "")
+
+
+REVIEW = resume_schema.ProjectReview(
+    strength=6, verdict="Clear work; no outcome yet.",
+    questions=["How many hours a week did it save?"],
+    bullets=["Rebuilt the rates tool in Python, saving [X hours] a week"],
+    skills=["Python"],
+    details=resume_schema.ProjectDetails(situation="Rates came by email.", task="",
+                                         action="Built a Python app. It replaced VBA.",
+                                         result="Saves 6 hours a week."))
+
+
+def test_a_project_review_sends_the_project_style_targets_and_answers(monkeypatch):
+    messages = FakeMessages(REVIEW)
+    fake_client(monkeypatch, messages=messages)
+    project = {"project_id": 3, "title": "Rates", "employer": "Acme", "situation":
+               "Rates came by email.", "action": "Built a Python app.", "result": None,
+               "skills": float("nan"), "review": {"old": True}}
+    style = {"samples": ["Built a pipeline.", "Led a team."], "typical": 180, "longest": 290}
+    content, usage = ai.review_project(project, [("How many hours?", " 6 a week "),
+                                                 ("How many users?", "  ")], style,
+                                       "Analytics Engineer")
+    assert content["strength"] == 6 and content["details"]["result"] == "Saves 6 hours a week."
+    assert usage.cost_usd == 0.184
+    call = messages.calls[0]
+    sent = call["messages"][0]["content"]
+    assert call["system"] == ai.PROJECT_SYSTEM
+    assert "questions" in call["output_config"]["format"]["schema"]["properties"]
+    assert '"situation": "Rates came by email."' in sent and '"result": ""' in sent
+    assert '"skills": ""' in sent and "review" not in sent and "project_id" not in sent
+    assert '<style typical_length="180" longest="290">\n- Built a pipeline.\n- Led a team.' in sent
+    assert "<targets>\nAnalytics Engineer\n</targets>" in sent
+    assert "Q: How many hours?\nA: 6 a week" in sent and "How many users?" not in sent
+    messages.calls.clear()
+    ai.review_project(project, [], {}, "")
+    first = messages.calls[0]["messages"][0]["content"]
+    assert "<answers>" not in first and "<targets>" not in first
+    assert 'typical_length="200" longest="300"' in first                  # defaults
+    with pytest.raises(ai.AIError, match="Write a line or two"):
+        ai.review_project({"title": "Empty", "skills": "SQL"}, [], {}, "")
+

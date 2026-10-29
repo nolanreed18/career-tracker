@@ -706,6 +706,46 @@ def save_resume_master(content: dict, on: date) -> None:
         """, (json.dumps(content), on))
 
 
+# ---- project bank -----------------------------------------------------------
+
+PROJECT_FIELDS = {"kind", "title", "employer", "period", "summary", "situation", "task",
+                  "action", "result", "skills", "bullet"}
+
+
+def projects() -> pd.DataFrame:
+    """Every project in the bank, work first, then by title."""
+    return _read("select * from career_projects order by kind desc, title")
+
+
+def project(project_id: int) -> dict | None:
+    return _one("select * from career_projects where project_id = %s", (project_id,))
+
+
+def add_project(on: date, **fields) -> int:
+    unknown = set(fields) - PROJECT_FIELDS
+    if unknown:
+        raise ValueError(f"unknown project fields {sorted(unknown)}")
+    return _insert("career_projects", "project_id",
+                   {**fields, "created_on": on, "updated_on": on})
+
+
+def update_project(project_id: int, on: date, **fields) -> None:
+    _update("career_projects", "project_id", project_id, {**fields, "updated_on": on},
+            PROJECT_FIELDS | {"updated_on"})
+
+
+def save_project_review(project_id: int, review: dict | None, on: date) -> None:
+    """Claude's latest review of a project (None clears it)."""
+    with _cursor() as cur:
+        cur.execute("update career_projects set review = %s::jsonb, reviewed_on = %s "
+                    "where project_id = %s",
+                    (None if review is None else json.dumps(review), on, project_id))
+
+
+def delete_project(project_id: int) -> None:
+    _delete("career_projects", "project_id", project_id)
+
+
 def tailored_versions(application_id: int) -> pd.DataFrame:
     """Every tailored version of one application's resume, newest first
     (tailor_id, version, notes, model, created_on)."""
