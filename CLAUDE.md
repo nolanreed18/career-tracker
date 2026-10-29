@@ -67,7 +67,10 @@ only they can do (accounts, secrets, clicking merge).
 - **The look lives in `app/theme.py`**: a light palette (the default) and a dark
   one as Streamlit theme options, applied per run by `ui.setup()` from the
   `settings` table ("theme"), plus one stylesheet. `.streamlit/config.toml`
-  must equal the light palette (`tests/test_theme.py` checks). Pages use
+  must equal the light palette (`tests/test_theme.py` checks). `THEME.md`
+  carries the look to other apps: its code blocks are `app/theme.py`,
+  `config.toml` and ui's look helpers word for word (test_theme checks), so
+  a change to one goes into THEME.md too. Pages use
   `ui.card()`, `ui.empty()` and the badge helpers rather than emoji or raw
   HTML; colour means something (blue = in progress, green = good, orange =
   attention, red = overdue/closed, grey = neutral, yellow = unverified: an
@@ -98,7 +101,7 @@ only they can do (accounts, secrets, clicking merge).
   User-Agent, tablets count as computers). A phone gets one centred column and the
   everyday tasks; wide editing grids show `ui.empty("computer", …)` instead.
   A computer gets the wide layout
-  (`config.COMPUTER_MAX_WIDTH`) and side-by-side views; a clickable table
+  (`theme.COMPUTER_MAX_WIDTH`) and side-by-side views; a clickable table
   (`on_select`) puts its pick in session state and bumps its `round_key`, and
   ignores a tick past the end of its rows. Page tests run as a computer; the
   `phone` fixture switches. A button that calls Claude is `ui.claude_button` /

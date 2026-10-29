@@ -96,7 +96,9 @@ page's sections, the lead filters, Open/Closed/All) is the same
 pill selector: a grey track with the chosen one in the blue gradient. Both
 looks, and the fonts, badges, cards and that selector, are defined in
 `app/theme.py`; `.streamlit/config.toml`
-carries the light look so the first paint already matches.
+carries the light look so the first paint already matches. To give another
+app the same look, copy [`THEME.md`](THEME.md) into it and tell Claude Code
+"Apply THEME.md": it holds the rules and the code.
 
 **Phone or computer.** The app tells from your browser whether it's on a
 phone (an iPad counts as a computer). A phone keeps to

@@ -167,8 +167,5 @@ MAYBE_FIT = 4
 # long inbox stays quick to draw on a phone.
 LEADS_SHOWN = 25
 
-# Phone or computer: the app picks from the browser (logic.device_from_agent).
-# On a computer pages use the full width, up to this many pixels.
-COMPUTER_MAX_WIDTH = 1440
 HOME_TOP_LEADS = 3                   # a computer's Home lists the best few waiting leads
 BULK_ADD_MAX = 5                     # leads added at once from the table (each runs a site search)
