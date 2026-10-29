@@ -14,8 +14,6 @@ from urllib.parse import quote
 
 from streamlit import config
 
-import config as knobs  # the app's settings (config here is Streamlit's)
-
 LIGHT = "light"
 DARK = "dark"
 MODES = [LIGHT, DARK]
@@ -163,6 +161,9 @@ CLAUDE_MARK = _claude_mark()
 CLAUDE_KEY = "claude_"            # a widget key starting with this gets the mark (ui.claude_button)
 
 
+# On a computer pages use the full width, up to this many pixels.
+COMPUTER_MAX_WIDTH = 1440
+
 # On a phone the pills are a little smaller, so most rows fit on one line; one
 # that doesn't wraps inside its track.
 PHONE_PILLS = """
@@ -177,7 +178,7 @@ def layout_css(phone: bool) -> str:
     if phone:
         return PHONE_PILLS
     return ('[data-testid="stMainBlockContainer"] { margin: 0 auto; max-width: '
-            f"{knobs.COMPUTER_MAX_WIDTH}px; }}")
+            f"{COMPUTER_MAX_WIDTH}px; }}")
 
 
 def stylesheet(mode: str, phone: bool = False) -> str:
@@ -211,7 +212,7 @@ def stylesheet(mode: str, phone: bool = False) -> str:
     color: var(--ct-text2); }}
 
 /* Stat cards: a muted microlabel over a big mono number. Their columns may
-   shrink below Streamlit's 120px minimum so three fit on a phone. */
+   shrink below Streamlit's 120px minimum. */
 [data-testid="stColumn"]:has([data-testid="stMetric"]) {{ min-width: 0; }}
 @media (max-width: 640px) {{   /* four don't fit across a phone: two to a row */
     [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]) {{

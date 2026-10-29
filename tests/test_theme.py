@@ -1,13 +1,17 @@
 """The look: two complete palettes, the light one being what config.toml
 draws first, applied through Streamlit's theme options."""
 
+import inspect
+import re
 import tomllib
 from pathlib import Path
 
 import pytest
 from streamlit import config
 
+import logic
 import theme
+import ui
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -80,3 +84,26 @@ def test_the_stylesheet_marks_claude_buttons_and_fits_the_device():
     assert "padding: 6px 11px" in phone                        # smaller pills
     assert "max-width: 1440px" not in phone
 
+
+
+def block(markdown: str, heading: str, lang: str) -> str:
+    """The fenced code block that follows a ### heading."""
+    start = markdown.index(f"### {heading}\n")
+    match = re.compile(rf"```{lang}\n(.*?)```", re.S).search(markdown, start)
+    return match.group(1)
+
+
+def test_theme_md_carries_the_current_look_word_for_word():
+    """THEME.md is the look to copy into other apps. Change app/theme.py,
+    config.toml or one of the helpers below, and paste the new text into
+    THEME.md's matching block."""
+    markdown = (ROOT / "THEME.md").read_text(encoding="utf-8")
+    assert block(markdown, "app/theme.py", "python") == (ROOT / "app/theme.py").read_text()
+    assert block(markdown, ".streamlit/config.toml", "toml") == (
+        ROOT / ".streamlit/config.toml").read_text()
+    helpers = block(markdown, "The helpers (in the app's ui.py)", "python")
+    for name in ("done", "claude_button", "claude_submit", "card", "disclosure", "sections",
+                 "delete_button", "round_key", "bump_round", "empty", "md", "badge"):
+        assert inspect.getsource(getattr(ui, name)) in helpers, name
+    assert inspect.getsource(logic.device_from_agent) in helpers
+    compile(helpers, "helpers", "exec")                     # and it is valid Python
