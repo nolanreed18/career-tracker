@@ -587,3 +587,118 @@ def test_shorten_cuts_at_a_word():
     assert logic.shorten("Built and manage the system", 40) == "Built and manage the system"
     assert logic.shorten("  spaced   out  ", 40) == "spaced out"
     assert logic.shorten("Unbroken" * 3, 10) == "UnbrokenUn…"
+
+
+# ---- project bank ---------------------------------------------------------------
+
+FULL_PROJECT = {"situation": "Schedulers rebuilt freight rates by hand every week from emails.",
+                "task": "Own the rates tool end to end.",
+                "action": "Rebuilt the VBA tool as a Python web app with validation, an "
+                          "audit trail and accounting integration, moved the data to MySQL, "
+                          "then trained the schedulers.",
+                "result": "Cut rate updates from 6 hours to 20 minutes a week.",
+                "skills": "Python, Panel, MySQL", "bullet": "Rebuilt the freight-rate tool "
+                                                             "in Python, cutting updates 90%"}
+
+
+def test_a_projects_detail_score_says_what_is_missing():
+    full = logic.project_detail(FULL_PROJECT)
+    assert full == {"score": 100, "missing": [], "level": "strong"}
+    empty = logic.project_detail({})
+    assert (empty["score"], empty["level"], len(empty["missing"])) == (0, "weak", 7)
+    no_number = logic.project_detail({**FULL_PROJECT, "result": "Schedulers trust the rates "
+                                                                "now and stopped rebuilding them."})
+    assert (no_number["score"], no_number["level"]) == (85, "strong")
+    assert no_number["missing"] == ["a number in the result: hours, $, %, users"]
+    thin = logic.project_detail({**FULL_PROJECT, "task": None, "result": float("nan"),
+                                 "skills": "Python"})
+    assert (thin["score"], thin["level"]) == (45, "weak")      # NaN and None count as empty
+    assert logic.project_detail({**FULL_PROJECT, "action": "Built it.", "bullet": ""}) == {
+        "score": 70, "level": "thin",
+        "missing": ["what you did and how (Action)", "a resume bullet"]}
+
+
+def test_a_short_company_name_finds_its_employer_on_the_master():
+    employers = ["Flint Hills Resources (Koch, Inc.)", "Chevron Phillips Chemical Company LLC"]
+    assert logic.match_employer("FHR", employers) == employers[0]
+    assert logic.match_employer("CPChem", employers) == employers[1]
+    assert logic.match_employer("koch", employers) == employers[0]          # part of the name
+    assert logic.match_employer("Chevron Phillips Chemical Company LLC", employers) == employers[1]
+    assert logic.match_employer("HR", employers) is None                    # not from the start
+    assert logic.match_employer("Acme", employers) is None
+    assert logic.match_employer(None, employers) is None
+
+
+PROJECTS_TEXT = """Project: Freight rates
+Company: FHR
+Rank: 5
+Summary: The rates tool
+Situation: Rates came by email.
+Schedulers retyped them.
+Action: Built a Python app.
+Result: 6 hours to 20 minutes a week.
+Skills: Python, MySQL
+
+Project: Fitness tracker
+Summary: A workout planner
+Action: Built it in VBA.
+
+Project: Valve study
+Company: Acme Valves
+Situation: Leaks."""
+
+
+def test_the_projects_spreadsheets_text_reads_back_into_projects():
+    found = logic.parse_projects_text(PROJECTS_TEXT)
+    assert [f["title"] for f in found] == ["Freight rates", "Fitness tracker", "Valve study"]
+    assert found[0]["situation"] == "Rates came by email.\nSchedulers retyped them."
+    assert found[0]["employer"] == "FHR" and "rank" not in found[0]
+    assert found[1]["action"] == "Built it in VBA." and "employer" not in found[1]
+    assert logic.parse_projects_text("") == [] and logic.parse_projects_text(None) == []
+    master = {"roles": [{"employer": "Flint Hills Resources (Koch, Inc.)", "bullets": []}]}
+    ready = logic.import_projects(PROJECTS_TEXT, master, ["fitness tracker"])   # one is in
+    assert [(p["title"], p["employer"], p["kind"]) for p in ready] == [
+        ("Freight rates", "Flint Hills Resources (Koch, Inc.)", "work"),
+        ("Valve study", "Acme Valves", "work")]                  # kept as written when unknown
+    assert logic.import_projects(PROJECTS_TEXT, None, [])[1]["kind"] == "personal"
+    assert logic.master_employers({"roles": [{"employer": "A"}, {"employer": "B"},
+                                             {"employer": "A"}]}) == ["A", "B"]
+
+
+def test_a_projects_bullet_goes_into_the_masters_pool_where_it_belongs():
+    master = {"roles": [
+        {"employer": "Acme", "title": "Engineer", "start": "Jun 2023", "end": "Dec 2024",
+         "bullets": [{"text": "Old work.", "in_master": True}]},
+        {"employer": "Acme", "title": "Analyst", "start": "Jan 2025", "end": "Present",
+         "bullets": [{"text": "Built a pipeline.", "in_master": False}]}],
+        "projects": [{"employer": "Fitness tracker", "bullets": []}]}
+    work = {"title": "Rates", "employer": "Acme", "skills": "Python, SQL"}
+    added, where = logic.add_to_master(master, work, "  Rebuilt the rates tool. ", 4)
+    assert where == "Acme — Analyst"                                       # the newest role
+    assert added["roles"][1]["bullets"][-1] == {"text": "Rebuilt the rates tool.",
+                                                "skills": ["Python", "SQL"], "source": "project",
+                                                "rank": 4, "in_master": False}
+    assert len(master["roles"][1]["bullets"]) == 1                          # the input untouched
+    assert logic.bullet_status(added, "rebuilt the  rates tool.") == "in the pool"
+    assert logic.bullet_status(added, "Old work.") == "on the master"
+    assert logic.bullet_status(added, "Something else") is None
+    assert logic.add_to_master(added, work, "Rebuilt the rates tool.", 4)[1] == "already"
+    assert logic.add_to_master(master, {**work, "employer": "Beta"}, "x", 3)[1] == ""
+    personal, where = logic.add_to_master(master, {"title": "Fitness tracker"}, "Built it.", 3)
+    assert where == "Fitness tracker" and personal["projects"][0]["bullets"][0]["text"] == "Built it."
+    fresh, where = logic.add_to_master(master, {"title": "Budget app"}, "Built a budget.", 3)
+    assert where == "Budget app" and fresh["projects"][-1]["employer"] == "Budget app"
+    assert [logic.project_rank(s) for s in (1, 5, 8, 10, None, "x")] == [1, 2, 4, 5, 3, 3]
+
+
+def test_bullet_style_samples_the_newest_roles_printed_bullets():
+    master = {"roles": [
+        {"employer": "Old", "start": "Jan 2020", "bullets": [{"text": "x" * 300,
+                                                               "in_master": True}]},
+        {"employer": "New", "start": "Jan 2025", "bullets": [
+            {"text": "a" * 100, "in_master": True}, {"text": "pool", "in_master": False},
+            {"text": "b" * 200, "in_master": True}]}], "projects": []}
+    style = logic.bullet_style(master)
+    assert style == {"samples": ["a" * 100, "b" * 200], "typical": 200, "longest": 300}
+    assert logic.bullet_style(None) == {"samples": [], "typical": 200, "longest": 300}
+

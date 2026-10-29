@@ -827,6 +827,185 @@ def file_stem(*parts: str) -> str:
     return "_".join(c for c in cleaned if c) or "Resume"
 
 
+# ---- project bank -----------------------------------------------------------
+
+PROJECT_TEXT_FIELDS = {"company": "employer", "summary": "summary", "situation": "situation",
+                       "task": "task", "action": "action", "result": "result",
+                       "skills": "skills"}
+
+
+def _text(value_) -> str:
+    return "" if blank(value_) else str(value_).strip()
+
+
+def project_detail(project: dict) -> dict:
+    """The free detail score of one project (config.DETAIL_CHECKS): points
+    out of 100, what's missing in plain words, and a level for its colour
+    ("strong", "thin" or "weak")."""
+    score, missing = 0, []
+    for field, minimum, points, label in config.DETAIL_CHECKS:
+        if field == "result_number":
+            met = bool(re.search(r"\d", _text(project.get("result"))))
+        elif field == "skills":
+            met = len(skills_list(_text(project.get("skills")))) >= minimum
+        else:
+            met = len(_text(project.get(field))) >= minimum
+        if met:
+            score += points
+        else:
+            missing.append(label)
+    level = ("strong" if score >= config.DETAIL_STRONG
+             else "thin" if score >= config.DETAIL_THIN else "weak")
+    return {"score": score, "missing": missing, "level": level}
+
+
+def _abbreviates(short: str, words: list[str], first: bool = True) -> bool:
+    """Whether short spells the words' starts in order ("fhr": Flint Hills
+    Resources; "cpchem": Chevron Phillips CHEMical). A word may be skipped,
+    except the first."""
+    if not short:
+        return True
+    if not words:
+        return False
+    word = words[0]
+    for k in range(min(len(word), len(short)), 0 if first else -1, -1):
+        if word[:k] == short[:k] and _abbreviates(short[k:], words[1:], first=False):
+            return True
+    return False
+
+
+def match_employer(name, employers: list[str]) -> str | None:
+    """The employer in employers that name stands for: the same name, one
+    containing the other, or an abbreviation of it ("FHR"); None when none
+    fits."""
+    name = _text(name)
+    if not name:
+        return None
+    short = re.sub(r"[^a-z]", "", name.lower())
+    for employer in employers:
+        full = employer.lower()
+        if name.lower() == full or name.lower() in full or full in name.lower():
+            return employer
+    for employer in employers:
+        words = re.findall(r"[a-z]+", employer.lower())
+        if short and _abbreviates(short, words):
+            return employer
+    return None
+
+
+def parse_projects_text(text) -> list[dict]:
+    """The projects in a projects spreadsheet's text (projects_text's
+    blocks: "Project: …" then "Company: …", "Situation: …" lines, a field
+    running on until the next one), as project-bank fields."""
+    found = []
+    for block in re.split(r"(?m)^(?=Project: )", _text(text)):
+        if not block.startswith("Project: "):
+            continue
+        fields, current = {}, None
+        for line in block.splitlines():
+            label, _, rest = line.partition(": ")
+            key = label.strip().lower()
+            if key == "project" and "title" not in fields:
+                fields["title"], current = rest.strip(), "title"
+            elif key in PROJECT_TEXT_FIELDS and rest:
+                current = PROJECT_TEXT_FIELDS[key]
+                fields[current] = rest.strip()
+            elif key == "rank" and rest:
+                current = None
+            elif current and current != "title":
+                fields[current] = f"{fields[current]}\n{line}".strip()
+        if fields.get("title"):
+            found.append(fields)
+    return found
+
+
+def master_employers(master: dict | None) -> list[str]:
+    """The employers on the master resume, in its order, once each."""
+    return list(dict.fromkeys(r["employer"] for r in (master or {}).get("roles", [])
+                              if r.get("employer")))
+
+
+def import_projects(text, master: dict | None, known_titles) -> list[dict]:
+    """The spreadsheet's projects not yet in the bank (by title), ready to
+    add: the employer matched to the master's, work when it has one."""
+    known = {str(t).strip().lower() for t in known_titles}
+    employers = master_employers(master)
+    out = []
+    for fields in parse_projects_text(text):
+        if fields["title"].lower() in known:
+            continue
+        employer = (match_employer(fields.get("employer"), employers)
+                    or _text(fields.get("employer")) or None)
+        out.append({**fields, "employer": employer, "kind": "work" if employer else "personal"})
+        known.add(fields["title"].lower())
+    return out
+
+
+def _same_text(a, b) -> bool:
+    return " ".join(_text(a).lower().split()) == " ".join(_text(b).lower().split())
+
+
+def bullet_status(master: dict | None, text) -> str | None:
+    """Where a bullet sits on the master: "on the master" (ticked), "in the
+    pool", or None when it isn't there."""
+    for role in list((master or {}).get("roles", [])) + list((master or {}).get("projects", [])):
+        for bullet in role.get("bullets", []):
+            if _same_text(bullet.get("text"), text):
+                return "on the master" if bullet.get("in_master") else "in the pool"
+    return None
+
+
+def project_rank(strength) -> int:
+    """A bullet's rank (1-5) from Claude's 1-10 strength for its project."""
+    try:
+        return max(1, min(config.BULLET_RANK_MAX, round(int(strength) / 2)))
+    except (TypeError, ValueError):
+        return 3
+
+
+def add_to_master(master: dict, project: dict, text: str, rank: int) -> tuple[dict, str]:
+    """The master with text added to its pool (unticked, source "project"):
+    under the newest role at the project's employer, or for a personal
+    project under the master project of that name (made when missing). Also
+    returns where it went: "" when a work project's employer isn't on the
+    master, "already" when the bullet is there."""
+    out = copy.deepcopy(master)
+    if bullet_status(out, text):
+        return out, "already"
+    bullet = {"text": " ".join(_text(text).split()),
+              "skills": skills_list(_text(project.get("skills"))),
+              "source": "project", "rank": rank, "in_master": False}
+    if _text(project.get("employer")):
+        roles = [r for r in roles_by_date(out.get("roles", []))
+                 if _same_text(r.get("employer"), project["employer"])]
+        if not roles:
+            return out, ""
+        role = roles[0]
+        role.setdefault("bullets", []).append(bullet)
+        return out, " — ".join(p for p in (role["employer"], role.get("title")) if p)
+    name = _text(project.get("title"))
+    target = next((p for p in out.setdefault("projects", []) if _same_text(p.get("employer"), name)),
+                  None)
+    if target is None:
+        target = {"employer": name, "title": "", "location": "", "start": "", "end": "",
+                  "bullets": []}
+        out["projects"].append(target)
+    target.setdefault("bullets", []).append(bullet)
+    return out, name
+
+
+def bullet_style(master: dict | None) -> dict:
+    """How the master's printed bullets read, for Claude to match: a few
+    samples from the newest role and their usual and longest length."""
+    printed = _printed(master or {})
+    newest = roles_by_date((master or {}).get("roles", []))
+    samples = [b["text"] for b in (newest[0]["bullets"] if newest else []) if b.get("in_master")]
+    lengths = sorted(len(t) for t in printed)
+    return {"samples": samples[:4],
+            "typical": lengths[len(lengths) // 2] if lengths else 200,
+            "longest": lengths[-1] if lengths else 300}
+
+
 def contact_line(master: dict) -> str:
     """The resume's contact line: email, phone and LinkedIn, dotted."""
     return " • ".join(v for v in (master.get("email"), master.get("phone"),

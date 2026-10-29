@@ -208,3 +208,26 @@ create table if not exists tailored_resumes (
     created_on      date not null,
     unique (application_id, version)
 );
+
+-- The project bank: every work and personal project in full (STAR detail),
+-- the resume bullet chosen for it, and Claude's latest review (json:
+-- strength, verdict, questions, bullets, skills; "before" holds the fields as
+-- they were when Claude last worked answers into them, for undo).
+create table if not exists career_projects (
+    project_id      bigint generated always as identity primary key,
+    kind            text not null check (kind in ('work', 'personal')),
+    title           text not null,
+    employer        text,              -- work: the master role's employer
+    period          text,              -- "Jan 2025 – Present"
+    summary         text,              -- one line: what it is
+    situation       text,
+    task            text,
+    action          text,
+    result          text,
+    skills          text,              -- comma-separated
+    bullet          text,              -- the resume line chosen for it
+    review          jsonb,
+    reviewed_on     date,
+    created_on      date not null,
+    updated_on      date not null
+);

@@ -928,6 +928,124 @@ def test_the_posting_section_saves_the_job_posting():
     assert not widget(at.button, "Tailor the resume for this job").disabled
 
 
+SPREADSHEET = """Project: Rates tool
+Company: AE
+Rank: 5
+Situation: Rates came by email and schedulers retyped every one of them each week by hand.
+Task: Own the rates tool.
+Action: Rebuilt the VBA tool as a Python web app with validation, an audit trail and accounting
+integration, then trained the schedulers on it and retired the spreadsheet.
+Result: Rate updates went from 6 hours to 20 minutes a week.
+Skills: Python, MySQL
+
+Project: Valve study
+Company: Beta
+Situation: Leaks."""
+
+
+def test_projects_import_score_review_and_feed_the_master(monkeypatch):
+    import ai
+    import docx_fixture
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    data.save_resume_master(docx_fixture.SAMPLE, TODAY)
+    data.add_resume_source("Projects.csv", "projects", SPREADSHEET, None, TODAY)
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Projects").run()
+    assert not at.exception
+    click(at, "Import 2 projects from your projects spreadsheet (free)")
+    bank = data.projects().set_index("title")
+    assert bank.loc["Rates tool", "employer"] == "Acme Energy"             # "AE"
+    assert bank.loc["Valve study", "employer"] == "Beta Chemicals"
+    assert not any(b.label.startswith("Import") for b in at.button)       # nothing left to import
+    assert any(m.value == ":green-badge[1 strong] :red-badge[1 need detail]"   # no "0 thin"
+               for m in at.markdown)
+    assert at.dataframe[0].value["Project"].tolist() == ["Valve study", "Rates tool"]  # weakest first
+    valves, rates = int(bank.loc["Valve study", "project_id"]), int(bank.loc["Rates tool",
+                                                                             "project_id"])
+    assert widget(at.selectbox, "Project").value == valves
+    assert any(c.value.startswith("To strengthen it, add: the problem or why it mattered "
+                                  "(Situation); what you were responsible for (Task)")
+               for c in at.caption)
+
+    widget(at.selectbox, "Project").set_value(rates).run()
+    widget(at.text_area, "Task: what you were responsible for").set_value("Owned it end to end.")
+    click(at, "Save")
+    assert data.project(rates)["task"] == "Owned it end to end."
+
+    calls = []
+
+    def review(project, answers, style, targets):
+        calls.append((project["title"], answers, style["samples"]))
+        action = project["action"] + (" It now serves 12 schedulers." if answers else "")
+        return ({"strength": 6, "verdict": "Clear work.", "questions": ["How many people use it?"],
+                 "bullets": ["Rebuilt the rates tool, saving [X hours] a week",
+                             "Rebuilt the freight-rate tool in Python, cutting weekly updates "
+                             "from 6 hours to 20 minutes"],
+                 "skills": ["Python", "MySQL"],
+                 "details": {"situation": project["situation"], "task": project["task"],
+                             "action": action, "result": project["result"]}},
+                ai.Usage("claude-opus-5-5", 6000, 8000))
+    monkeypatch.setattr(ai, "review_project", review)
+    click(at, "Review with Claude")
+    assert calls[0] == ("Rates tool", [], ["Built a pipeline that saved 2 hours a day."])
+    assert at.success[0].value == "Claude rates it 6/10. Cost $0.18."
+    saved = data.project(rates)
+    assert saved["review"]["strength"] == 6 and "before" not in saved["review"]
+    assert saved["action"].endswith("retired the spreadsheet.")             # no answers: unchanged
+    assert data.ai_usage_since(TODAY) == (1, 0.184)
+    assert any(":blue-badge[Claude: 6/10] Clear work." in m.value for m in at.markdown)
+
+    click(at, "Work my answers in")                                        # nothing answered
+    assert at.error[0].value == "Answer at least one question first." and len(calls) == 1
+    widget(at.text_area, "How many people use it?").set_value("Twelve schedulers.")
+    click(at, "Work my answers in")
+    assert calls[1][1] == [("How many people use it?", "Twelve schedulers.")]
+    assert at.success[0].value == ("Claude rates it 6/10, and worked your answers into action. "
+                                   "Cost $0.18.")
+    assert data.project(rates)["action"].endswith("It now serves 12 schedulers.")
+    click(at, "Undo Claude's last change to the details")
+    assert data.project(rates)["action"].endswith("retired the spreadsheet.")
+    assert "before" not in data.project(rates)["review"]
+
+    assert widget(at.button, "Use it and add to the master's pool").disabled  # [X hours] to fill
+    widget(at.button, "Use this").click().run()
+    assert data.project(rates)["bullet"] == "Rebuilt the rates tool, saving [X hours] a week"
+    widget(at.button, "Use it and add to the master's pool", 1).click().run()
+    assert not at.exception
+    bullet = data.project(rates)["bullet"]
+    assert bullet.startswith("Rebuilt the freight-rate tool in Python")
+    assert at.success[0].value.startswith("Added to the master's pool under Acme Energy — "
+                                          "Business Analyst.")
+    pool = data.resume_master()["content"]["roles"][0]["bullets"][-1]
+    assert (pool["text"], pool["source"], pool["rank"], pool["in_master"]) == (
+        bullet, "project", 3, False)
+    assert any(m.value.startswith(":blue-badge[In the master's pool]") for m in at.markdown)
+
+    click(at, "Add a project")
+    widget(at.text_input, "Project").set_value("Budget app")
+    widget(at.selectbox, "Where").set_value("Personal project")
+    click(at, "Add")
+    budget_id = int(data.projects().set_index("title").loc["Budget app", "project_id"])
+    budget = data.project(budget_id)
+    assert (budget["kind"], budget["employer"]) == ("personal", None)
+    assert widget(at.selectbox, "Project").value == budget_id                 # opened
+    assert any(m.value.endswith("**Budget app**") for m in at.markdown)
+    widget(at.checkbox, "I want to delete this project").check().run()
+    click(at, "Delete project")
+    assert "Budget app" not in data.projects()["title"].tolist()
+
+
+def test_projects_draws_empty_and_without_a_claude_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Projects").run()
+    assert not at.exception and not at.dataframe
+    data.add_project(TODAY, kind="personal", title="Budget app", summary="A budget.")
+    at.run()
+    assert any(c.value == "Needs the Claude key: see Build from files." for c in at.caption)
+    assert not any(b.label == "Review with Claude" for b in at.button)
+
+
 def test_resume_sources_are_listed_with_the_template_marked_and_can_be_removed():
     import docx_fixture
     source = data.add_resume_source("Resume.docx", "resume", "## Sample", docx_fixture.template(),

@@ -79,6 +79,23 @@ class Tailored(BaseModel):
     cover_letter: str       # greeting to sign-off, paragraphs separated by blank lines
 
 
+class ProjectDetails(BaseModel):
+    situation: str          # the problem, or why the work mattered
+    task: str               # what the person was responsible for
+    action: str             # what they did and how
+    result: str             # how it turned out, with numbers where given
+
+
+class ProjectReview(BaseModel):
+    """Claude's review of one project in the bank (ai.review_project)."""
+    strength: int           # 1 (vague) to 10 (specific, quantified, clearly theirs)
+    verdict: str            # a sentence or two: what reads well, what's missing
+    questions: list[str]    # up to five questions whose answers would strengthen it most
+    bullets: list[str]      # two or three resume bullets made only from the facts given
+    skills: list[str]       # the tools and skills the details show
+    details: ProjectDetails  # the four fields with the answers worked in (as given without)
+
+
 def empty() -> dict:
     return Resume(name="", email="", phone="", linkedin="", roles=[], projects=[],
                   education=[], skill_groups=[], conflicts=[]).model_dump()
