@@ -1,6 +1,6 @@
 # Career Tracker
 
-Job search + career log. Streamlit (`app/`), Neon Postgres, Streamlit Community
+Job search tracker. Streamlit (`app/`), Neon Postgres, Streamlit Community
 Cloud from `main`. The owner is new to GitHub and coding: explain in plain
 language, do the work yourself, and end with a short numbered list of anything
 only they can do (accounts, secrets, clicking merge).
@@ -53,7 +53,7 @@ only they can do (accounts, secrets, clicking merge).
   else Claude's word-for-word `description` (asked for only when the
   posting is missing). "Get the posting from the link" is
   `posting.from_links`: employer data, then the job link, then the employer page.
-  The project bank (`career_projects`, Resume page → Projects) holds each work
+  The project bank (`career_projects`, Resume and Projects → Projects) holds each work
   and personal project in STAR detail; `logic.project_detail` scores it free
   (`config.DETAIL_CHECKS`), `ai.review_project` (`ProjectReview`) rates it,
   asks questions and drafts bullets from the person's facts only, and with

@@ -1,5 +1,6 @@
-"""Resume: the master resume as data, built from your own files with
-Claude's help, edited here, and exported back to Word in your own layout."""
+"""Resume and Projects: the master resume as data, built from your own files
+with Claude's help, edited here, and exported back to Word in your own
+layout; and the project bank its bullets come from."""
 
 import streamlit as st
 
@@ -34,7 +35,8 @@ from ui import (
     setup,
 )
 
-setup("Resume", "Your master resume as data: built from your files, tailored per job")
+setup("Resume and Projects", "Your master resume and project bank: built from your files, "
+      "tailored per job")
 
 today = data.today()
 

@@ -19,8 +19,7 @@ import ui
 ROOT = Path(__file__).resolve().parent.parent
 HOME = ROOT / "app" / "Home.py"
 PAGES = sorted((ROOT / "app" / "pages").glob("*.py"))
-LEADS, APPS, COMPANIES, LOG = (ROOT / "app" / "pages" / name for name in (
-    "1_Job_Leads.py", "2_Applications.py", "4_Companies_and_Contacts.py", "5_Career_Log.py"))
+LEADS, APPS = (ROOT / "app" / "pages" / name for name in ("1_Job_Leads.py", "2_Applications.py"))
 TODAY = date(2026, 10, 14)
 
 
@@ -74,9 +73,6 @@ def seed() -> int:
     busy = data.add_application(data.company_id_for("Beta", TODAY), "PM", "interviewing", TODAY,
                                 next_action="Send thank-you", next_action_on=date(2026, 10, 12))
     data.add_interview(busy, date(2026, 10, 15), round="Onsite")
-    data.add_contact("Sam", TODAY, company_id=acme, kind="recruiter")
-    data.add_career_entry("win", "Cut report time 90%", date(2026, 9, 1))
-    data.add_position("Acme", "Analyst", date(2024, 1, 8), base_salary=85000)
     data.save_job_profile(TODAY, target_roles="Data Analyst", work_modes="remote, hybrid")
     data.add_leads([logic.clean_lead(r)[0] for r in (
         {"source": "LinkedIn", "title": "Analytics Engineer", "company": "Gamma",
@@ -167,56 +163,30 @@ def test_deleting_needs_the_confirmation():
     assert not at.exception
 
 
-def test_a_company_in_use_is_not_deleted():
-    seed()
-    at = run(COMPANIES)
-    widget(at.selectbox, "Edit a company").set_value("Acme").run()
-    assert widget(at.button, "Delete company").disabled           # tick box first
-    widget(at.checkbox, "I want to delete this company").check().run()
-    click(at, "Delete company")
-    assert "still has applications" in at.error[0].value
-    assert "Acme" in data.companies()["name"].tolist()
-
-
 def test_tables_show_blanks_not_none_for_missing_values():
     seed()
     data.add_application(data.company_id_for("Acme", TODAY), "Saved one", "saved", TODAY)
-    companies = run(COMPANIES).dataframe[0].value
-    assert companies["industry"].tolist() == ["", ""]           # not None, not "None"
     apps = run(APPS).dataframe[0].value                         # beside the open one: short
     assert list(apps.columns) == ["company", "role", "status", "resume"]
     assert "None" not in apps.astype(str).values
 
 
-def test_a_deleted_company_leaves_the_dropdown():
+def test_a_company_with_no_applications_left_drops_out_of_the_picker():
     seed()
-    data.add_company("Solo", TODAY)
-    at = run(COMPANIES)
-    widget(at.selectbox, "Edit a company").set_value("Solo").run()
-    widget(at.checkbox, "I want to delete this company").check().run()
-    click(at, "Delete company")
-    assert at.success[0].value == "Deleted Solo."
-    dropdown = widget(at.selectbox, "Edit a company")
-    assert dropdown.value is None and "Solo" not in dropdown.options
+    solo = data.add_application(data.company_id_for("Solo", TODAY), "Analyst", "saved", TODAY)
+    data.delete_application(solo)
+    at = run(APPS)
+    click(at, "Add an application")
+    options = widget(at.selectbox, "Company").options
+    assert "Acme" in options and "Solo" not in options
 
 
 def test_sections_stay_put_after_an_action():
     seed()
-    at = run(COMPANIES)
-    widget(at.radio, "Section").set_value("Contacts").run()
-    click(at, "Add a contact")
-    widget(at.text_input, "Name").set_value("Ana")
-    click(at, "Add contact")
-    assert at.success[0].value == "Added Ana."
-    assert widget(at.radio, "Section").value == "Contacts"
-    assert "Ana" in data.contacts()["name"].tolist()
-
-
-def test_logging_a_win():
-    at = run(LOG)
-    widget(at.text_input, "What").set_value("Led the migration")
-    click(at, "Add")
-    assert data.career_entries("win")["title"].tolist() == ["Led the migration"]
+    at = run(LEADS)
+    widget(at.radio, "Section").set_value("What I'm looking for").run()
+    click(at, "Save")
+    assert widget(at.radio, "Section").value == "What I'm looking for"
 
 
 @pytest.mark.parametrize("path", [HOME, *PAGES], ids=lambda p: p.stem)
@@ -668,8 +638,8 @@ def test_todays_glassdoor_links_open_the_right_form(phone):
                for m in at.markdown)
 
 
-RESUME = ROOT / "app" / "pages" / "8_Resume.py"
-STATS = ROOT / "app" / "pages" / "6_Stats.py"
+RESUME = ROOT / "app" / "pages" / "3_Resume_and_Projects.py"
+STATS = ROOT / "app" / "pages" / "5_Stats.py"
 
 
 def test_resume_page_draws_empty_and_says_whether_claude_has_a_key(monkeypatch):

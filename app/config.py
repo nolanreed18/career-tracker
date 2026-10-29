@@ -35,11 +35,6 @@ WORK_MODES = ["onsite", "hybrid", "remote"]
 
 INTERVIEW_FORMATS = ["phone", "video", "onsite", "take-home"]
 
-CONTACT_KINDS = ["recruiter", "hiring manager", "referral", "colleague", "network"]
-
-# Career log entry types.
-CAREER_KINDS = ["win", "skill", "certification", "feedback", "learning"]
-
 # Job leads from alert emails. "moved" means it became an application.
 LEAD_STATUSES = ["new", "moved", "dismissed"]
 
@@ -144,7 +139,7 @@ RESUME_SOURCE_KINDS = ["resume", "history", "projects", "other"]
 # Bullet strength, 1 (filler) to 5 (quantified, big scope).
 BULLET_RANK_MAX = 5
 
-# The project bank (Resume page, Projects): every work and personal project in
+# The project bank (Resume and Projects page, Projects): every work and personal project in
 # full, scored for detail, with Claude to review and word it. Kinds are
 # repeated in schema.sql's CHECK.
 PROJECT_KINDS = ["work", "personal"]

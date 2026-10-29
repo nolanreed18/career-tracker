@@ -59,16 +59,13 @@ def test_update_refuses_unknown_columns():
         data.add_application(acme, "B", "applied", TODAY, salary=1)
 
 
-def test_a_company_with_applications_cannot_be_deleted():
+def test_deleting_an_application_takes_its_history_and_interviews_along():
     acme = data.company_id_for("Acme", TODAY)
     app_id = data.add_application(acme, "A", "applied", TODAY)
     data.add_interview(app_id, TODAY)
-    with pytest.raises(data.InUse):
-        data.delete_company(acme)
-    data.delete_application(app_id)                 # takes its history and interviews along
+    data.delete_application(app_id)
     assert data.all_events().empty and data.interviews().empty
-    data.delete_company(acme)
-    assert data.companies().empty
+    assert data.companies()["applications"].tolist() == [0]
 
 
 def test_every_configured_value_is_allowed_by_the_schema_and_nothing_else():
@@ -77,22 +74,16 @@ def test_every_configured_value_is_allowed_by_the_schema_and_nothing_else():
         data.add_application(acme, status, status, TODAY)
     for mode in config.WORK_MODES:
         data.add_application(acme, mode, "saved", TODAY, work_mode=mode)
-    for kind in config.CONTACT_KINDS:
-        data.add_contact(kind, TODAY, kind=kind)
-    for kind in config.CAREER_KINDS:
-        data.add_career_entry(kind, kind, TODAY)
     with pytest.raises(psycopg.errors.CheckViolation):
         data.add_application(acme, "x", "ghosted", TODAY)
     with pytest.raises(psycopg.errors.CheckViolation):
-        data.add_career_entry("hobby", "x", TODAY)
+        data.add_application(acme, "x", "saved", TODAY, work_mode="moon")
 
 
 def test_salary_and_date_ranges_are_checked():
     acme = data.company_id_for("Acme", TODAY)
     with pytest.raises(psycopg.errors.CheckViolation):
         data.add_application(acme, "x", "applied", TODAY, salary_min=100, salary_max=50)
-    with pytest.raises(psycopg.errors.CheckViolation):
-        data.add_position("Acme", "x", TODAY, ended_on=date(2020, 1, 1))
 
 
 def test_interviews_come_back_in_date_and_time_order():
@@ -124,18 +115,6 @@ def test_a_failed_import_adds_nothing():
     assert data.applications().empty and data.companies().empty
 
 
-def test_career_log_and_job_history():
-    data.add_career_entry("win", "Shipped it", date(2026, 9, 1), tags="sql")
-    entry = data.add_career_entry("skill", "dbt", date(2026, 10, 1))
-    assert data.career_entries()["title"].tolist() == ["dbt", "Shipped it"]
-    assert data.career_entries("win")["title"].tolist() == ["Shipped it"]
-    data.update_career_entry(entry, details="  ")
-    assert data.career_entries("skill")["details"].isna().all()
-    job = data.add_position("Acme", "Analyst", date(2024, 1, 8), base_salary=85000)
-    data.update_position(job, ended_on=date(2026, 6, 30))
-    assert data.positions()["ended_on"].tolist() == [date(2026, 6, 30)]
-
-
 def test_a_closed_connection_is_reopened():
     data.companies()
     data._conn.close()
@@ -154,10 +133,10 @@ def test_a_connection_the_server_dropped_while_idle_is_replaced(monkeypatch, dat
 
 def test_a_new_database_gets_its_tables_on_first_connection(database, monkeypatch):
     with psycopg.connect(database, autocommit=True) as conn:
-        conn.execute("drop table career_entries")
+        conn.execute("drop table settings")
     monkeypatch.setattr(data, "_schema_ready", False)
     data.reset_connection()
-    assert data.career_entries().empty                # recreated, not an error
+    assert data.get_setting("theme") is None          # recreated, not an error
 
 
 def test_a_setting_is_saved_over_and_unset_means_the_default():

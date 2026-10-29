@@ -1,8 +1,8 @@
 # Career Tracker
 
-A private, phone-friendly tracker for a job search and a career: applications
-and where each one stands, companies and contacts, interviews, and a running
-log of wins, skills and job history. Streamlit front end, Neon Postgres
+A private, phone-friendly tracker for a job search: job leads scored for fit,
+applications and where each one stands, a master resume and project bank that
+Claude tailors per job, and interviews. Streamlit front end, Neon Postgres
 database, hosted free on Streamlit Community Cloud.
 
 ## What's in it
@@ -24,7 +24,8 @@ database, hosted free on Streamlit Community Cloud.
   section lists the categories, weights and pay rules (they live in
   `app/config.py`). Today's arrivals carry a **New** badge and the **New
   today** view shows just them; weak matches (under 4) are hidden until you
-  choose **All**; a lead nobody touches for 14 days moves to **Stale**. All of
+  choose **All** or **Weak** (on a computer, tick them all at once to
+  dismiss); a lead nobody touches for 14 days moves to **Stale**. All of
   them stay stored, so the same job (company and title) never comes back
   from any site. **Add** makes one a Saved application; **Dismiss…** asks
   why (wrong role, location, pay, company, already applied, other) and the
@@ -46,19 +47,8 @@ database, hosted free on Streamlit Community Cloud.
   application says where it stands (looking, found, not on the employer's
   site, didn't finish, or not looked for yet), and **Edit** takes the
   employer's link when you find it yourself.
-- **Interviews**: upcoming and past, with prep notes, "how it went" and a 1–5
-  rating.
-- **Companies & Contacts**: companies (added for you with each application),
-  plus recruiters, referrals and network contacts with "last contacted" dates.
-- **Career Log**: wins, skills, certifications, feedback and things learned,
-  with a CSV download. A **Job history** tab keeps past jobs and pay.
-- **Stats**: pipeline by stage, applications per week, and response rate by
-  source.
-- **Import**: bring in applications from a spreadsheet saved as CSV. Headers
-  are matched loosely, and importing the same file twice adds nothing.
-
-- **Resume**: your master resume as data. Under **Build from files** you
-  upload your resume as a Word file (it becomes the template every export is
+- **Resume and Projects**: your master resume as data. Under **Build from
+  files** you upload your resume as a Word file (it becomes the template every export is
   modelled on) plus anything with more detail: a project history, a projects
   spreadsheet, old resumes. One click asks Claude to turn them into the
   master: the resume's bullets word for word, extra bullets from the other
@@ -93,6 +83,12 @@ database, hosted free on Streamlit Community Cloud.
   older version). Every Claude call is a
   button you click, costs about 45 cents (30 to build the master), and is
   counted on the page.
+- **Interviews**: upcoming and past, with prep notes, "how it went" and a 1–5
+  rating.
+- **Stats**: pipeline by stage, applications per week, and response rate by
+  source.
+- **Import**: bring in applications from a spreadsheet saved as CSV. Headers
+  are matched loosely, and importing the same file twice adds nothing.
 
 Settings you might want to change (the 14-day follow-up, the 7-day interview
 window, the status list, the Claude model) are in `app/config.py`.
@@ -143,10 +139,10 @@ open one, and a click on a row opens it.
      ```toml
      DATABASE_URL = "postgresql://…the string from Neon…"
      APP_PASSWORD = "a password you choose"
-     ANTHROPIC_API_KEY = "…a key from console.anthropic.com, for the Resume page…"
+     ANTHROPIC_API_KEY = "…a key from console.anthropic.com, for Resume and Projects…"
      ```
 
-   The Claude key is optional: without it the Resume page still shows and
+   The Claude key is optional: without it Resume and Projects still shows and
    edits the master, and only the "Build the master with Claude" button is
    off. Make the key in a workspace of its own with a monthly spend limit.
 
@@ -205,7 +201,7 @@ streamlit run app/Home.py
 It opens at `http://localhost:8501`. It needs a file named `.env` in this
 folder with two lines, `DATABASE_URL=postgresql://…` (the string from Neon)
 and `APP_PASSWORD=…` (the password the app asks for), plus
-`ANTHROPIC_API_KEY=…` if you want the Resume page's Claude button;
+`ANTHROPIC_API_KEY=…` if you want the Claude buttons on Resume and Projects;
 `.env` is never uploaded to GitHub. `Ctrl+C` stops it.
 
 `python apply_schema.py` creates the tables by hand. The app does this itself,
@@ -277,7 +273,7 @@ up automatically (`.claude/hooks/session-start.sh`).
 | `db.py` | Finds `DATABASE_URL` (in `.env`, or Streamlit secrets when online). |
 | `backup.py` | Dumps every table to CSV. |
 | `app/digest.py` | The daily digest email, built from the day's leads. |
-| `app/ai.py` | Claude, for the Resume page: the key, a connection check, building the master from your files, tailoring, finding postings and reviewing projects. |
+| `app/ai.py` | Claude, for Resume and Projects and Applications: the key, a connection check, building the master from your files, tailoring, finding postings and reviewing projects. |
 | `app/docx_io.py` | Reads Word files as text and writes the master resume back in your own layout. |
 | `app/resume_schema.py` | The shape of the master resume as data, a tailored version and a project review. |
 | `leads.py` | How the daily job-alert review reads your profile, adds leads and builds the digest. |
