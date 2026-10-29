@@ -20,19 +20,21 @@ from ui import (
     badge,
     bump_round,
     card,
+    claude_button,
+    claude_submit,
     delete_button,
     disclosure,
     done,
     empty,
     md,
+    on_phone,
     posting_button,
     round_key,
     sections,
     setup,
 )
 
-setup("Resume", "Your master resume as data: built from your files, tailored per job",
-      wide=True)
+setup("Resume", "Your master resume as data: built from your files, tailored per job")
 
 today = data.today()
 
@@ -139,6 +141,11 @@ if section == "Master":
                 st.caption("Fix the right value below; the list stays until you tick "
                            "“Clear the conflicts list” and save.")
 
+        if on_phone():
+            empty("computer", "Edit the master on your computer",
+                  "Its roles and bullets are wide tables. On a phone you can download it, and "
+                  "Projects and Resume Builder work here.")
+            st.stop()
         form_round = round_key("master")       # a fresh form after every save: no stale cells
         with st.form(f"resume_master_{form_round}"):
             st.markdown("**Contact**")
@@ -303,146 +310,157 @@ if section == "Projects":
         details = {int(r["project_id"]): logic.project_detail(r) for r in records}
         ordered = sorted(records, key=lambda r: (details[int(r["project_id"])]["score"],
                                                  str(r["title"]).lower()))
-        levels = [d["level"] for d in details.values()]
-        st.markdown(" ".join(
-            badge(LEVEL_COLORS[level], f"{levels.count(level)} {name}") for level, name in
-            (("strong", "strong"), ("thin", "thin"), ("weak", "need detail"))
-            if levels.count(level)))
-        st.dataframe(
-            pd.DataFrame([{
-                "Project": r["title"],
-                "Detail": details[int(r["project_id"])]["score"],
-                "Claude": (f"{r['review']['strength']}/10" if isinstance(r["review"], dict)
-                           else "–")} for r in ordered]),
-            hide_index=True, width="stretch",
-            column_config={
-                "Detail": st.column_config.ProgressColumn(
-                    "Detail", min_value=0, max_value=100, format="%d", width="small",
-                    help="The free detail score: situation, task, action, result, a number, "
-                         "skills and a bullet"),
-                "Claude": st.column_config.TextColumn("Claude", width="small")})
+        phone = on_phone()
+        # A computer shows the list beside the open project; a phone, one under the other.
+        list_area, detail_area = ((st.container(), st.container()) if phone
+                                  else st.columns([2, 3], gap="large"))
+        with list_area:
+            levels = [d["level"] for d in details.values()]
+            st.markdown(" ".join(
+                badge(LEVEL_COLORS[level], f"{levels.count(level)} {name}") for level, name in
+                (("strong", "strong"), ("thin", "thin"), ("weak", "need detail"))
+                if levels.count(level)))
+            overview = st.dataframe(
+                pd.DataFrame([{
+                    "Project": r["title"],
+                    "Detail": details[int(r["project_id"])]["score"],
+                    "Claude": (f"{r['review']['strength']}/10" if isinstance(r["review"], dict)
+                               else "–")} for r in ordered]),
+                hide_index=True, width="stretch",
+                **({} if phone else {"on_select": "rerun", "selection_mode": "single-row",
+                                     "key": round_key("projects_table")}),
+                column_config={
+                    "Detail": st.column_config.ProgressColumn(
+                        "Detail", min_value=0, max_value=100, format="%d", width="small",
+                        help="The free detail score: situation, task, action, result, a number, "
+                             "skills and a bullet"),
+                    "Claude": st.column_config.TextColumn("Claude", width="small")})
 
-        ids = [int(r["project_id"]) for r in ordered]
-        pick_key = round_key("project_pick")
-        if (wanted := st.session_state.pop("open_project", None)) in ids:
-            st.session_state[pick_key] = wanted
-        labels = {int(r["project_id"]): f"{r['title']} · {details[int(r['project_id'])]['score']}"
-                  f"/100" for r in ordered}
-        picked = st.selectbox("Project", ids, format_func=labels.get, key=pick_key)
-        project = data.project(picked)
-        detail = details[picked]
-        review = project["review"] if isinstance(project["review"], dict) else None
+            ids = [int(r["project_id"]) for r in ordered]
+            if not phone and overview.selection.rows and overview.selection.rows[0] < len(ids):
+                st.session_state["open_project"] = ids[overview.selection.rows[0]]
+                bump_round("projects_table")
+            pick_key = round_key("project_pick")
+            if (wanted := st.session_state.pop("open_project", None)) in ids:
+                st.session_state[pick_key] = wanted
+            labels = {int(r["project_id"]): f"{r['title']} · {details[int(r['project_id'])]['score']}"
+                      f"/100" for r in ordered}
+            picked = st.selectbox("Project", ids, format_func=labels.get, key=pick_key)
+        with detail_area:
+            project = data.project(picked)
+            detail = details[picked]
+            review = project["review"] if isinstance(project["review"], dict) else None
 
-        score_badge = badge(LEVEL_COLORS[detail["level"]], f"Detail {detail['score']}/100")
-        st.markdown(f"{score_badge} **{md(project['title'])}**")
-        if detail["missing"]:
-            st.caption("To strengthen it, add: " + "; ".join(detail["missing"]) + ".")
-        if project["bullet"]:
-            place = logic.bullet_status(content, project["bullet"])
-            note = {"on the master": badge("green", "On the master"),
-                    "in the pool": badge("blue", "In the master's pool")}.get(
-                place, badge("gray", "Not on the master yet"))
-            st.markdown(f"{note} {md(project['bullet'])}")
-            if place is None and master is not None and "[" not in project["bullet"]:
-                if st.button("Add this bullet to the master's pool", key=f"pool_{picked}"):
-                    bullet_to_master(project, project["bullet"], content,
-                                     logic.project_rank(review["strength"]) if review else 3)
+            score_badge = badge(LEVEL_COLORS[detail["level"]], f"Detail {detail['score']}/100")
+            st.markdown(f"{score_badge} **{md(project['title'])}**")
+            if detail["missing"]:
+                st.caption("To strengthen it, add: " + "; ".join(detail["missing"]) + ".")
+            if project["bullet"]:
+                place = logic.bullet_status(content, project["bullet"])
+                note = {"on the master": badge("green", "On the master"),
+                        "in the pool": badge("blue", "In the master's pool")}.get(
+                    place, badge("gray", "Not on the master yet"))
+                st.markdown(f"{note} {md(project['bullet'])}")
+                if place is None and master is not None and "[" not in project["bullet"]:
+                    if st.button("Add this bullet to the master's pool", key=f"pool_{picked}"):
+                        bullet_to_master(project, project["bullet"], content,
+                                         logic.project_rank(review["strength"]) if review else 3)
 
-        where_value = project["employer"] or PERSONAL
-        where_options = employers + [PERSONAL]
-        if where_value not in where_options:
-            where_options = [where_value] + where_options
-        with st.form(f"project_{picked}_{st.session_state.get('project_round', 0)}"):
-            title = st.text_input("Project", project["title"])
-            where_col, when_col = st.columns([2, 1])
-            where = where_col.selectbox("Where", where_options,
-                                        index=where_options.index(where_value))
-            period = when_col.text_input("When", project["period"] or "",
-                                         placeholder="Jan 2025 – Present")
-            summary = st.text_area("What it is", project["summary"] or "", height=68)
-            situation = st.text_area("Situation: the problem, or why it mattered",
-                                     project["situation"] or "", height=110)
-            task = st.text_area("Task: what you were responsible for", project["task"] or "",
-                                height=90)
-            action = st.text_area("Action: what you did and how", project["action"] or "",
-                                  height=160)
-            result = st.text_area("Result: how it turned out, with numbers",
-                                  project["result"] or "", height=110)
-            skills = st.text_input("Skills (comma-separated)", project["skills"] or "")
-            bullet = st.text_area("Resume bullet", project["bullet"] or "", height=80,
-                                  help="The line for your resume: one of Claude's options "
-                                       "below, or your own")
-            saved = st.form_submit_button("Save", type="primary")
-        if saved:
-            if not title.strip():
-                st.error("The project needs a name.")
+            where_value = project["employer"] or PERSONAL
+            where_options = employers + [PERSONAL]
+            if where_value not in where_options:
+                where_options = [where_value] + where_options
+            with st.form(f"project_{picked}_{st.session_state.get('project_round', 0)}"):
+                title = st.text_input("Project", project["title"])
+                where_col, when_col = st.columns([2, 1])
+                where = where_col.selectbox("Where", where_options,
+                                            index=where_options.index(where_value))
+                period = when_col.text_input("When", project["period"] or "",
+                                             placeholder="Jan 2025 – Present")
+                summary = st.text_area("What it is", project["summary"] or "", height=68)
+                situation = st.text_area("Situation: the problem, or why it mattered",
+                                         project["situation"] or "", height=110)
+                task = st.text_area("Task: what you were responsible for", project["task"] or "",
+                                    height=90)
+                action = st.text_area("Action: what you did and how", project["action"] or "",
+                                      height=160)
+                result = st.text_area("Result: how it turned out, with numbers",
+                                      project["result"] or "", height=110)
+                skills = st.text_input("Skills (comma-separated)", project["skills"] or "")
+                bullet = st.text_area("Resume bullet", project["bullet"] or "", height=80,
+                                      help="The line for your resume: one of Claude's options "
+                                           "below, or your own")
+                saved = st.form_submit_button("Save", type="primary")
+            if saved:
+                if not title.strip():
+                    st.error("The project needs a name.")
+                else:
+                    employer = None if where == PERSONAL else where
+                    data.update_project(picked, today, kind="work" if employer else "personal",
+                                        title=title, employer=employer, period=period,
+                                        summary=summary, situation=situation, task=task,
+                                        action=action, result=result, skills=skills, bullet=bullet)
+                    done("Saved.", "project_round")
+
+            st.markdown("**Claude**")
+            if not ai.ready():
+                st.caption("Needs the Claude key: see Build from files.")
             else:
-                employer = None if where == PERSONAL else where
-                data.update_project(picked, today, kind="work" if employer else "personal",
-                                    title=title, employer=employer, period=period,
-                                    summary=summary, situation=situation, task=task,
-                                    action=action, result=result, skills=skills, bullet=bullet)
-                done("Saved.", "project_round")
+                if review:
+                    rating = badge("blue", f"Claude: {review['strength']}/10")
+                    st.markdown(f"{rating} {md(review['verdict'])}")
+                if claude_button("Review again" if review else "Review with Claude",
+                                 f"review_{picked}", type="secondary" if review else "primary",
+                                 help="Claude rates how it reads, asks what's missing and words "
+                                      "bullets from your own facts (about 10 cents)"):
+                    review_now(project, [], content)
+                if review and review["questions"]:
+                    st.markdown("**Claude's questions**")
+                    st.caption("Answer what you can, a sentence each, and skip the rest. Claude "
+                               "works the facts into the details above (your words stay) and "
+                               "rewords the bullets.")
+                    answer_key = round_key(f"answers_{picked}")
+                    with st.form(answer_key):          # one tap sends every answer
+                        answers = [(question, st.text_area(question, key=f"{answer_key}_{n}",
+                                                           height=68))
+                                   for n, question in enumerate(review["questions"])]
+                        answered = claude_submit("Work my answers in", f"answers_{picked}",
+                                                 help="About 10 cents")
+                    if answered:
+                        if any(a.strip() for _, a in answers):
+                            review_now(project, answers, content)
+                        else:
+                            st.error("Answer at least one question first.")
+                if review and review["bullets"]:
+                    st.markdown("**Bullet options**")
+                    for n, option in enumerate(review["bullets"]):
+                        with card(f"option-{picked}-{n}"):
+                            st.markdown(md(option))
+                            unfilled = "[" in option
+                            if unfilled:
+                                st.caption("Fill in the [bracketed] part once it's in the Resume "
+                                           "bullet box above, then save.")
+                            use_col, pool_col = st.columns(2)
+                            if use_col.button("Use this", key=f"use_{picked}_{n}", width="stretch"):
+                                data.update_project(picked, today, bullet=option)
+                                done("That's the project's resume bullet now.", "project_round")
+                            if pool_col.button("Use it and add to the master's pool",
+                                               key=f"use_pool_{picked}_{n}", width="stretch",
+                                               disabled=unfilled or master is None):
+                                data.update_project(picked, today, bullet=option)
+                                bullet_to_master(project, option, content,
+                                                 logic.project_rank(review["strength"]))
+                if review and review.get("before"):
+                    if st.button("Undo Claude's last change to the details", key=f"undo_{picked}"):
+                        data.update_project(picked, today, **review["before"])
+                        data.save_project_review(
+                            picked, {k: v for k, v in review.items() if k != "before"}, today)
+                        done("Put the details back as they were.", "project_round")
 
-        st.markdown("**Claude**")
-        if not ai.ready():
-            st.caption("Needs the Claude key: see Build from files.")
-        else:
-            if review:
-                rating = badge("blue", f"Claude: {review['strength']}/10")
-                st.markdown(f"{rating} {md(review['verdict'])}")
-            if st.button("Review again" if review else "Review with Claude",
-                         key=f"review_{picked}", type="secondary" if review else "primary",
-                         help="Claude rates how it reads, asks what's missing and words "
-                              "bullets from your own facts (about 10 cents)"):
-                review_now(project, [], content)
-            if review and review["questions"]:
-                st.markdown("**Claude's questions**")
-                st.caption("Answer what you can, a sentence each, and skip the rest. Claude "
-                           "works the facts into the details above (your words stay) and "
-                           "rewords the bullets.")
-                answer_key = round_key(f"answers_{picked}")
-                with st.form(answer_key):          # one tap sends every answer
-                    answers = [(question, st.text_area(question, key=f"{answer_key}_{n}",
-                                                       height=68))
-                               for n, question in enumerate(review["questions"])]
-                    answered = st.form_submit_button("Work my answers in",
-                                                     help="About 10 cents")
-                if answered:
-                    if any(a.strip() for _, a in answers):
-                        review_now(project, answers, content)
-                    else:
-                        st.error("Answer at least one question first.")
-            if review and review["bullets"]:
-                st.markdown("**Bullet options**")
-                for n, option in enumerate(review["bullets"]):
-                    with card(f"option-{picked}-{n}"):
-                        st.markdown(md(option))
-                        unfilled = "[" in option
-                        if unfilled:
-                            st.caption("Fill in the [bracketed] part once it's in the Resume "
-                                       "bullet box above, then save.")
-                        use_col, pool_col = st.columns(2)
-                        if use_col.button("Use this", key=f"use_{picked}_{n}", width="stretch"):
-                            data.update_project(picked, today, bullet=option)
-                            done("That's the project's resume bullet now.", "project_round")
-                        if pool_col.button("Use it and add to the master's pool",
-                                           key=f"use_pool_{picked}_{n}", width="stretch",
-                                           disabled=unfilled or master is None):
-                            data.update_project(picked, today, bullet=option)
-                            bullet_to_master(project, option, content,
-                                             logic.project_rank(review["strength"]))
-            if review and review.get("before"):
-                if st.button("Undo Claude's last change to the details", key=f"undo_{picked}"):
-                    data.update_project(picked, today, **review["before"])
-                    data.save_project_review(
-                        picked, {k: v for k, v in review.items() if k != "before"}, today)
-                    done("Put the details back as they were.", "project_round")
-
-        if delete_button("project", f"project_{picked}"):
-            data.delete_project(picked)
-            bump_round("project_pick")
-            done(f"Deleted {project['title']}.")
+            if delete_button("project", f"project_{picked}"):
+                data.delete_project(picked)
+                bump_round("project_pick")
+                done(f"Deleted {project['title']}.")
 
 # ---- tailor -----------------------------------------------------------------------
 
@@ -520,7 +538,7 @@ if section == "Resume Builder":
         ready = ai.ready() and bool(app["posting"])
         steer = st.text_input("Steer Claude (optional)", key=f"steer_{picked}",
                               placeholder="e.g. lead with the Power BI work; keep the intern role")
-        if st.button("Tailor with Claude", type="primary", disabled=not ready):
+        if claude_button("Tailor with Claude", "tailor", type="primary", disabled=not ready):
             with st.spinner("Reading the posting and choosing bullets…"):
                 try:
                     result, usage = ai.tailor(content, app["posting"], app["company"],
@@ -627,31 +645,36 @@ if section == "Resume Builder":
                                 "and why**")
                     for item in tailored["changes"]:
                         st.markdown(f"- {md(item)}")
-            with st.form(f"tailored_{tailor_id}"):
-                st.markdown("**Experience**")
-                roles = tailored_roles(tailored, "roles", tailor_id)
-                projects = []
-                if tailored.get("projects"):
-                    st.markdown("**Personal projects**")
-                    projects = tailored_roles(tailored, "projects", tailor_id)
-                st.markdown("**Skills**")
-                skills = st.data_editor(
-                    pd.DataFrame(tailored.get("skill_groups", []), columns=["name", "skills"]),
-                    column_config={"name": "Group", "skills": st.column_config.TextColumn(
-                        "Skills", width="large")},
-                    num_rows="dynamic", hide_index=True, key=f"tailored_{tailor_id}_skills",
-                    width="stretch")
-                st.markdown("**Cover letter**")
-                letter_text = st.text_area("Cover letter", value=tailored.get("cover_letter", ""),
-                                           height=360, label_visibility="collapsed")
-                saved = st.form_submit_button("Save", type="primary")
-            if saved:
-                edited = {**tailored, "roles": roles, "projects": projects,
-                          "skill_groups": [r for r in skills.fillna("").to_dict("records")
-                                           if str(r.get("name", "")).strip()],
-                          "cover_letter": letter_text}
-                data.save_tailored(tailor_id, logic.clean_tailored(edited))
-                done("Saved.")
+            if on_phone():
+                st.caption("Edit the bullets and the letter on your computer; the downloads "
+                           "above work here.")
+            else:
+                with st.form(f"tailored_{tailor_id}"):
+                    st.markdown("**Experience**")
+                    roles = tailored_roles(tailored, "roles", tailor_id)
+                    projects = []
+                    if tailored.get("projects"):
+                        st.markdown("**Personal projects**")
+                        projects = tailored_roles(tailored, "projects", tailor_id)
+                    st.markdown("**Skills**")
+                    skills = st.data_editor(
+                        pd.DataFrame(tailored.get("skill_groups", []), columns=["name", "skills"]),
+                        column_config={"name": "Group", "skills": st.column_config.TextColumn(
+                            "Skills", width="large")},
+                        num_rows="dynamic", hide_index=True, key=f"tailored_{tailor_id}_skills",
+                        width="stretch")
+                    st.markdown("**Cover letter**")
+                    letter_text = st.text_area(
+                        "Cover letter", value=tailored.get("cover_letter", ""), height=360,
+                        label_visibility="collapsed")
+                    saved = st.form_submit_button("Save", type="primary")
+                if saved:
+                    edited = {**tailored, "roles": roles, "projects": projects,
+                              "skill_groups": [r for r in skills.fillna("").to_dict("records")
+                                               if str(r.get("name", "")).strip()],
+                              "cover_letter": letter_text}
+                    data.save_tailored(tailor_id, logic.clean_tailored(edited))
+                    done("Saved.")
             if delete_button("version", f"tailored_{tailor_id}"):
                 data.delete_tailored(tailor_id)
                 bump_round("tailor_version")
@@ -664,11 +687,15 @@ KIND_LABELS = {"resume": "The master resume (Word)", "history": "Project history
                "projects": "Projects spreadsheet (CSV)", "other": "Something else to read"}
 
 if section == "Build from files":
+    if on_phone():
+        empty("computer", "Build from files on your computer",
+              "Uploading Word files and building the master is easier on a bigger screen.")
+        st.stop()
     status_col, usage_col = st.columns(2)
     with status_col:
         if ai.ready():
             st.markdown(f"{badge('green', 'Key found')} Claude: `{config.AI_MODEL}`")
-            if st.button("Test connection (free)"):
+            if claude_button("Test connection (free)", "ping"):
                 try:
                     st.success(ai.ping())
                 except ai.AIError as problem:
@@ -745,7 +772,8 @@ if section == "Build from files":
                "pool, skills tagged, and any disagreements between files listed. About "
                "30 cents. It replaces the current master, so save edits you care about "
                "first, or export them.")
-    if st.button("Build the master with Claude", type="primary", disabled=not can_build):
+    if claude_button("Build the master with Claude", "build_master", type="primary",
+                     disabled=not can_build):
         with st.spinner("Reading your files…"):
             try:
                 content, usage = ai.structure_resume(texts)

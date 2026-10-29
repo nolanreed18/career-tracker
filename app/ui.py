@@ -40,13 +40,34 @@ SIGNED_IN = "signed_in"
 THEME_SETTING = "theme"
 
 
-def setup(title: str, subtitle: str | None = None, wide: bool = False) -> None:
-    """Page config, sign-in, the look, and the page head. Phone-first: one
-    centred column (wide for a page of editing grids)."""
+LAYOUT_KEY = "layout_choice"
+
+
+def device() -> str:
+    """"phone" or "computer": the sidebar's Layout switch when it says so,
+    else what the browser says it is."""
+    choice = st.session_state.get(LAYOUT_KEY, "Auto")
+    if choice in ("Phone", "Computer"):
+        return choice.lower()
+    try:
+        agent = st.context.headers.get("User-Agent", "")
+    except Exception:                                  # no browser: a test or a script
+        agent = ""
+    return logic.device_from_agent(agent)
+
+
+def on_phone() -> bool:
+    return device() == "phone"
+
+
+def setup(title: str, subtitle: str | None = None) -> None:
+    """Page config, sign-in, the look, and the page head. A phone gets one
+    centred column; a computer the full width (up to a limit), which pages
+    use for side-by-side layouts."""
     st.set_page_config(
         page_title=title if title == "Career Tracker" else f"{title} · Career Tracker",
         page_icon="💼",
-        layout="wide" if wide else "centered",
+        layout="centered" if on_phone() else "wide",
     )
     require_password()
     appearance()
@@ -86,6 +107,8 @@ def appearance() -> None:
         st.session_state["theme_shown"] = mode
     with st.sidebar:
         dark = st.toggle("Dark mode", key="dark_mode")
+        st.selectbox("Layout", config.LAYOUT_CHOICES, key=LAYOUT_KEY,
+                     help="Auto picks the phone or computer layout from your browser")
         _account()
     picked = theme.DARK if dark else theme.LIGHT
     if picked != mode:
@@ -97,7 +120,7 @@ def appearance() -> None:
         st.session_state["theme_rerun"] = True       # once: never loop on a surprise
         st.rerun()
     st.session_state["theme_rerun"] = False
-    st.html(theme.stylesheet(mode))
+    st.html(theme.stylesheet(mode, phone=on_phone()))
 
 
 def _account() -> None:
@@ -241,6 +264,24 @@ def apply_status(app: dict) -> None:
         st.caption("Not looked for on the employer's site yet.")
 
 
+def claude_ready() -> bool:
+    """Whether the Claude key is set (ai.ready, imported only when needed)."""
+    import ai
+    return ai.ready()
+
+
+def claude_button(label: str, key: str, active: bool = True, **kwargs) -> bool:
+    """A button for something Claude does: its key starts "claude_", which
+    the stylesheet marks with Claude's spark (active=False: an ordinary
+    button, e.g. when no Claude key is set and the click won't call it)."""
+    return st.button(label, key=f"{theme.CLAUDE_KEY}{key}" if active else key, **kwargs)
+
+
+def claude_submit(label: str, key: str, **kwargs) -> bool:
+    """A form's submit button for something Claude does, with the mark."""
+    return st.form_submit_button(label, key=f"{theme.CLAUDE_KEY}{key}", **kwargs)
+
+
 def find_posting_button(app: dict, key: str) -> None:
     """A button that has Claude look for the posting on the employer's own
     site and saves the link (find_company_posting); shown when the key is set."""
@@ -248,10 +289,9 @@ def find_posting_button(app: dict, key: str) -> None:
 
     if not ai.ready():
         return
-    if st.button("Find it on the employer's site", key=f"find_posting_{key}",
-                 icon=":material/travel_explore:", width="stretch",
-                 help="Claude searches the web for this posting on the employer's own "
-                      "careers site, so you can apply there (about 15 cents)"):
+    if claude_button("Find it on the employer's site", f"find_posting_{key}", width="stretch",
+                     help="Claude searches the web for this posting on the employer's own "
+                          "careers site, so you can apply there (about 15 cents)"):
         with st.spinner("Searching the employer's site…"):
             notes = find_company_posting(app, data.today())
         done(" ".join(notes))

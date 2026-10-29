@@ -103,6 +103,22 @@ saved in the database, so every device follows. Both looks, and the fonts,
 badges and cards, are defined in `app/theme.py`; `.streamlit/config.toml`
 carries the light look so the first paint already matches.
 
+**Phone or computer.** The app tells from your browser whether it's on a
+phone, and the sidebar's **Layout** switch (Auto, Phone, Computer) overrides it
+for the session, e.g. on an iPad asking for the desktop site. A phone keeps to
+the everyday tasks: triaging leads as cards, opening an application, applying,
+logging updates, interviews, Projects and Resume Builder downloads; the wide
+editing tables (the master's grids, a tailored version's grids, Build from
+files) say to use the computer, and Import leaves the phone's menu. A computer
+uses the full width: Home puts what needs attention beside your best waiting
+leads, the pipeline and this week's numbers; Job Leads opens as a sortable table
+where you tick several leads and add (up to five at a time) or dismiss them
+together, their cards below; Applications and Projects show the list beside the
+open one, and a click on a row opens it.
+
+**Claude's mark.** Every button that calls Claude carries a small Claude spark
+(`ui.claude_button`), so you can see what costs a few cents before you tap it.
+
 ## First-time setup (once)
 
 1. **Create the database.** Sign in at [neon.tech](https://neon.tech) with the

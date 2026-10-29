@@ -90,6 +90,16 @@ only they can do (accounts, secrets, clicking merge).
   first connection of each process. Changing an existing table → also add an
   idempotent statement to `data.MIGRATIONS` (run after schema.sql, and by
   `leads.py add` over HTTPS), so the live database updates itself.
+- **Phone or computer**: `ui.on_phone()` (`logic.device_from_agent` on the
+  User-Agent, tablets count as computers; the sidebar's Layout switch,
+  `ui.LAYOUT_KEY`, overrides it). A phone gets one centred column and the
+  everyday tasks; wide editing grids show `ui.empty("computer", …)` instead;
+  `config.PHONE_HIDDEN_PAGES` leave its menu. A computer gets the wide layout
+  (`config.COMPUTER_MAX_WIDTH`) and side-by-side views; a clickable table
+  (`on_select`) puts its pick in session state and bumps its `round_key`, and
+  ignores a tick past the end of its rows. Page tests run as a computer; the
+  `phone` fixture switches. A button that calls Claude is `ui.claude_button` /
+  `ui.claude_submit` (a "claude_" key: the stylesheet draws Claude's spark).
 - Add forms sit behind `ui.disclosure()` buttons (server-side open state), not
   `st.expander`, which snaps shut when a click lands mid-load.
 - Every page's first statement is `fresh.check()`: Community Cloud pulls new

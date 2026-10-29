@@ -702,3 +702,44 @@ def test_bullet_style_samples_the_newest_roles_printed_bullets():
     assert style == {"samples": ["a" * 100, "b" * 200], "typical": 200, "longest": 300}
     assert logic.bullet_style(None) == {"samples": [], "typical": 200, "longest": 300}
 
+
+def test_a_phones_browser_gets_the_phone_layout_and_everything_else_the_computers():
+    phones = ["Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 "
+              "(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+              "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/130.0 Mobile Safari/537.36",
+              "Mozilla/5.0 (Android 15; Mobile; rv:131.0) Gecko/131.0 Firefox/131.0"]
+    computers = ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like "
+                 "Gecko) Chrome/130.0 Safari/537.36",
+                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like "
+                 "Gecko) Version/18.0 Safari/605.1.15",
+                 "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15",   # a tablet
+                 "Mozilla/5.0 (Linux; Android 15; SM-X910) AppleWebKit/537.36 Chrome/130.0 "
+                 "Safari/537.36",                                         # an Android tablet
+                 "", None]
+    assert [logic.device_from_agent(a) for a in phones] == ["phone"] * 3
+    assert [logic.device_from_agent(a) for a in computers] == ["computer"] * 6
+
+
+def test_a_lead_table_row_says_it_all_in_a_line():
+    leads = pd.DataFrame([
+        {"fit_score": 8.4, "found_on": TODAY, "title": "Analyst", "company": "Acme",
+         "location": "Denver, CO", "work_mode": "hybrid", "salary_min": 120000,
+         "salary_max": 140000, "pay_source": "estimated", "source": "LinkedIn",
+         "job_url": "https://www.linkedin.com/jobs/view/123/?trk=x"},
+        {"fit_score": None, "found_on": date(2026, 10, 1), "title": "BI Dev", "company": "Beta",
+         "location": None, "work_mode": "remote", "salary_min": None, "salary_max": None,
+         "pay_source": None, "source": None, "job_url": None}])
+    table = logic.lead_table(leads, TODAY)
+    assert table.iloc[0].to_dict() == {
+        "fit": 8.4, "title": "Analyst", "company": "Acme", "where": "Denver, CO · Hybrid",
+        "pay": "~$120k–$140k", "source": "LinkedIn", "found": TODAY,
+        "posting": "https://www.linkedin.com/jobs/view/123/"}
+    second = table.iloc[1].to_dict()
+    assert pd.isna(second["fit"]) and pd.isna(second["posting"])
+    assert (second["where"], second["pay"], second["source"]) == ("Remote", "—", "")
+    assert [logic.salary_short(*r) for r in ((135000, 160000), (90000, 90000), (125500, None),
+                                             (None, 80000), (None, None))] == [
+        "$135k–$160k", "$90k", "$126k+", "up to $80k", ""]
+    assert list(logic.lead_table(leads.iloc[[]], TODAY).columns)[0] == "fit"
+

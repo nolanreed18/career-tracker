@@ -10,8 +10,11 @@ orange = needs attention, red = closed or overdue, grey = neutral.
 """
 
 from html import escape
+from urllib.parse import quote
 
 from streamlit import config
+
+import config as knobs  # the app's settings (config here is Streamlit's)
 
 LIGHT = "light"
 DARK = "dark"
@@ -147,12 +150,41 @@ def current() -> str | None:
     return None
 
 
-def stylesheet(mode: str) -> str:
+def _claude_mark() -> str:
+    """A small spark in Claude's coral, as a data URI: rays of a few lengths
+    around a centre, the way Claude's own mark looks."""
+    rays = "".join(
+        f"<rect x='11' y='{12 - length:g}' width='2.2' height='{length - 1.6:g}' rx='1.1' "
+        f"transform='rotate({angle} 12 12)'/>"
+        for angle, length in zip(range(0, 360, 30), (11, 8.5, 10, 8, 11, 9, 10.5, 8, 11, 8.5,
+                                                     10, 9)))
+    svg = f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='#D97757'>{rays}</svg>"
+    return "data:image/svg+xml," + quote(svg)
+
+
+CLAUDE_MARK = _claude_mark()
+CLAUDE_KEY = "claude_"            # a widget key starting with this gets the mark (ui.claude_button)
+
+
+def layout_css(phone: bool) -> str:
+    """The part of the stylesheet that differs by device: a phone's menu
+    leaves out the computer-only pages; a computer's page stops at a
+    comfortable width."""
+    if phone:
+        return "\n".join(f'[data-testid="stSidebarNavItems"] li:has(a[href$="/{name}"]) '
+                          "{ display: none; }" for name in knobs.PHONE_HIDDEN_PAGES)
+    return ('[data-testid="stMainBlockContainer"] { margin: 0 auto; max-width: '
+            f"{knobs.COMPUTER_MAX_WIDTH}px; }}")
+
+
+def stylesheet(mode: str, phone: bool = False) -> str:
     """A <style> element finishing the look for this mode: microlabels,
-    mono numbers, cards, segmented filters, the gradient button."""
+    mono numbers, cards, segmented filters, the gradient button, the Claude
+    mark, and the layout for a phone or a computer."""
     t = TOKENS[mode]
     tokens = " ".join(f"--ct-{k}: {v};" for k, v in t.items())
     return f"""<style>
+{layout_css(phone)}
 :root {{ {tokens} --ct-mono: {MONO}; --ct-ease: 0.2s ease; }}
 
 /* Less empty space above the page head (the header bar is 3.75rem). */
@@ -223,6 +255,14 @@ def stylesheet(mode: str) -> str:
 [data-testid="stBaseButton-secondary"]:hover,
 [data-testid="stBaseButton-secondaryFormSubmit"]:hover {{ border-color: var(--ct-blue);
     background: var(--ct-card-hover); color: var(--ct-text); }}
+
+/* Something Claude does (ui.claude_button): its mark before the label. */
+[class*="st-key-{CLAUDE_KEY}"] button p::before {{ content: ""; display: inline-block;
+    width: 1.05em; height: 1.05em; margin-right: 0.42em; vertical-align: -0.17em;
+    background: url("{CLAUDE_MARK}") center / contain no-repeat; }}
+[class*="st-key-{CLAUDE_KEY}"] [data-testid^="stBaseButton-primary"] p::before {{
+    background-color: #fff; background-size: 78%; border-radius: 50%;
+    box-shadow: 0 0 0 1.5px #fff; }}   /* on the gradient: a white disc behind the mark */
 
 /* Horizontal radios become a segmented control: one of a few, all visible. */
 [data-testid="stRadio"] [role="radiogroup"] {{ gap: 6px; flex-wrap: wrap; }}

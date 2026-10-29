@@ -34,6 +34,12 @@ def fixed_today(database, monkeypatch):
     monkeypatch.setattr(theme, "_applied", None)     # a fresh process: reads the saved look
 
 
+@pytest.fixture
+def phone(monkeypatch):
+    """The phone layout (one column, lead cards), as an iPhone's browser gets."""
+    monkeypatch.setattr(ui, "device", lambda: "phone")
+
+
 def new_app(path: Path, signed_in: bool = True) -> AppTest:
     at = AppTest.from_file(str(path), default_timeout=30)
     if signed_in:
@@ -177,8 +183,9 @@ def test_tables_show_blanks_not_none_for_missing_values():
     data.add_application(data.company_id_for("Acme", TODAY), "Saved one", "saved", TODAY)
     companies = run(COMPANIES).dataframe[0].value
     assert companies["industry"].tolist() == ["", ""]           # not None, not "None"
-    apps = run(APPS).dataframe[0].value
-    assert apps["applied_on"].isna().sum() == 1                  # the one still Saved
+    apps = run(APPS).dataframe[0].value                         # beside the open one: short
+    assert list(apps.columns) == ["company", "role", "status", "resume"]
+    assert "None" not in apps.astype(str).values
 
 
 def test_a_deleted_company_leaves_the_dropdown():
@@ -337,7 +344,7 @@ def test_google_without_allowed_emails_lets_nobody_in(google, monkeypatch):
     assert "isn't allowed" in at.error[0].value and not at.metric
 
 
-def test_leads_are_listed_best_fit_first_and_home_points_to_them():
+def test_leads_are_listed_best_fit_first_and_home_points_to_them(phone):
     seed()
     at = run(LEADS)
     assert widget(at.radio, "Show").value == "strong"      # opens on the strong ones
@@ -351,7 +358,7 @@ def test_leads_are_listed_best_fit_first_and_home_points_to_them():
     assert any("2 leads in the inbox, 2 new today, 1 strong" in m.value for m in home.markdown)
 
 
-def test_a_long_inbox_is_drawn_a_batch_at_a_time():
+def test_a_long_inbox_is_drawn_a_batch_at_a_time(phone):
     data.add_leads([logic.clean_lead({"source": "Dice", "title": f"Role {n}", "company": f"Co {n}",
                                       "fit": {"role": 8}})[0]
                     for n in range(config.LEADS_SHOWN + 3)], TODAY)
@@ -363,7 +370,7 @@ def test_a_long_inbox_is_drawn_a_batch_at_a_time():
     assert not any(b.label.startswith("Show ") for b in at.button)
 
 
-def test_a_lead_shows_its_category_ratings_and_the_rules_are_explained():
+def test_a_lead_shows_its_category_ratings_and_the_rules_are_explained(phone):
     seed()
     at = run(LEADS)
     widget(at.radio, "Show").set_value("today").run()
@@ -376,7 +383,7 @@ def test_a_lead_shows_its_category_ratings_and_the_rules_are_explained():
     assert any("**Pay.**" in m.value and "estimate" in m.value for m in at.markdown)
 
 
-def test_a_lead_shows_listed_pay_plainly_and_a_warning_when_pay_is_missing_or_estimated():
+def test_a_lead_shows_listed_pay_plainly_and_a_warning_when_pay_is_missing_or_estimated(phone):
     seed()
     data.add_leads([logic.clean_lead({
         "source": "Indeed", "title": "Data Engineer", "company": "Epsilon",
@@ -393,7 +400,7 @@ def test_a_lead_shows_listed_pay_plainly_and_a_warning_when_pay_is_missing_or_es
                "Levels.fyi range, Data Engineer, Denver" in c for c in captions)
 
 
-def test_dismissing_a_lead_asks_why_and_restore_brings_it_back():
+def test_dismissing_a_lead_asks_why_and_restore_brings_it_back(phone):
     seed()
     at = run(LEADS)
     widget(at.radio, "Show").set_value("today").run()
@@ -413,7 +420,7 @@ def test_dismissing_a_lead_asks_why_and_restore_brings_it_back():
     assert data.lead(int(gone["lead_id"]))["dismiss_reason"] is None
 
 
-def test_todays_leads_are_marked_new_and_old_ones_go_stale():
+def test_todays_leads_are_marked_new_and_old_ones_go_stale(phone):
     seed()                                                  # Gamma and Delta arrive today
     data.add_leads([logic.clean_lead(r)[0] for r in (
         {"source": "Dice", "title": "Yesterday's Analyst", "company": "Eta", "fit_score": 8},
@@ -450,7 +457,7 @@ def test_companies_to_skip_are_saved_with_the_profile():
     assert any("**Dismissals.**" in m.value for m in at.markdown)
 
 
-def test_moving_a_lead_creates_the_application_and_reads_its_posting(monkeypatch):
+def test_moving_a_lead_creates_the_application_and_reads_its_posting(monkeypatch, phone):
     import posting
     seed()
     monkeypatch.setattr(posting, "fetch", lambda url: posting.Posting(
@@ -468,7 +475,7 @@ def test_moving_a_lead_creates_the_application_and_reads_its_posting(monkeypatch
                                          "Posting read (260 characters).")
 
 
-def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
+def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch, phone):
     import ai
     import posting
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
@@ -523,7 +530,7 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch):
     assert not any(b.label == "Applied today" for b in at.button)        # only while Saved
 
 
-def test_a_glassdoor_lead_gets_its_posting_from_the_employers_site(monkeypatch):
+def test_a_glassdoor_lead_gets_its_posting_from_the_employers_site(monkeypatch, phone):
     import ai
     import posting
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
@@ -626,7 +633,7 @@ def test_the_profile_form_saves():
         "Data Analyst", 100000, "remote")
 
 
-def test_weak_leads_are_hidden_until_asked_for():
+def test_weak_leads_are_hidden_until_asked_for(phone):
     seed()
     data.add_leads([logic.clean_lead({
         "source": "Indeed", "title": "Excel Reporting Clerk", "company": "Epsilon",
@@ -646,7 +653,7 @@ def test_weak_leads_are_hidden_until_asked_for():
     assert "Analytics Engineer" in shown and "BI Developer" not in shown
 
 
-def test_todays_glassdoor_links_open_the_right_form():
+def test_todays_glassdoor_links_open_the_right_form(phone):
     data.add_leads([logic.clean_lead({
         "source": "Glassdoor", "title": "Analyst", "company": "Zeta", "fit_score": 8})[0]], TODAY)
     lead_id = int(data.job_leads()["lead_id"][0])
@@ -1061,3 +1068,145 @@ def test_resume_sources_are_listed_with_the_template_marked_and_can_be_removed()
     widget(at.checkbox, "I want to delete this file").check().run()      # newest first: the CSV
     widget(at.button, "Delete file").click().run()
     assert data.resume_sources()["filename"].tolist() == ["Resume.docx"]
+
+
+# ---- phone and computer -----------------------------------------------------------
+
+def test_home_on_a_computer_adds_the_best_leads_and_the_pipeline():
+    seed()
+    at = run(HOME)                                          # no browser: the computer layout
+    assert any(h.value == "Pipeline" for h in at.subheader)
+    assert any(m.value.startswith(":green-badge[9/10] Analytics Engineer — Gamma")
+               for m in at.markdown)                         # the best lead waiting
+    assert any(m.value == ":blue-badge[Applied] **1**  :violet-badge[Interviewing] **1**"
+               or ("[Applied] **1**" in m.value and "[Interviewing] **1**" in m.value)
+               for m in at.markdown)
+    assert [m.label for m in at.metric][-2:] == ["Applied this week", "Interviews, 2 weeks"]
+
+
+def test_home_on_a_phone_keeps_to_the_inbox_and_what_needs_doing(phone):
+    seed()
+    at = run(HOME)
+    assert not any(h.value == "Pipeline" for h in at.subheader)
+    assert any(h.value == "Needs attention" for h in at.subheader)
+
+
+def test_a_computer_opens_an_application_by_clicking_its_row():
+    quiet = seed()
+    at = run(APPS)
+    assert any("Pick an application" in h.value for h in at.get("html"))
+    row = at.dataframe[0].value["company"].tolist().index("Acme")
+    at.session_state["apps_table_0"] = {"selection": {"rows": [row], "columns": []}}
+    at.run()
+    assert not at.exception
+    assert widget(at.selectbox, "Open an application").value == quiet
+    assert any(m.value.startswith("### Acme — Data Analyst") for m in at.markdown)
+
+
+def test_a_phone_picks_an_application_from_the_list_without_the_table(phone):
+    seed()
+    at = run(APPS)
+    assert not at.dataframe
+    assert widget(at.selectbox, "Open an application").value is None
+
+
+def test_a_computer_sees_the_inbox_as_a_table_and_acts_on_several_leads(monkeypatch):
+    import ui as page_ui
+    data.add_leads([logic.clean_lead({"source": "LinkedIn", "title": f"Analyst {n}",
+                                      "company": f"Co {n}", "fit": {"role": 9 - n % 3},
+                                      "salary": "$120k-$140k"})[0] for n in range(10)], TODAY)
+    at = run(LEADS)
+    assert widget(at.radio, "View").value == "Table"
+    widget(at.radio, "Show").set_value("all").run()
+    table = at.dataframe[0].value
+    assert len(table) == 10 and table["pay"].iloc[0] == "$120k–$140k"
+    assert any(c.value.startswith("Click a heading to sort.") for c in at.caption)
+
+    titles = table["title"].tolist()
+
+    def tick(rows):            # a browser sends the ticks with every rerun; the harness doesn't
+        turn = at.session_state["leads_table_round"] if "leads_table_round" in at.session_state \
+            else 0
+        at.session_state[f"leads_table_{turn}_all"] = {"selection": {"rows": rows,
+                                                                       "columns": []}}
+
+    tick([0, 1])
+    at.run()
+    assert any(m.value == "**2 leads selected**" for m in at.markdown)
+    assert sum("**" in m.value and "Analyst" in m.value for m in at.markdown) >= 2   # their cards
+    tick([0, 1])
+    widget(at.multiselect, "Dismiss the selected").set_value(["wrong role", "pay"]).run()
+    tick([0, 1])
+    click(at, "Dismiss 2 leads: wrong role, pay")
+    gone = data.job_leads("dismissed")
+    assert sorted(gone["title"]) == sorted(titles[:2])
+    assert set(gone["dismiss_reason"]) == {"wrong role, pay"}
+
+    monkeypatch.setattr(page_ui, "prepare_application", lambda app_id, today: ["Searched."])
+    tick([0])
+    at.run()
+    tick([0])
+    click(at, "Add 1 lead to Applications")
+    assert at.success[0].value == "Added 1 lead to Applications as Saved. Searched."
+    assert data.applications()["role"].tolist() == [titles[2]]
+
+    tick(list(range(4)))
+    at.run()
+    assert not widget(at.button, "Add 4 leads to Applications").disabled
+    tick(list(range(6)))
+    at.run()
+    assert widget(at.button, "Add 6 leads to Applications").disabled     # over the limit
+    tick([0, 99])                                         # a stale tick past the end: ignored
+    at.run()
+    assert not at.exception and any(m.value == "**1 lead selected**" for m in at.markdown)
+    widget(at.radio, "View").set_value("Cards").run()                # the cards, two across
+    assert any(b.label == "Add" for b in at.button)
+
+
+def test_a_computer_opens_a_project_by_clicking_its_row():
+    first = data.add_project(TODAY, kind="work", title="Alpha", summary="A.")
+    second = data.add_project(TODAY, kind="work", title="Beta", summary="B.")
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Projects").run()
+    row = at.dataframe[0].value["Project"].tolist().index("Beta")
+    at.session_state["projects_table_0"] = {"selection": {"rows": [row], "columns": []}}
+    at.run()
+    assert not at.exception
+    assert widget(at.selectbox, "Project").value == second != first
+
+
+def test_a_phone_leaves_the_wide_resume_editing_to_the_computer(phone):
+    import docx_fixture
+    data.save_resume_master(docx_fixture.SAMPLE, TODAY)
+    at = run(RESUME)
+    assert any("Edit the master on your computer" in h.value for h in at.get("html"))
+    assert not any(w.label == "Name" for w in at.text_input)          # no editing grids
+    widget(at.radio, "Section").set_value("Build from files").run()
+    assert any("Build from files on your computer" in h.value for h in at.get("html"))
+    assert not at.get("file_uploader")
+
+
+def test_the_layout_switch_overrides_the_browser():
+    at = new_app(HOME)
+    at.session_state[ui.LAYOUT_KEY] = "Phone"
+    at.run()
+    assert not any(h.value == "Pipeline" for h in at.subheader)
+    assert widget(at.selectbox, "Layout").value == "Phone"
+    widget(at.selectbox, "Layout").set_value("Computer").run()
+    assert widget(at.selectbox, "Layout").value == "Computer"
+
+
+def test_claude_powered_buttons_carry_the_claude_mark(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    seed()
+    at = run(LEADS)
+    widget(at.radio, "View").set_value("Cards").run()
+    assert all(b.key.startswith("claude_move_") for b in at.button if b.label == "Add")
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Build from files").run()
+    assert widget(at.button, "Test connection (free)").key == "claude_ping"
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    at = run(LEADS)
+    widget(at.radio, "View").set_value("Cards").run()
+    assert all(b.key.startswith("move_") for b in at.button if b.label == "Add")   # no key: plain
+
