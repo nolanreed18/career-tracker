@@ -14,11 +14,14 @@ from ui import (
     badge,
     bump_round,
     card,
+    claude_button,
+    claude_ready,
     done,
     empty,
     fit_badge,
     fit_breakdown,
     md,
+    on_phone,
     pay_badge,
     prepare_application,
     round_key,
@@ -30,6 +33,7 @@ setup("Job Leads", "From your alert emails, scored for fit every morning")
 
 
 today = data.today()
+claude_on = claude_ready()       # Add also has Claude look for the employer's own posting
 
 
 def describe(lead) -> str:
@@ -67,9 +71,13 @@ def lead_card(lead) -> None:
         if logic.value(lead.fit_reason):
             st.markdown(md(lead.fit_reason))
         move_col, dismiss_col = st.columns(2, wrap=False)
-        if move_col.button("Add", key=f"move_{lead_id}", type="primary", width="stretch",
-                           help="Save it as an application, read the posting from its link and "
-                                "have Claude find it on the employer's own site to apply there"):
+        with move_col:
+            add = claude_button("Add", f"move_{lead_id}", active=claude_on, type="primary",
+                                width="stretch",
+                                help="Save it as an application, read the posting from its link "
+                                     "and have Claude find it on the employer's own site to "
+                                     "apply there (about 15 cents)")
+        if add:
             application_id = data.move_lead_to_applications(lead_id, today)
             with st.spinner("Saved. Reading the posting and looking for it on the employer's "
                             "site (a minute or two; leaving the page doesn't stop it, the "
@@ -92,15 +100,93 @@ def lead_card(lead) -> None:
 
 def in_batches(frame, key: str, draw) -> None:
     """draw(lead) for the first config.LEADS_SHOWN leads, and a button for
-    the next batch: a long inbox stays quick to draw on a phone."""
+    the next batch: a long inbox stays quick to draw on a phone. A computer
+    lays the cards out two across."""
     batches = st.session_state.get(f"batches_{key}", 1)
-    for lead in frame.head(config.LEADS_SHOWN * batches).itertuples():
-        draw(lead)
+    phone = on_phone()
+    for n, lead in enumerate(frame.head(config.LEADS_SHOWN * batches).itertuples()):
+        if phone:
+            draw(lead)
+            continue
+        if n % 2 == 0:
+            row = st.columns(2, gap="medium")
+        with row[n % 2]:
+            draw(lead)
     left = len(frame) - config.LEADS_SHOWN * batches
     if left > 0 and st.button(f"Show {min(config.LEADS_SHOWN, left)} more ({left} left)",
                               key=f"more_{key}", width="stretch"):
         st.session_state[f"batches_{key}"] = batches + 1
         st.rerun()
+
+
+LEAD_COLUMNS = {                     # sized to fit the page's width without scrolling
+    "fit": st.column_config.NumberColumn("Fit", format="%.1f", width=52),
+    "title": st.column_config.TextColumn("Title", width=250),
+    "company": st.column_config.TextColumn("Company", width=165),
+    "where": st.column_config.TextColumn("Where", width=130),
+    "pay": st.column_config.TextColumn("Pay", width=110,
+                                       help="In thousands; ~ means the daily review estimated it"),
+    "source": st.column_config.TextColumn("Source", width=80),
+    "found": st.column_config.DateColumn("Found", format="MMM D", width=64),
+    "posting": st.column_config.LinkColumn("Posting", display_text="Open", width=64),
+}
+
+
+def table_view(leads, view: str) -> None:
+    """A computer's inbox: every lead in a full-width, sortable table. Tick
+    some and a bar above the table adds or dismisses them together, with
+    their cards below it. Each Show view has its own table, so changing it
+    clears the ticks."""
+    bar = st.container()                     # filled once the table says what's ticked
+    picked = st.dataframe(
+        logic.lead_table(leads, today), hide_index=True, width="stretch",
+        height=min(40 + 35 * len(leads), 680), column_config=LEAD_COLUMNS,
+        on_select="rerun", selection_mode="multi-row", key=f"{round_key('leads_table')}_{view}")
+    chosen = leads.iloc[[r for r in picked.selection.rows if r < len(leads)]]
+    with bar:
+        if chosen.empty:
+            st.caption("Click a heading to sort. Tick leads to add or dismiss several at once; "
+                       "their details show under the table.")
+            return
+        ids = [int(i) for i in chosen["lead_id"]]
+        count = logic.plural(len(ids), "lead")
+        too_many = len(ids) > config.BULK_ADD_MAX
+        with card("bulk"):
+            text_col, add_col, why_col, go_col = st.columns([2, 3, 3, 3],
+                                                            vertical_alignment="center")
+            text_col.markdown(f"**{count} selected**")
+            with add_col:
+                add = claude_button(
+                    f"Add {count} to Applications", "bulk_add", active=claude_on,
+                    type="primary", width="stretch", disabled=too_many,
+                    help=(f"Add up to {config.BULK_ADD_MAX} at a time. " if too_many else "")
+                    + "Each is saved as an application, its posting read, and Claude looks for "
+                      "it on the employer's own site (about 15 cents each)")
+            reasons = why_col.multiselect(
+                "Dismiss the selected", config.DISMISS_REASONS,
+                placeholder="Dismiss them because…", key=f"bulk_dismiss_{round_key('leads')}",
+                label_visibility="collapsed",
+                help="Pick why, then Dismiss: the daily review reads recent reasons")
+            with go_col:
+                dismiss = reasons and st.button(f"Dismiss {count}: {', '.join(reasons)}",
+                                                key="bulk_dismiss_go", width="stretch")
+        if add:
+            notes = []
+            with st.spinner(f"Saving {count} and looking for each on the employer's site "
+                            "(about a minute each; leaving the page doesn't stop it)…"):
+                for lead_id in ids:
+                    notes += prepare_application(
+                        data.move_lead_to_applications(lead_id, today), today)
+            bump_round("leads_table")
+            bump_round("leads")
+            done(" ".join([f"Added {count} to Applications as Saved."] + notes))
+        if dismiss:
+            for lead_id in ids:
+                data.set_lead_status(lead_id, "dismissed", reasons, today)
+            bump_round("leads_table")
+            bump_round("leads")
+            done(f"Dismissed {count} ({', '.join(reasons)}).")
+    in_batches(chosen, "chosen", lead_card)           # their cards, two across
 
 
 def dismissed_card(lead) -> None:
@@ -164,7 +250,18 @@ if section == "Inbox":
             leads = leads[~weak]
         if leads.empty:
             empty("filter_alt", "Nothing in this view", "Choose All to see every lead.")
-        in_batches(leads, "inbox", lead_card)
+        elif on_phone():
+            in_batches(leads, "inbox", lead_card)
+        else:
+            # The radio forgets its choice while another section is open; keep it ourselves.
+            view = st.radio("View", ["Table", "Cards"], horizontal=True, key="leads_view",
+                            index=["Table", "Cards"].index(
+                                st.session_state.get("leads_view_kept", "Table")))
+            st.session_state["leads_view_kept"] = view
+            if view == "Table":
+                table_view(leads, show)
+            else:
+                in_batches(leads, "inbox", lead_card)
 
 # ---- stale ------------------------------------------------------------------
 

@@ -33,6 +33,19 @@ def value(x):
     return None if blank(x) else x
 
 
+# ---- phone or computer --------------------------------------------------------
+
+PHONE_AGENT = re.compile(r"iPhone|iPod|Android.+Mobile|Windows Phone|IEMobile|BlackBerry|"
+                         r"Opera Mini|Mobile.+Firefox", re.I)
+
+
+def device_from_agent(agent) -> str:
+    """"phone" for a phone's browser (its User-Agent says so), else
+    "computer": a tablet, a computer or an unknown browser gets the bigger
+    layout."""
+    return "phone" if PHONE_AGENT.search(str(agent or "")) else "computer"
+
+
 # ---- needs attention --------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -1128,6 +1141,39 @@ def match_endings(tailored: dict, master: dict) -> dict:
                 text = text.rstrip(".")
             bullet["text"] = text
     return out
+
+
+def lead_table(leads: pd.DataFrame, today: date) -> pd.DataFrame:
+    """Leads as a computer's table shows them, one row each in the leads'
+    order: fit, title, company, where, pay in thousands (with ~ when the
+    daily review estimated it), source, the day it was found, and the
+    posting link."""
+    rows = []
+    for lead in leads.itertuples():
+        pay = salary_short(lead.salary_min, lead.salary_max)
+        if pay and value(lead.pay_source) == "estimated":
+            pay = f"~{pay}"
+        rows.append({"fit": None if blank(lead.fit_score) else float(lead.fit_score),
+                     "title": lead.title, "company": lead.company,
+                     "where": " · ".join(place(lead.location, lead.work_mode)),
+                     "pay": pay or "—", "source": value(lead.source) or "",
+                     "found": lead.found_on, "posting": job_link(lead.job_url)})
+    return pd.DataFrame(rows, columns=["fit", "title", "company", "where", "pay", "source",
+                                       "found", "posting"])
+
+
+def salary_short(low, high) -> str:
+    """A pay range in thousands for a narrow column: "$135k–$160k"."""
+    def k(amount) -> str:
+        return f"${round(float(amount) / 1000):g}k"
+    low, high = value(low), value(high)
+    if low is not None and high is not None:
+        return k(low) if low == high else f"{k(low)}–{k(high)}"
+    if low is not None:
+        return f"{k(low)}+"
+    if high is not None:
+        return f"up to {k(high)}"
+    return ""
 
 
 def place(location, work_mode) -> list[str]:

@@ -170,3 +170,12 @@ MAYBE_FIT = 4
 # Lead cards drawn at once on Job Leads; a button shows the next batch, so a
 # long inbox stays quick to draw on a phone.
 LEADS_SHOWN = 25
+
+# Phone or computer: the app picks from the browser (logic.device_from_agent);
+# the sidebar's Layout switch overrides it for the session. On a computer
+# pages use the full width, up to this many pixels.
+LAYOUT_CHOICES = ["Auto", "Phone", "Computer"]
+COMPUTER_MAX_WIDTH = 1440
+PHONE_HIDDEN_PAGES = ["Import"]      # pages left out of the phone's menu
+HOME_TOP_LEADS = 3                   # a computer's Home lists the best few waiting leads
+BULK_ADD_MAX = 5                     # leads added at once from the table (each runs a site search)
