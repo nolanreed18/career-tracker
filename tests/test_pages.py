@@ -651,6 +651,9 @@ def test_weak_leads_are_hidden_until_asked_for(phone):
     widget(at.radio, "Show").set_value("strong").run()
     shown = " ".join(m.value for m in at.markdown)
     assert "Analytics Engineer" in shown and "BI Developer" not in shown
+    widget(at.radio, "Show").set_value("weak").run()          # to clear them out in one go
+    shown = " ".join(m.value for m in at.markdown)
+    assert "Excel Reporting Clerk" in shown and "Analytics Engineer" not in shown
 
 
 def test_todays_glassdoor_links_open_the_right_form(phone):
@@ -666,6 +669,7 @@ def test_todays_glassdoor_links_open_the_right_form(phone):
 
 
 RESUME = ROOT / "app" / "pages" / "8_Resume.py"
+STATS = ROOT / "app" / "pages" / "6_Stats.py"
 
 
 def test_resume_page_draws_empty_and_says_whether_claude_has_a_key(monkeypatch):
@@ -1089,6 +1093,17 @@ def test_home_on_a_phone_keeps_to_the_inbox_and_what_needs_doing(phone):
     at = run(HOME)
     assert not any(h.value == "Pipeline" for h in at.subheader)
     assert any(h.value == "Needs attention" for h in at.subheader)
+
+
+def test_stats_charts_sit_side_by_side_on_a_computer_and_stack_on_a_phone(monkeypatch):
+    seed()
+    at = run(STATS)
+    assert len(at.columns) >= 5                    # three numbers, then the two charts
+    assert {"Pipeline", "Applications per week"} <= {h.value for h in at.subheader}
+    monkeypatch.setattr(ui, "device", lambda: "phone")
+    at = run(STATS)
+    assert len(at.columns) == 3
+    assert {"Pipeline", "Applications per week"} <= {h.value for h in at.subheader}
 
 
 def test_a_computer_opens_an_application_by_clicking_its_row():

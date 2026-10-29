@@ -313,7 +313,7 @@ if section == "Projects":
         phone = on_phone()
         # A computer shows the list beside the open project; a phone, one under the other.
         list_area, detail_area = ((st.container(), st.container()) if phone
-                                  else st.columns([2, 3], gap="large"))
+                                  else st.columns(2, gap="large"))
         with list_area:
             levels = [d["level"] for d in details.values()]
             st.markdown(" ".join(
@@ -329,12 +329,13 @@ if section == "Projects":
                 hide_index=True, width="stretch",
                 **({} if phone else {"on_select": "rerun", "selection_mode": "single-row",
                                      "key": round_key("projects_table")}),
-                column_config={
+                column_config={            # a fixed title width keeps the scores in view
+                    "Project": st.column_config.TextColumn("Project", width=280),
                     "Detail": st.column_config.ProgressColumn(
-                        "Detail", min_value=0, max_value=100, format="%d", width="small",
+                        "Detail", min_value=0, max_value=100, format="%d", width=90,
                         help="The free detail score: situation, task, action, result, a number, "
                              "skills and a bullet"),
-                    "Claude": st.column_config.TextColumn("Claude", width="small")})
+                    "Claude": st.column_config.TextColumn("Claude", width=64)})
 
             ids = [int(r["project_id"]) for r in ordered]
             if not phone and overview.selection.rows and overview.selection.rows[0] < len(ids):

@@ -121,12 +121,12 @@ def in_batches(frame, key: str, draw) -> None:
 
 LEAD_COLUMNS = {                     # sized to fit the page's width without scrolling
     "fit": st.column_config.NumberColumn("Fit", format="%.1f", width=52),
-    "title": st.column_config.TextColumn("Title", width=250),
-    "company": st.column_config.TextColumn("Company", width=165),
-    "where": st.column_config.TextColumn("Where", width=130),
+    "title": st.column_config.TextColumn("Title", width=310),
+    "company": st.column_config.TextColumn("Company", width=150),
+    "where": st.column_config.TextColumn("Where", width=145),
     "pay": st.column_config.TextColumn("Pay", width=110,
                                        help="In thousands; ~ means the daily review estimated it"),
-    "source": st.column_config.TextColumn("Source", width=80),
+    "source": st.column_config.TextColumn("Source", width=76),
     "found": st.column_config.DateColumn("Found", format="MMM D", width=64),
     "posting": st.column_config.LinkColumn("Posting", display_text="Open", width=64),
 }
@@ -230,7 +230,8 @@ if section == "Inbox":
                    f"weak (under {config.MAYBE_FIT})"
                    + (f"; {len(stale)} stale under Stale." if len(stale) else "."))
         SHOW = {"today": "New today", "maybe": f"Worth a look ({config.MAYBE_FIT}+, any day)",
-                "strong": f"Strong only ({config.STRONG_FIT}+)", "all": "All"}
+                "strong": f"Strong only ({config.STRONG_FIT}+)",
+                "weak": f"Weak (under {config.MAYBE_FIT})", "all": "All"}
         # The radio forgets its choice while another section is open; keep it ourselves.
         # It opens on the strong ones when there are any: the rest can wait.
         kept = st.session_state.get("leads_show_kept", "strong" if strong.any()
@@ -248,6 +249,8 @@ if section == "Inbox":
             leads = leads[strong]
         elif show == "maybe":
             leads = leads[~weak]
+        elif show == "weak":                          # to clear out in one go
+            leads = leads[weak]
         if leads.empty:
             empty("filter_alt", "Nothing in this view", "Choose All to see every lead.")
         elif on_phone():
