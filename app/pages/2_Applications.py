@@ -36,7 +36,8 @@ setup("Applications", "Add one, find one, keep it up to date")
 
 today = data.today()
 companies = data.companies()
-company_names = companies["name"].tolist()
+# Ones still in use: a company whose applications were all deleted drops out.
+company_names = companies.loc[companies["applications"] > 0, "name"].tolist()
 
 
 # ---- add --------------------------------------------------------------------
@@ -209,7 +210,7 @@ with detail_area:
                          help="Tailor the resume and cover letter to this job"):
         st.session_state["tailor_application"] = picked
         st.session_state["resume_goto"] = "Resume Builder"
-        st.switch_page("pages/8_Resume.py")
+        st.switch_page("pages/3_Resume_and_Projects.py")
     if app["status"] == "saved" and applied_col.button(
             "Applied today", icon=":material/send:", width="stretch",
             help="Marks it Applied as of today and starts the follow-up clock"):
@@ -280,13 +281,13 @@ with detail_area:
             done("Posting saved.")
         versions = data.tailored_versions(picked)
         if not versions.empty:
-            st.caption(f"{logic.plural(len(versions), 'tailored version')} on the Resume page, "
+            st.caption(f"{logic.plural(len(versions), 'tailored version')} on Resume and Projects, "
                        f"the latest {logic.when(versions['created_on'].iloc[0], today)}.")
         if st.button("Tailor the resume for this job", icon=":material/auto_awesome:",
                      disabled=not app["posting"]):
             st.session_state["tailor_application"] = picked
             st.session_state["resume_goto"] = "Resume Builder"
-            st.switch_page("pages/8_Resume.py")
+            st.switch_page("pages/3_Resume_and_Projects.py")
         if not app["posting"]:
             st.caption("Get or save the posting first: tailoring reads it.")
 

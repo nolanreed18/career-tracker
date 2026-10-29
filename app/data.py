@@ -250,9 +250,6 @@ def _delete(table: str, key: str, key_value: int, in_use_message: str = "") -> N
 
 # ---- companies --------------------------------------------------------------
 
-COMPANY_FIELDS = {"name", "website", "industry", "location", "notes"}
-
-
 def companies() -> pd.DataFrame:
     return _read("""
         select c.*, count(a.application_id) as applications
@@ -260,10 +257,6 @@ def companies() -> pd.DataFrame:
         group by c.company_id
         order by lower(c.name)
     """)
-
-
-def add_company(name: str, on: date, **fields) -> int:
-    return _insert("companies", "company_id", {"name": name, "created_on": on, **fields})
 
 
 def company_id_for(name: str, on: date) -> int:
@@ -280,41 +273,6 @@ def company_id_for(name: str, on: date) -> int:
             return row[0]
         cur.execute("select company_id from companies where lower(name) = lower(%s)", (name,))
         return cur.fetchone()[0]
-
-
-def update_company(company_id: int, **fields) -> None:
-    _update("companies", "company_id", company_id, fields, COMPANY_FIELDS)
-
-
-def delete_company(company_id: int) -> None:
-    _delete("companies", "company_id", company_id,
-            "this company still has applications; delete those first")
-
-
-# ---- contacts ---------------------------------------------------------------
-
-CONTACT_FIELDS = {"company_id", "name", "title", "kind", "email", "phone", "linkedin",
-                  "notes", "last_contacted_on"}
-
-
-def contacts() -> pd.DataFrame:
-    return _read("""
-        select ct.*, co.name as company
-        from contacts ct left join companies co using (company_id)
-        order by lower(ct.name)
-    """)
-
-
-def add_contact(name: str, on: date, **fields) -> int:
-    return _insert("contacts", "contact_id", {"name": name, "created_on": on, **fields})
-
-
-def update_contact(contact_id: int, **fields) -> None:
-    _update("contacts", "contact_id", contact_id, fields, CONTACT_FIELDS)
-
-
-def delete_contact(contact_id: int) -> None:
-    _delete("contacts", "contact_id", contact_id)
 
 
 # ---- applications -----------------------------------------------------------
@@ -475,55 +433,6 @@ def update_interview(interview_id: int, **fields) -> None:
 
 def delete_interview(interview_id: int) -> None:
     _delete("interviews", "interview_id", interview_id)
-
-
-# ---- career log -------------------------------------------------------------
-
-CAREER_FIELDS = {"kind", "title", "details", "happened_on", "tags"}
-
-
-def career_entries(kind: str | None = None) -> pd.DataFrame:
-    where = "" if kind is None else "where kind = %(kind)s"
-    return _read(f"""
-        select * from career_entries {where}
-        order by happened_on desc, entry_id desc
-    """, {"kind": kind})
-
-
-def add_career_entry(kind: str, title: str, happened_on: date, **fields) -> int:
-    return _insert("career_entries", "entry_id",
-                   {"kind": kind, "title": title, "happened_on": happened_on, **fields})
-
-
-def update_career_entry(entry_id: int, **fields) -> None:
-    _update("career_entries", "entry_id", entry_id, fields, CAREER_FIELDS)
-
-
-def delete_career_entry(entry_id: int) -> None:
-    _delete("career_entries", "entry_id", entry_id)
-
-
-# ---- job history ------------------------------------------------------------
-
-POSITION_FIELDS = {"employer", "title", "started_on", "ended_on", "base_salary", "bonus",
-                   "other_comp", "notes"}
-
-
-def positions() -> pd.DataFrame:
-    return _read("select * from positions order by started_on desc, position_id desc")
-
-
-def add_position(employer: str, title: str, started_on: date, **fields) -> int:
-    return _insert("positions", "position_id",
-                   {"employer": employer, "title": title, "started_on": started_on, **fields})
-
-
-def update_position(position_id: int, **fields) -> None:
-    _update("positions", "position_id", position_id, fields, POSITION_FIELDS)
-
-
-def delete_position(position_id: int) -> None:
-    _delete("positions", "position_id", position_id)
 
 
 # ---- job search profile -----------------------------------------------------

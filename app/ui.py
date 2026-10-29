@@ -29,8 +29,6 @@ ATTENTION_BADGES = {
     "follow_up": ("orange", "Follow up"), "stale_saved": ("gray", "Saved"),
 }
 FIT_COLORS = {"strong": "green", "maybe": "blue", "weak": "gray"}
-KIND_COLORS = {"win": "green", "skill": "blue", "certification": "violet",
-               "feedback": "orange", "learning": "gray"}
 
 # Characters Streamlit markdown would treat as formatting. `$` matters most:
 # two of them ("$90k–$120k") turn the text between into a maths formula.
@@ -482,10 +480,6 @@ def fit_breakdown(detail) -> str:
              for key, (label, _, _) in config.FIT_CATEGORIES.items() if key in ratings]
     text = " · ".join(parts)
     return f"{badge('red', 'Deal-breaker')} {text}" if detail.get("deal_breaker") else text
-
-
-def kind_badge(kind: str) -> str:
-    return badge(KIND_COLORS.get(kind, "gray"), kind.capitalize())
 
 
 def status_label(status: str) -> str:

@@ -1,5 +1,5 @@
 """The shape of the master resume as data: what Claude fills in from the
-uploaded files (structured output), what the Resume page edits, and what
+uploaded files (structured output), what the Resume and Projects page edits, and what
 docx_io turns back into a Word file. Every field is required so the schema
 is strict; empty strings and lists stand for "none"."""
 

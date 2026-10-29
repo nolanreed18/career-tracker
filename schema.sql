@@ -17,6 +17,8 @@ create table if not exists companies (
 -- One row per company, whatever the capitalisation.
 create unique index if not exists companies_name_key on companies (lower(name));
 
+-- Contacts, the career log and job history (below) are no longer in the app;
+-- their tables stay so nothing saved in them is lost.
 create table if not exists contacts (
     contact_id         bigint generated always as identity primary key,
     company_id         bigint references companies on delete set null,
@@ -87,7 +89,7 @@ create table if not exists interviews (
 );
 create index if not exists interviews_app on interviews (application_id);
 
--- The career log: wins, skills, certifications, feedback, things learned.
+-- The career log: wins, skills, certifications, feedback, things learned (unused).
 create table if not exists career_entries (
     entry_id     bigint generated always as identity primary key,
     kind         text not null check (kind in
@@ -98,7 +100,7 @@ create table if not exists career_entries (
     tags         text
 );
 
--- Job history, with pay, for salary negotiations and resumes.
+-- Job history, with pay (unused).
 create table if not exists positions (
     position_id  bigint generated always as identity primary key,
     employer     text not null check (btrim(employer) <> ''),
