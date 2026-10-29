@@ -81,7 +81,8 @@ only they can do (accounts, secrets, clicking merge).
   `ui.bump_round()` after a delete, or it keeps showing the old choice.
 - Knobs in `app/config.py`, including `FIT_CATEGORIES` (the lead-scoring
   categories and weights; `logic.fit_total` does the maths, the review rates)
-  and the pay rules (`PAY_SOURCES`, `PAY_RESEARCH`): pay is rated only when a
+  and the pay rules (`PAY_SOURCES`, `PAY_RESEARCH`; the review looks pay up only
+  for jobs rating `PAY_RESEARCH_FIT`+ on role and location): pay is rated only when a
   lead has a salary, listed or estimated; `logic.clean_lead` refuses a pay
   rating without one, and unknown pay stays out of the score.
   **Status / kind lists are repeated in `schema.sql` CHECKs** (statuses,
@@ -94,10 +95,9 @@ only they can do (accounts, secrets, clicking merge).
   idempotent statement to `data.MIGRATIONS` (run after schema.sql, and by
   `leads.py add` over HTTPS), so the live database updates itself.
 - **Phone or computer**: `ui.on_phone()` (`logic.device_from_agent` on the
-  User-Agent, tablets count as computers; the sidebar's Layout switch,
-  `ui.LAYOUT_KEY`, overrides it). A phone gets one centred column and the
-  everyday tasks; wide editing grids show `ui.empty("computer", …)` instead;
-  `config.PHONE_HIDDEN_PAGES` leave its menu. A computer gets the wide layout
+  User-Agent, tablets count as computers). A phone gets one centred column and the
+  everyday tasks; wide editing grids show `ui.empty("computer", …)` instead.
+  A computer gets the wide layout
   (`config.COMPUTER_MAX_WIDTH`) and side-by-side views; a clickable table
   (`on_select`) puts its pick in session state and bumps its `round_key`, and
   ignores a tick past the end of its rows. Page tests run as a computer; the

@@ -23,9 +23,9 @@ import data  # noqa: E402
 import db  # noqa: E402
 import posting  # noqa: E402
 
-TABLES = ("companies, contacts, applications, application_events, interviews, "
-          "career_entries, positions, job_profile, job_leads, settings, "
-          "resume_sources, resume_master, ai_usage, tailored_resumes, career_projects")
+TABLES = ("companies, applications, application_events, interviews, job_profile, "
+          "job_leads, settings, resume_sources, resume_master, ai_usage, tailored_resumes, "
+          "career_projects")
 
 
 @pytest.fixture(autouse=True)

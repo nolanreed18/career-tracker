@@ -33,6 +33,12 @@ from ui import (
 
 setup("Applications", "Add one, find one, keep it up to date")
 
+RATINGS = ["", "1 — rough", "2", "3 — okay", "4", "5 — great"]
+
+
+def rating_index(rating) -> int:
+    return 0 if logic.blank(rating) else int(rating)
+
 
 today = data.today()
 companies = data.companies()
@@ -90,7 +96,7 @@ if disclosure("Add an application", "add_application"):
 
 apps = data.applications()
 if apps.empty:
-    empty("inbox", "No applications yet", "Add one above, or bring in a spreadsheet on Import.")
+    empty("inbox", "No applications yet", "Add one above, or add a lead from Job Leads.")
     st.stop()
 
 phone = on_phone()
@@ -245,29 +251,58 @@ with detail_area:
 
     if section == "Interviews":
         for iv in data.interviews(picked).itertuples():
+            iv_id = int(iv.interview_id)
             at = f" at {logic.clock(iv.start_time)}" if not logic.blank(iv.start_time) else ""
-            st.markdown(f"**{md(logic.value(iv.round) or 'Interview')}** — "
-                        f"{logic.when(iv.scheduled_on, today)}{at}")
-            extra = [x for x in (logic.value(iv.format), logic.value(iv.interviewers)) if x]
-            if extra:
-                st.caption(md(" · ".join(extra)))
-        st.caption("Add notes and how it went on the Interviews page.")
-        interview_round = st.session_state.get("interview_round", 0)
-        with st.form(f"add_interview_{picked}_{interview_round}"):
-            st.markdown("**Add an interview**")
-            day_col, time_col = st.columns(2)
-            iv_on = day_col.date_input("Date", value=today)
-            iv_at = time_col.time_input("Time", value=None, step=900)
-            iv_round = st.text_input("Round", placeholder="Recruiter screen, Technical, Onsite…")
-            format_col, who_col = st.columns(2)
-            iv_format = format_col.selectbox("Format", optional(config.INTERVIEW_FORMATS))
-            iv_who = who_col.text_input("Interviewers")
-            iv_prep = st.text_area("Prep notes")
-            added = st.form_submit_button("Add interview", type="primary")
-        if added:
-            data.add_interview(picked, iv_on, start_time=iv_at, round=iv_round,
-                               format=iv_format or None, interviewers=iv_who, prep_notes=iv_prep)
-            done("Interview added.", "interview_round")
+            with st.expander(f"{logic.value(iv.round) or 'Interview'} · "
+                             f"{logic.when(iv.scheduled_on, today)}{at}",
+                             icon=":material/event:" if iv.scheduled_on >= today
+                             else ":material/history:"):
+                with st.form(f"interview_{iv_id}"):
+                    day_col, time_col = st.columns(2)
+                    e_on = day_col.date_input("Date", value=iv.scheduled_on)
+                    e_at = time_col.time_input("Time", value=logic.value(iv.start_time),
+                                               step=900)
+                    e_round = st.text_input("Round", value=logic.value(iv.round) or "")
+                    formats = optional(config.INTERVIEW_FORMATS)
+                    format_col, who_col = st.columns(2)
+                    e_format = format_col.selectbox(
+                        "Format", formats,
+                        index=formats.index(iv.format) if iv.format in formats else 0)
+                    e_who = who_col.text_input("Interviewers",
+                                               value=logic.value(iv.interviewers) or "")
+                    e_prep = st.text_area("Prep notes", value=logic.value(iv.prep_notes) or "")
+                    e_outcome = st.text_area(
+                        "How it went", value=logic.value(iv.outcome_notes) or "",
+                        placeholder="Questions asked, what went well, what to work on")
+                    e_rating = st.selectbox("Rating", RATINGS, index=rating_index(iv.rating))
+                    saved = st.form_submit_button("Save", type="primary")
+                if saved:
+                    data.update_interview(
+                        iv_id, scheduled_on=e_on, start_time=e_at, round=e_round,
+                        format=e_format or None, interviewers=e_who, prep_notes=e_prep,
+                        outcome_notes=e_outcome, rating=RATINGS.index(e_rating) or None)
+                    done("Interview saved.")
+                if delete_button("interview", f"interview_{iv_id}"):
+                    data.delete_interview(iv_id)
+                    done("Interview deleted.")
+        if disclosure("Add an interview", f"add_interview_{picked}"):
+            interview_round = st.session_state.get("interview_round", 0)
+            with st.form(f"add_interview_{picked}_{interview_round}"):
+                day_col, time_col = st.columns(2)
+                iv_on = day_col.date_input("Date", value=today)
+                iv_at = time_col.time_input("Time", value=None, step=900)
+                iv_round = st.text_input("Round",
+                                         placeholder="Recruiter screen, Technical, Onsite…")
+                format_col, who_col = st.columns(2)
+                iv_format = format_col.selectbox("Format", optional(config.INTERVIEW_FORMATS))
+                iv_who = who_col.text_input("Interviewers")
+                iv_prep = st.text_area("Prep notes")
+                added = st.form_submit_button("Add interview", type="primary")
+            if added:
+                data.add_interview(picked, iv_on, start_time=iv_at, round=iv_round,
+                                   format=iv_format or None, interviewers=iv_who,
+                                   prep_notes=iv_prep)
+                done("Interview added.", "interview_round")
 
     if section == "Posting":
         posting_button(app, "application")

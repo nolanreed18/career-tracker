@@ -230,23 +230,22 @@ if section == "Inbox":
                    f"weak (under {config.MAYBE_FIT})"
                    + (f"; {len(stale)} stale under Stale." if len(stale) else "."))
         SHOW = {"today": "New today", "maybe": f"Worth a look ({config.MAYBE_FIT}+, any day)",
-                "strong": f"Strong only ({config.STRONG_FIT}+)",
                 "weak": f"Weak (under {config.MAYBE_FIT})", "all": "All"}
         # The radio forgets its choice while another section is open; keep it ourselves.
-        # It opens on the strong ones when there are any: the rest can wait.
-        kept = st.session_state.get("leads_show_kept", "strong" if strong.any()
-                                    else "today" if fresh.any() else "maybe")
+        # It opens on today's arrivals when there are any, best fit first.
+        kept = st.session_state.get("leads_show_kept")
+        if kept not in SHOW:                       # also a choice since taken away
+            kept = "today" if fresh.any() else "maybe"
+            st.session_state.pop("leads_show", None)
         show = st.radio("Show", list(SHOW), horizontal=True, format_func=SHOW.get,
                         index=list(SHOW).index(kept), key="leads_show",
                         label_visibility="collapsed")
         st.session_state["leads_show_kept"] = show
         if show == "today":
-            leads = leads[fresh & ~weak]                   # weak ones wait under All
+            leads = leads[fresh & ~weak]                   # weak ones wait under Weak
             if hidden := int((fresh & weak).sum()):
                 st.caption(f"{logic.plural(hidden, 'weak lead')} from today "
-                           f"{'is' if hidden == 1 else 'are'} under All.")
-        elif show == "strong":
-            leads = leads[strong]
+                           f"{'is' if hidden == 1 else 'are'} under Weak.")
         elif show == "maybe":
             leads = leads[~weak]
         elif show == "weak":                          # to clear out in one go
@@ -256,15 +255,7 @@ if section == "Inbox":
         elif on_phone():
             in_batches(leads, "inbox", lead_card)
         else:
-            # The radio forgets its choice while another section is open; keep it ourselves.
-            view = st.radio("View", ["Table", "Cards"], horizontal=True, key="leads_view",
-                            index=["Table", "Cards"].index(
-                                st.session_state.get("leads_view_kept", "Table")))
-            st.session_state["leads_view_kept"] = view
-            if view == "Table":
-                table_view(leads, show)
-            else:
-                in_batches(leads, "inbox", lead_card)
+            table_view(leads, show)
 
 # ---- stale ------------------------------------------------------------------
 

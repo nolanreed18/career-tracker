@@ -106,6 +106,12 @@ MIGRATIONS = [
                                  else 'missing' end
         where apply_state is null
           and (coalesce(apply_url, '') <> '' or coalesce(apply_note, '') <> '')""",
+    # 2026-10: contacts, the career log and job history left the app, and their data
+    # with them (the column first: it pointed at contacts).
+    "alter table applications drop column if exists contact_id",
+    "drop table if exists contacts",
+    "drop table if exists career_entries",
+    "drop table if exists positions",
 ]
 
 
@@ -279,8 +285,7 @@ def company_id_for(name: str, on: date) -> int:
 
 APPLICATION_FIELDS = {"company_id", "role", "job_url", "location", "work_mode", "salary_min",
                       "salary_max", "source", "applied_on", "next_action", "next_action_on",
-                      "contact_id", "notes", "posting", "apply_url", "apply_note",
-                      "apply_state"}
+                      "notes", "posting", "apply_url", "apply_note", "apply_state"}
 
 _APPLICATIONS = """
     select a.*, co.name as company,
@@ -366,38 +371,6 @@ def events(application_id: int) -> pd.DataFrame:
         select * from application_events where application_id = %s
         order by happened_on, event_id
     """, (application_id,))
-
-
-def all_events() -> pd.DataFrame:
-    return _read("select * from application_events order by happened_on, event_id")
-
-
-def import_applications(rows: list[dict], on: date) -> tuple[int, int]:
-    """Add rows from logic.map_import, all or none; (added, skipped).
-
-    A row matching an existing application -- same company, role and applied
-    date -- is skipped, so importing the same file twice adds nothing.
-    """
-    added = skipped = 0
-    with _transaction() as cur:
-        cur.execute("""
-            select lower(co.name), lower(a.role), a.applied_on
-            from applications a join companies co using (company_id)
-        """)
-        existing = set(cur.fetchall())
-        for row in rows:
-            row = dict(row)
-            company = row.pop("company")
-            key = (company.strip().lower(), row["role"].strip().lower(), row.get("applied_on"))
-            if key in existing:
-                skipped += 1
-                continue
-            company_id = company_id_for(company, on)
-            add_application(company_id, row.pop("role"), row.pop("status"), on,
-                            applied_on=row.pop("applied_on", None), **row)
-            existing.add(key)
-            added += 1
-    return added, skipped
 
 
 # ---- interviews -------------------------------------------------------------

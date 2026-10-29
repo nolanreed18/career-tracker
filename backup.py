@@ -26,12 +26,9 @@ STAMP_FORMAT = "%Y%m%d_%H%M%S"
 # Every table in schema.sql. tests/test_backup.py checks none is missing.
 TABLES = [
     ("companies", "company_id"),
-    ("contacts", "contact_id"),
     ("applications", "application_id"),
     ("application_events", "event_id"),
     ("interviews", "interview_id"),
-    ("career_entries", "entry_id"),
-    ("positions", "position_id"),
     ("job_profile", "profile_id"),
     ("job_leads", "lead_id"),
     ("settings", "key"),
