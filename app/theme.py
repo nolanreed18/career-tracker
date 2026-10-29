@@ -97,18 +97,15 @@ TOKENS = {
         "card": "#ffffff", "card-hover": "#f1f5f9", "border": "#e2e8f0",
         "border-strong": "#94a3b8", "blue": "#2563eb", "cyan": "#0e7490",
         "table-head": "#f1f5f9",
-        # The selected pill: a soft wash of the gradient is enough on white.
-        "selected": "linear-gradient(135deg, rgba(37, 99, 235, 0.28), rgba(6, 182, 212, 0.18))",
-        "selected-border": "rgba(6, 182, 212, 0.6)",
+        # The pill selector: a grey track the options sit in, lighter under the pointer.
+        "track": "#eaeff5", "track-hover": "#ffffff",
     },
     DARK: {
         "text": "#f8fafc", "text2": "#94a3b8", "muted": "#64748b",
         "card": "#111827", "card-hover": "#1c263d", "border": "#1e293b",
         "border-strong": "#475569", "blue": "#3b82f6", "cyan": "#22d3ee",
         "table-head": "#0f172a",
-        # On a dark card the wash vanishes: a stronger fill and a bright edge.
-        "selected": "linear-gradient(135deg, rgba(37, 99, 235, 0.65), rgba(6, 182, 212, 0.45))",
-        "selected-border": "rgba(34, 211, 238, 0.9)",
+        "track": "#111827", "track-hover": "#1c263d",
     },
 }
 
@@ -166,32 +163,29 @@ CLAUDE_MARK = _claude_mark()
 CLAUDE_KEY = "claude_"            # a widget key starting with this gets the mark (ui.claude_button)
 
 
-# On a phone the sub-page pills stay on one row, a little smaller, and slide
-# sideways when there are more than fit.
-PHONE_SECTIONS = """
-[class*="st-key-sections-"] [role="radiogroup"] { flex-wrap: nowrap; overflow-x: auto;
-    scrollbar-width: none; }
-[class*="st-key-sections-"] [role="radiogroup"]::-webkit-scrollbar { display: none; }
-[class*="st-key-sections-"] [data-testid="stRadioOption"] { flex-shrink: 0; padding: 6px 11px; }
-[class*="st-key-sections-"] [data-testid="stRadioOption"] p { font-size: 0.8rem;
-    white-space: nowrap; }"""
+# On a phone the pills are a little smaller, so most rows fit on one line; one
+# that doesn't wraps inside its track.
+PHONE_PILLS = """
+[data-testid="stRadioOption"],
+[class*="st-key-sections-"] [data-testid="stRadioOption"] { padding: 6px 11px; }
+[class*="st-key-sections-"] [data-testid="stRadioOption"] p { font-size: 0.8rem; }"""
 
 
 def layout_css(phone: bool) -> str:
     """The part of the stylesheet that differs by device: a phone's menu
-    leaves out the computer-only pages and its sub-page pills keep to one
-    row; a computer's page stops at a comfortable width."""
+    leaves out the computer-only pages and its pills are a little smaller;
+    a computer's page stops at a comfortable width."""
     if phone:
         return "\n".join(f'[data-testid="stSidebarNavItems"] li:has(a[href$="/{name}"]) '
                           "{ display: none; }" for name in knobs.PHONE_HIDDEN_PAGES
-                          ) + PHONE_SECTIONS
+                          ) + PHONE_PILLS
     return ('[data-testid="stMainBlockContainer"] { margin: 0 auto; max-width: '
             f"{knobs.COMPUTER_MAX_WIDTH}px; }}")
 
 
 def stylesheet(mode: str, phone: bool = False) -> str:
     """A <style> element finishing the look for this mode: microlabels,
-    mono numbers, cards, segmented filters, the gradient button, the Claude
+    mono numbers, cards, pill selectors, the gradient button, the Claude
     mark, and the layout for a phone or a computer."""
     t = TOKENS[mode]
     tokens = " ".join(f"--ct-{k}: {v};" for k, v in t.items())
@@ -275,32 +269,27 @@ def stylesheet(mode: str, phone: bool = False) -> str:
     background-color: #fff; background-size: 78%; border-radius: 50%;
     box-shadow: 0 0 0 1.5px #fff; }}   /* on the gradient: a white disc behind the mark */
 
-/* Horizontal radios become pills: one of a few, all visible. */
-[data-testid="stRadio"] [role="radiogroup"] {{ gap: 6px; flex-wrap: wrap; }}
-[data-testid="stRadioOption"] {{ margin: 0; padding: 5px 12px; border-radius: 999px;
-    background: var(--ct-card); border: 1px solid var(--ct-border); color: var(--ct-text2);
-    font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; }}
+/* The pill selector: every row of options (each st.radio, ui.sections
+   included) sits in one grey track, and the chosen one is a solid pill in
+   the gradient, like the sidebar's open page. */
+[data-testid="stRadio"] [role="radiogroup"] {{ display: inline-flex; flex-wrap: wrap;
+    width: fit-content; max-width: 100%; gap: 2px; padding: 3px; border-radius: 20px;
+    background: var(--ct-track); border: 1px solid var(--ct-border); }}
+[data-testid="stRadioOption"] {{ margin: 0; padding: 6px 14px; border-radius: 999px;
+    background: transparent; border: none; color: var(--ct-text2); font-weight: 600;
+    white-space: nowrap; cursor: pointer;
+    transition: background var(--ct-ease), color var(--ct-ease); }}
 [data-testid="stRadioOption"] > div > div > div:not([data-testid]) {{ display: none; }}  /* the dot */
+[data-testid="stRadioOption"] div, [data-testid="stRadioOption"] p {{ color: inherit; }}
 [data-testid="stRadioOption"] p {{ font-size: 0.8rem; }}
-[data-testid="stRadioOption"]:hover {{ background: var(--ct-card-hover); color: var(--ct-text); }}
+[data-testid="stRadioOption"]:hover {{ background: var(--ct-track-hover); color: var(--ct-text); }}
 [data-testid="stRadioOption"][data-selected="true"],
-[data-testid="stRadioOption"]:has(input:checked) {{ background: var(--ct-selected);
-    border-color: var(--ct-selected-border); color: var(--ct-text);
-    box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.15); }}
+[data-testid="stRadioOption"]:has(input:checked) {{ background: {GRADIENT}; color: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2); }}
 
-/* Sub-pages (ui.sections): a pill selector, the choices in one rounded track
-   (a rounded box if a phone wraps it onto two rows). */
+/* Sub-pages (ui.sections): the same, a size up. */
 [class*="st-key-sections-"] {{ margin-bottom: 0.4rem; }}
-[class*="st-key-sections-"] [role="radiogroup"] {{ display: inline-flex; width: fit-content;
-    max-width: 100%; gap: 2px; padding: 4px; border-radius: 22px;
-    background: var(--ct-card-hover); border: 1px solid var(--ct-border); }}
-[class*="st-key-sections-"] [data-testid="stRadioOption"] {{ padding: 7px 16px;
-    background: transparent; border-color: transparent; }}
-[class*="st-key-sections-"] [data-testid="stRadioOption"]:hover {{ background: var(--ct-card); }}
-[class*="st-key-sections-"] [data-testid="stRadioOption"][data-selected="true"],
-[class*="st-key-sections-"] [data-testid="stRadioOption"]:has(input:checked) {{
-    background: var(--ct-selected); border-color: var(--ct-selected-border);
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12); }}
+[class*="st-key-sections-"] [data-testid="stRadioOption"] {{ padding: 7px 16px; }}
 [class*="st-key-sections-"] [data-testid="stRadioOption"] p {{ font-size: 0.85rem; }}
 
 /* No "Press Enter to submit form" hint inside inputs: it sits on the value. */

@@ -95,8 +95,11 @@ window, the status list, the Claude model) are in `app/config.py`.
 
 **Look and feel.** The app opens in a light look; the **Dark mode** switch in
 the sidebar (tap ≫ at the top left on a phone) flips it, and the choice is
-saved in the database, so every device follows. Both looks, and the fonts,
-badges and cards, are defined in `app/theme.py`; `.streamlit/config.toml`
+saved in the database, so every device follows. Every row of choices (a
+page's sections, the lead filters, Table or Cards, Open/Closed/All) is the same
+pill selector: a grey track with the chosen one in the blue gradient. Both
+looks, and the fonts, badges, cards and that selector, are defined in
+`app/theme.py`; `.streamlit/config.toml`
 carries the light look so the first paint already matches.
 
 **Phone or computer.** The app tells from your browser whether it's on a
