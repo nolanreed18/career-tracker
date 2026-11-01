@@ -163,6 +163,70 @@ def from_links(job_url, apply_url) -> tuple[Posting, str]:
     raise problems[0]
 
 
+# ---- finding a posting on the employer's careers site -------------------------
+
+# The same three systems list every open job as data, so a title can be looked
+# up there; any address on the site will do, its home page included.
+WORKDAY_SITE = re.compile(r"^https://([\w-]+)\.(wd\d+)\.myworkdayjobs\.com/"
+                          r"(?:[a-z]{2}-[A-Z]{2}/)?([^/?#]+)")
+GREENHOUSE_BOARD = re.compile(r"^https://(?:boards|job-boards)\.greenhouse\.io/([^/?#]+)")
+LEVER_BOARD = re.compile(r"^https://jobs\.lever\.co/([^/?#]+)")
+
+
+def careers_site(url) -> bool:
+    """Whether the address is on a careers site on_careers_site can search."""
+    url = str(url or "").strip()
+    return any(site.match(url) for site in (WORKDAY_SITE, GREENHOUSE_BOARD, LEVER_BOARD))
+
+
+def on_careers_site(url, title, location="") -> str | None:
+    """The address of the posting with this title on the employer's careers
+    site, found through the site's own list of open jobs (Workday,
+    Greenhouse or Lever). None when the site isn't one of those, can't be
+    read, or lists no job with that title (logic.pick_posting decides)."""
+    url = str(url or "").strip()
+    try:
+        if match := WORKDAY_SITE.match(url):
+            tenant, wd, site = match.groups()
+            root = f"https://{tenant}.{wd}.myworkdayjobs.com"
+            data = _post_json(f"{root}/wday/cxs/{tenant}/{site}/jobs",
+                              {"appliedFacets": {}, "limit": 20, "offset": 0,
+                               "searchText": str(title)})
+            jobs = [(job.get("title"), f"{root}/{site}{job['externalPath']}",
+                     job.get("locationsText")) for job in data.get("jobPostings") or []
+                    if job.get("externalPath")]
+        elif match := GREENHOUSE_BOARD.match(url):
+            data = _json(f"https://boards-api.greenhouse.io/v1/boards/{match.group(1)}/jobs")
+            jobs = [(job.get("title"), job.get("absolute_url"),
+                     (job.get("location") or {}).get("name")) for job in data.get("jobs") or []]
+        elif match := LEVER_BOARD.match(url):
+            listed = json.loads(_get(f"https://api.lever.co/v0/postings/{match.group(1)}"
+                                     "?mode=json", accept="application/json"))
+            jobs = [(job.get("text"), job.get("hostedUrl"),
+                     (job.get("categories") or {}).get("location")) for job in listed]
+        else:
+            return None
+    except (PostingError, ValueError, AttributeError, TypeError, KeyError):
+        return None
+    return logic.pick_posting(jobs, title, location)
+
+
+def _post_json(url: str, body: dict) -> dict:
+    """A careers site's search: JSON in, JSON out."""
+    try:
+        response = httpx.post(url, json=body, timeout=TIMEOUT_S,
+                              headers={**HEADERS, "Accept": "application/json"})
+    except httpx.HTTPError as problem:
+        raise PostingError(f"Couldn't reach the careers site ({type(problem).__name__}).") \
+            from problem
+    if response.status_code != 200:
+        raise PostingError(f"The careers site answered {response.status_code}.")
+    data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError("not an object")
+    return data
+
+
 def _workday_place(text) -> str:
     """Workday's "Country - State - City" as "City, State"; anything else as is."""
     parts = [part.strip() for part in str(text).split(" - ")]

@@ -144,6 +144,18 @@ def test_the_same_job_gets_the_same_key_whatever_the_site_or_city():
     assert lead["dedupe_key"] == other["dedupe_key"] == "acme|analyst"
 
 
+def test_a_title_matches_however_a_careers_site_writes_it():
+    assert logic.title_key("Sr. Business Intelligence Developer") == logic.title_key(
+        "Senior Business Intelligence Developer")
+    assert logic.title_key("Data Engineer II") == logic.title_key("data engineer 2")
+    jobs = [("Analyst", "https://x/1", "Austin, TX"), ("Senior Analyst", "https://x/2", "Denver"),
+            ("Analyst", "https://x/3", "Denver, CO"), ("Analyst", None, "Denver, CO")]
+    assert logic.pick_posting(jobs, "Analyst", "Denver, CO") == "https://x/3"   # its city
+    assert logic.pick_posting(jobs, "Analyst") == "https://x/1"                 # else the first
+    assert logic.pick_posting(jobs, "Lead Analyst") is None                     # never a guess
+    assert logic.pick_posting(jobs, "") is None
+
+
 def test_stale_leads_are_the_old_ones_still_sitting_there():
     today = date(2026, 10, 19)
     days = config.LEAD_STALE_DAYS

@@ -475,6 +475,7 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch, pho
         ai.Usage("claude-opus-5-5", 3000, 500, 2)))
     monkeypatch.setattr(posting, "employer_posting", lambda url: posting.Posting(
         "Analytics Engineer II", "", "Denver, CO", "Gamma's own words. " * 20))
+    monkeypatch.setattr(posting, "on_careers_site", lambda *args: None)   # Claude's link stands
     at = run(LEADS)
     widget(at.button, "Add").click().run()
     app = data.applications().query("role == 'Analytics Engineer'").iloc[0]
@@ -514,6 +515,74 @@ def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch, pho
     assert (after["status"], after["applied_on"]) == ("applied", TODAY)
     assert data.events(int(app["application_id"]))["note"].tolist()[-1] == "Applied"
     assert not any(b.label == "Applied today" for b in at.button)        # only while Saved
+
+
+def test_a_known_careers_site_is_searched_for_the_title_before_asking_claude(monkeypatch):
+    import ai
+    import posting
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    seed()
+    site = "https://snc.wd1.myworkdayjobs.com/SNC_External_Career_Site/"
+    exact = site + "job/Lone-Tree-CO/Sr-Business-Intelligence-Developer_R0030488"
+    snc = data.company_id_for("Sierra Nevada Corporation", TODAY)
+    first = data.add_application(snc, "Sr Business Intelligence Developer", "saved", TODAY,
+                                 location="Lone Tree, CO", apply_url=site)
+    searched = []
+    monkeypatch.setattr(posting, "on_careers_site", lambda url, title, location=None: (
+        searched.append((url, title, location))
+        or (exact if title == "Sr Business Intelligence Developer" else None)))
+    monkeypatch.setattr(posting, "employer_posting", lambda url: posting.Posting(
+        "Sr Business Intelligence Developer", "", "Lone Tree, CO / Colorado Springs, CO",
+        "Pay range $131,010 - $180,138. " * 10))
+    monkeypatch.setattr(ai, "find_posting", lambda *args: pytest.fail("Claude was asked"))
+    at = new_app(APPS)
+    at.session_state["open_application"] = first
+    at.run()
+    click(at, "Find it on the employer's site")
+    saved = data.application(first)
+    assert searched[0] == (site, "Sr Business Intelligence Developer", "Lone Tree, CO")
+    assert (saved["apply_url"], saved["apply_state"]) == (exact, "found")
+    assert saved["apply_note"].startswith("Listed there as Sr Business Intelligence Developer "
+                                          "in Lone Tree, CO / Colorado Springs, CO.")
+    assert at.success[0].value.startswith("Found it on the employer's site: Sr Business "
+                                          "Intelligence Developer, Lone Tree, CO / Colorado "
+                                          "Springs, CO (free).")
+    assert data.ai_usage_since(TODAY)[0] == 0                         # no Claude call
+
+    # Another job at the same employer starts from the site already found.
+    second = data.add_application(snc, "Business Intelligence Analyst", "saved", TODAY)
+    asked = []
+    monkeypatch.setattr(ai, "find_posting", lambda *args: asked.append(args) or (
+        {"url": site, "title": "", "location": "", "note": "Their Workday site.",
+         "description": ""}, ai.Usage("claude-opus-5-5", 3000, 500, 1)))
+    at.session_state["open_application"] = second
+    at.run()
+    click(at, "Find it on the employer's site")
+    assert searched[1][:2] == (exact, "Business Intelligence Analyst")   # free first: not there
+    assert len(asked) == 1                                            # so Claude looked
+    assert data.application(second)["apply_url"] == site               # and only found the site
+
+
+def test_when_claude_finds_only_the_careers_site_the_app_finds_the_posting(monkeypatch):
+    import ai
+    import posting
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    app_id = seed()
+    site = "https://acme.wd5.myworkdayjobs.com/Careers"
+    monkeypatch.setattr(ai, "find_posting", lambda *args: (
+        {"url": site, "title": "", "location": "",
+         "note": "Low confidence: the search ran out before the posting's page.",
+         "description": ""}, ai.Usage("claude-opus-5-5", 3000, 500, 1)))
+    monkeypatch.setattr(posting, "on_careers_site", lambda url, title, location=None: (
+        site + "/job/Denver-CO/Data-Analyst_R1" if url == site else None))
+    monkeypatch.setattr(posting, "employer_posting", lambda url: None)
+    at = new_app(APPS)
+    at.session_state["open_application"] = app_id
+    at.run()
+    click(at, "Find it on the employer's site")
+    saved = data.application(app_id)
+    assert saved["apply_url"] == site + "/job/Denver-CO/Data-Analyst_R1"
+    assert saved["apply_note"] == "Found on the employer's careers site by its title."
 
 
 def test_a_glassdoor_lead_gets_its_posting_from_the_employers_site(monkeypatch, phone):
