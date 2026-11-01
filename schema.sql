@@ -84,6 +84,8 @@ create table if not exists job_profile (
     deal_breakers  text,
     about_me       text,              -- experience and skills, resume-style
     skip_companies text,              -- one per line: the review drops their jobs
+    watch_companies text,             -- one per line, name and careers-site link: the
+                                      -- review checks those sites for new jobs
     updated_on     date not null
 );
 

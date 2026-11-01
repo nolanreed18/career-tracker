@@ -184,31 +184,67 @@ def on_careers_site(url, title, location="") -> str | None:
     site, found through the site's own list of open jobs (Workday,
     Greenhouse or Lever). None when the site isn't one of those, can't be
     read, or lists no job with that title (logic.pick_posting decides)."""
-    url = str(url or "").strip()
     try:
-        if match := WORKDAY_SITE.match(url):
-            tenant, wd, site = match.groups()
-            root = f"https://{tenant}.{wd}.myworkdayjobs.com"
-            data = _post_json(f"{root}/wday/cxs/{tenant}/{site}/jobs",
-                              {"appliedFacets": {}, "limit": 20, "offset": 0,
-                               "searchText": str(title)})
-            jobs = [(job.get("title"), f"{root}/{site}{job['externalPath']}",
-                     job.get("locationsText")) for job in data.get("jobPostings") or []
-                    if job.get("externalPath")]
-        elif match := GREENHOUSE_BOARD.match(url):
-            data = _json(f"https://boards-api.greenhouse.io/v1/boards/{match.group(1)}/jobs")
-            jobs = [(job.get("title"), job.get("absolute_url"),
-                     (job.get("location") or {}).get("name")) for job in data.get("jobs") or []]
-        elif match := LEVER_BOARD.match(url):
-            listed = json.loads(_get(f"https://api.lever.co/v0/postings/{match.group(1)}"
-                                     "?mode=json", accept="application/json"))
-            jobs = [(job.get("text"), job.get("hostedUrl"),
-                     (job.get("categories") or {}).get("location")) for job in listed]
-        else:
-            return None
+        jobs = _listed(str(url or "").strip(), str(title))
     except (PostingError, ValueError, AttributeError, TypeError, KeyError):
         return None
     return logic.pick_posting(jobs, title, location)
+
+
+def site_jobs(url) -> list[dict] | None:
+    """The jobs a watched careers site lists in config.WATCH_SEARCH's places,
+    as {"title", "location", "url", "posted"} (Workday's "Posted 2 Days Ago";
+    "" elsewhere). A Workday job listed in several places is kept, its
+    location left blank for its posting to say. None when the site isn't a
+    Workday, Greenhouse or Lever one, or can't be read."""
+    url = str(url or "").strip()
+    if not careers_site(url):
+        return None
+    place = re.compile(config.WATCH_PLACE)
+    found = {}
+    try:
+        searches = config.WATCH_SEARCH if WORKDAY_SITE.match(url) else [""]
+        for term in searches:
+            for title, link, where, posted in _listed(url, term, pages=5):
+                several = bool(re.fullmatch(r"\d+ Locations", str(where or "")))
+                if several or place.search(str(where or "")):
+                    found[link] = {"title": str(title or "").strip(),
+                                   "location": "" if several else _workday_place(where or ""),
+                                   "url": link, "posted": str(posted or "")}
+    except (PostingError, ValueError, AttributeError, TypeError, KeyError):
+        return None
+    return list(found.values())
+
+
+def _listed(url: str, search: str, pages: int = 1) -> list[tuple]:
+    """A careers site's open jobs as (title, address, location, posted): a
+    Workday site's search for `search`, up to `pages` pages of 20; every job
+    on a Greenhouse or Lever board. [] for any other site."""
+    if match := WORKDAY_SITE.match(url):
+        tenant, wd, site = match.groups()
+        root = f"https://{tenant}.{wd}.myworkdayjobs.com"
+        jobs = []
+        for page in range(pages):
+            data = _post_json(f"{root}/wday/cxs/{tenant}/{site}/jobs",
+                              {"appliedFacets": {}, "limit": 20, "offset": 20 * page,
+                               "searchText": search})
+            listed = data.get("jobPostings") or []
+            jobs += [(job.get("title"), f"{root}/{site}{job['externalPath']}",
+                      job.get("locationsText"), job.get("postedOn"))
+                     for job in listed if job.get("externalPath")]
+            if len(listed) < 20 or 20 * (page + 1) >= int(data.get("total") or 0):
+                break
+        return jobs
+    if match := GREENHOUSE_BOARD.match(url):
+        data = _json(f"https://boards-api.greenhouse.io/v1/boards/{match.group(1)}/jobs")
+        return [(job.get("title"), job.get("absolute_url"),
+                 (job.get("location") or {}).get("name"), "") for job in data.get("jobs") or []]
+    if match := LEVER_BOARD.match(url):
+        listed = json.loads(_get(f"https://api.lever.co/v0/postings/{match.group(1)}"
+                                 "?mode=json", accept="application/json"))
+        return [(job.get("text"), job.get("hostedUrl"),
+                 (job.get("categories") or {}).get("location"), "") for job in listed]
+    return []
 
 
 def _post_json(url: str, body: dict) -> dict:

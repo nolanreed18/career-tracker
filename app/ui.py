@@ -169,7 +169,8 @@ def find_company_posting(app: dict, today) -> list[str]:
     # search stands even when the owner leaves the page while it runs.
     data.update_application(app_id, apply_state="looking",
                             apply_note=f"Looking since {data.now():%-I:%M %p}.")
-    known = [app.get("apply_url")] + data.company_apply_links(int(app["company_id"]))
+    known = ([app.get("apply_url"), app.get("job_url")]      # a watched site's job is its own
+             + data.company_apply_links(int(app["company_id"])))
     for site in dict.fromkeys(link for link in known if posting.careers_site(link)):
         if exact := posting.on_careers_site(site, app["role"], app.get("location")):
             return _save_found(app, exact, "", "", "Found on the employer's careers site by "

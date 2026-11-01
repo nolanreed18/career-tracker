@@ -35,7 +35,10 @@ database, hosted free on Streamlit Community Cloud.
   why (wrong role, location, pay, company, already applied, other) and the
   daily review reads the last month of reasons as a hint. The **What I'm
   looking for** tab holds the roles, places, pay floor, must-haves,
-  deal-breakers and **companies to skip** the scores are based on. Home
+  deal-breakers and **companies to skip** the scores are based on, and the
+  **companies to watch**: each morning the review checks their own careers
+  sites (Workday, Greenhouse or Lever) for new jobs in Colorado, often before
+  the job boards list them, with the pay and schedule from the posting. Home
   shows how many new leads are waiting.
 - **Applications**: add one, filter and search, then for each application log
   updates (status changes or plain notes), set the next step, add interviews

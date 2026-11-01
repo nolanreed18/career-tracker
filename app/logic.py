@@ -273,7 +273,7 @@ def pick_posting(jobs, title, location="") -> str | None:
     address of the one with this title: when several share it, the one
     listed in `location`'s city, else the first. None when none has it."""
     want = title_key(title)
-    same = [(url, place) for listed, url, place in jobs
+    same = [(url, place) for listed, url, place, *_ in jobs
             if url and want and title_key(listed) == want]
     city = words(str(location or "").split(",")[0])
     for url, place in same:
@@ -310,6 +310,52 @@ def skip_list(text) -> list[str]:
     if blank(text):
         return []
     return [w for w in (words(part) for part in re.split(r"[\n,;]+", str(text))) if w]
+
+
+def watch_list(text) -> list[tuple[str, str]]:
+    """The profile's companies to watch, one per line ("bp
+    https://bp.wd3.myworkdayjobs.com/bpCareers"), as (name, link). A line's
+    link is its first web address; the name is the text before it (else the
+    site's first word). Lines without a link are left out."""
+    watched = []
+    for line in str(text or "").splitlines():
+        match = re.search(r"https?://\S+", line)
+        if not match:
+            continue
+        name = line[:match.start()].strip(" \t:|-–—,")
+        url = match.group(0).rstrip(".,;)")
+        host, _, path = url.split("//", 1)[1].partition("/")
+        board = host.split(".")[0] in ("jobs", "boards", "job-boards")   # Lever, Greenhouse
+        watched.append((name or (path.split("/")[0] if board else host.split(".")[0]), url))
+    return watched
+
+
+def workday_posted(text, today: date) -> date | None:
+    """Workday's "Posted Today", "Posted Yesterday" or "Posted 3 Days Ago" as
+    a date; None for "30+ Days Ago" or anything else."""
+    text = str(text or "").lower()
+    if "today" in text:
+        return today
+    if "yesterday" in text:
+        return today - timedelta(days=1)
+    match = re.search(r"posted (\d+) days? ago", text)
+    return today - timedelta(days=int(match.group(1))) if match else None
+
+
+# A yearly pay range as a posting states it ("$131,010.00 - $180,138", "$95K to
+# $120K"); an hourly one is left out.
+PAY_RANGE = re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?\s*[kK]?\s*(?:-|–|—|to)\s*"
+                       r"\$?\s?\d[\d,]*(?:\.\d+)?\s*[kK]?")
+
+
+def listed_pay(text) -> str | None:
+    """The first yearly pay range a posting's text states, as "$131,010-$180,138";
+    None when it states none (Colorado postings must)."""
+    for match in PAY_RANGE.finditer(str(text or "")):
+        low, high = parse_salary(match.group(0))
+        if low and high and low >= 20000:
+            return f"${low:,}-${high:,}"
+    return None
 
 
 def skips_company(company, skip: list[str]) -> bool:

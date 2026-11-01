@@ -144,6 +144,29 @@ def test_the_same_job_gets_the_same_key_whatever_the_site_or_city():
     assert lead["dedupe_key"] == other["dedupe_key"] == "acme|analyst"
 
 
+def test_companies_to_watch_are_read_as_names_and_links():
+    assert logic.watch_list("bp https://bpinternational.wd3.myworkdayjobs.com/bpCareers\n"
+                            "Suncor: https://suncor.wd1.myworkdayjobs.com/Suncor_External.\n"
+                            "https://jobs.lever.co/acme\nhttps://boards.greenhouse.io/gamma\n"
+                            "no link on this line\n\n") == [
+        ("bp", "https://bpinternational.wd3.myworkdayjobs.com/bpCareers"),
+        ("Suncor", "https://suncor.wd1.myworkdayjobs.com/Suncor_External"),
+        ("acme", "https://jobs.lever.co/acme"), ("gamma", "https://boards.greenhouse.io/gamma")]
+    assert logic.watch_list(None) == []
+
+
+def test_workday_dates_and_a_postings_stated_pay_are_read():
+    today = date(2026, 11, 1)
+    assert [logic.workday_posted(t, today) for t in (
+        "Posted Today", "Posted Yesterday", "Posted 11 Days Ago", "Posted 30+ Days Ago", None)] == [
+        today, date(2026, 10, 31), date(2026, 10, 21), None, None]
+    assert logic.listed_pay("The pay range is $131,010.00 - $180,138 per year.") == (
+        "$131,010-$180,138")
+    assert logic.listed_pay("$95K to $120K") == "$95,000-$120,000"
+    assert logic.listed_pay("$35.00 - $45.00 per hour") is None              # hourly: no
+    assert logic.listed_pay("Competitive pay") is None
+
+
 def test_a_title_matches_however_a_careers_site_writes_it():
     assert logic.title_key("Sr. Business Intelligence Developer") == logic.title_key(
         "Senior Business Intelligence Developer")

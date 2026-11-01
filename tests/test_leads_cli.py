@@ -141,6 +141,49 @@ def test_digest_renders_todays_leads_and_what_needs_doing(tmp_path, capsys):
     assert "app_url" in capsys.readouterr().err
 
 
+def test_watch_lists_new_jobs_from_the_companies_careers_sites(monkeypatch, capsys):
+    import posting
+    data.save_job_profile(data.today(), skip_companies="Robert Half", watch_companies=(
+        "bp https://bp.wd3.myworkdayjobs.com/bpCareers\n"
+        "Suncor https://suncor.wd1.myworkdayjobs.com/Suncor_External\n"
+        "Robert Half https://jobs.lever.co/roberthalf\n"
+        "Gone https://careers.gone.com"))
+    data.add_leads([logic.clean_lead({"source": "LinkedIn", "title": "Drilling Manager",
+                                      "company": "bp"})[0]], data.today())
+    sites = {
+        "https://bp.wd3.myworkdayjobs.com/bpCareers": [
+            {"title": "Drilling Manager", "location": "Denver, Colorado", "url": "https://bp/1",
+             "posted": "Posted 9 Days Ago"},                                  # known already
+            {"title": "Planner/Scheduler", "location": "", "url": "https://bp/2",
+             "posted": "Posted Today"}],
+        "https://suncor.wd1.myworkdayjobs.com/Suncor_External": [
+            {"title": "Instrumentation Technician", "location": "Commerce City, CO, USA",
+             "url": "https://suncor/3", "posted": "Posted 30+ Days Ago"}],
+        "https://jobs.lever.co/roberthalf": [
+            {"title": "Analyst", "location": "Denver, CO", "url": "https://rh/4", "posted": ""}],
+    }
+    monkeypatch.setattr(posting, "site_jobs", lambda url: sites.get(url))
+    monkeypatch.setattr(posting, "employer_posting", lambda url: posting.Posting(
+        "", "", "Denver, Colorado", {"https://bp/2": "Pay $138,000 - $162,000. A 9/80 schedule.",
+                                     "https://suncor/3": "Four 10-hour days."}[url]))
+    assert leads.main(["watch"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["jobs"] == [
+        {"source": "bp careers site", "company": "bp", "title": "Planner/Scheduler",
+         "location": "Denver, Colorado", "job_url": "https://bp/2",
+         "posted_on": data.today().isoformat(), "salary": "$138,000-$162,000",
+         "pay_source": "listed", "schedule": "9/80",
+         "summary": "Pay $138,000 - $162,000. A 9/80 schedule."},
+        {"source": "Suncor careers site", "company": "Suncor",
+         "title": "Instrumentation Technician", "location": "Commerce City, CO, USA",
+         "job_url": "https://suncor/3", "posted_on": None, "schedule": "4/10",
+         "summary": "Four 10-hour days."}]
+    assert out["problems"] == ["Gone: couldn't read https://careers.gone.com (a Workday, "
+                               "Greenhouse or Lever careers site)"]
+    lead, problem = logic.clean_lead({**out["jobs"][0], "fit": {"role": 8}})   # adds as it is
+    assert problem is None and lead["salary_min"] == 138000
+
+
 def test_an_unknown_command_shows_how_to_use_it(capsys):
     assert leads.main(["dance"]) == 2
     assert "python leads.py add" in capsys.readouterr().err

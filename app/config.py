@@ -76,6 +76,17 @@ FIT_CATEGORIES = {
 # Any deal-breaker from the profile caps the score here, whatever the rest says.
 DEAL_BREAKER_CAP = 3.0
 
+# Companies to watch (What I'm looking for): the review lists each one's
+# careers site for jobs in these places. A Workday site is searched for each
+# word; Greenhouse and Lever list every job, kept when its location matches
+# WATCH_PLACE (a Workday job listed in several places is kept for the review
+# to check). Each new job's posting is read for its pay and schedule, up to
+# WATCH_MAX_JOBS a morning.
+WATCH_SEARCH = ["Colorado", "Denver"]
+WATCH_PLACE = r"Colorado|Denver|\bCO\b"
+WATCH_MAX_JOBS = 40
+WATCH_SUMMARY_CHARS = 1200          # of each posting, for the review to rate it by
+
 # A job whose alert or posting says it runs a compressed schedule (a 9/80 or a
 # 4/10 week) scores this much higher, up to 10: not a must-have, but worth a
 # lot. Unknown schedules (most jobs) score as before.

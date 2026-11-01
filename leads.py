@@ -5,6 +5,8 @@
     python leads.py rubric           today's date (owner's time zone) and the scoring
                                      categories, weights and thresholds, as JSON
     python leads.py known            every stored lead's dedupe key, one per line
+    python leads.py watch            new jobs on the careers sites of the profile's
+                                     companies to watch, as JSON
     python leads.py add leads.json   add scored leads; prints how many were new
     python leads.py digest run.json  the digest email for today's leads, as JSON
                                      {"subject", "html", "text"}
@@ -20,6 +22,13 @@ salary is given. A plain fit_score (1-10) is also accepted. The same job
 (company and title) seen before, from any site, is skipped, as is any job
 from the profile's companies to skip. Nothing is added unless every row is
 valid.
+
+watch prints {"jobs": [...], "problems": [...]}: each job not seen before,
+in config.WATCH_SEARCH's places, as a leads.json row (source, company,
+title, location, job_url, posted_on, and from its posting salary with
+pay_source "listed" when it states one, schedule when it says one) plus a
+summary of the posting to rate it by; a site that can't be read is a
+problem, not an error.
 
 run.json gives the digest what the database doesn't know: app_url (the
 app's address; required), and optionally emails_read, sources ({"LinkedIn":
@@ -39,6 +48,7 @@ import config  # noqa: E402
 import data  # noqa: E402
 import digest  # noqa: E402
 import logic  # noqa: E402
+import posting  # noqa: E402
 
 
 def main(argv: list[str]) -> int:
@@ -74,6 +84,9 @@ def main(argv: list[str]) -> int:
     if command == "known":
         for key in sorted(data.known_lead_keys()):
             print(key)
+        return 0
+    if command == "watch":
+        print(json.dumps(watch(data.job_profile() or {}), default=str, indent=2))
         return 0
     if command == "add" and len(argv) == 2:
         rows = json.loads(Path(argv[1]).read_text(encoding="utf-8"))
@@ -112,6 +125,37 @@ def main(argv: list[str]) -> int:
         return 0
     print(__doc__, file=sys.stderr)
     return 2
+
+
+def watch(profile: dict) -> dict:
+    """New jobs on the watched companies' careers sites (see the docstring)."""
+    today, known = data.today(), data.known_lead_keys()
+    skip = logic.skip_list(profile.get("skip_companies"))
+    jobs, problems = [], []
+    for name, url in logic.watch_list(profile.get("watch_companies")):
+        listed = posting.site_jobs(url)
+        if listed is None:
+            problems.append(f"{name}: couldn't read {url} (a Workday, Greenhouse or Lever "
+                            "careers site)")
+            continue
+        for job in listed:
+            key = logic.lead_key(name, job["title"])
+            if key in known or logic.skips_company(name, skip):
+                continue
+            known.add(key)
+            row = {"source": f"{name} careers site", "company": name, "title": job["title"],
+                   "location": job["location"], "job_url": job["url"],
+                   "posted_on": logic.workday_posted(job["posted"], today)}
+            if len(jobs) < config.WATCH_MAX_JOBS and (
+                    found := posting.employer_posting(job["url"])):
+                row["location"] = row["location"] or found.location
+                if pay := logic.listed_pay(found.text):
+                    row["salary"], row["pay_source"] = pay, "listed"
+                if schedule := logic.compressed_schedule(found.text):
+                    row["schedule"] = schedule
+                row["summary"] = found.text[:config.WATCH_SUMMARY_CHARS]
+            jobs.append(row)
+    return {"jobs": jobs, "problems": problems}
 
 
 if __name__ == "__main__":
