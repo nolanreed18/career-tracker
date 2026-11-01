@@ -312,6 +312,12 @@ def skip_list(text) -> list[str]:
     return [w for w in (words(part) for part in re.split(r"[\n,;]+", str(text))) if w]
 
 
+def watch_place(location) -> bool:
+    """Whether a job's location is in the places the review watches
+    (config.WATCH_PLACE)."""
+    return bool(re.search(config.WATCH_PLACE, str(location or "")))
+
+
 def watch_list(text) -> list[tuple[str, str]]:
     """The profile's companies to watch, one per line ("bp
     https://bp.wd3.myworkdayjobs.com/bpCareers"), as (name, link). A line's

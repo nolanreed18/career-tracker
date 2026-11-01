@@ -191,6 +191,9 @@ def watch(profile: dict) -> dict:
                    "posted_on": logic.workday_posted(job["posted"], today)}
             if len(jobs) < config.WATCH_MAX_JOBS and (
                     found := posting.employer_posting(job["url"])):
+                if not row["location"] and found.location and not logic.watch_place(
+                        found.location):
+                    continue                     # its several places are all elsewhere
                 row["location"] = row["location"] or found.location
                 if pay := logic.listed_pay(found.text):
                     row["salary"], row["pay_source"] = pay, "listed"

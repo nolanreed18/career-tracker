@@ -229,7 +229,9 @@ def test_a_watched_site_lists_its_jobs_in_the_owners_area(monkeypatch):
          "locationsText": "United States of America - Colorado - Denver",
          "externalPath": "/job/Denver/Planner-Scheduler_RQ1"},
         {"title": "DSR Supervisor", "locationsText": "China - Remote",          # not the area
-         "externalPath": "/job/China/DSR_RQ2"}] + [
+         "externalPath": "/job/China/DSR_RQ2"},
+        {"title": "Automation Specialist", "locationsText": "Denver City, Texas",  # nor this
+         "externalPath": "/job/Texas/Automation_RQ4"}] + [
         {"title": f"Lead {n}", "locationsText": "2 Locations", "postedOn": "Posted Today",
          "externalPath": f"/job/x/Lead_{n}"} for n in range(18)]},
         20: {"total": 23, "jobPostings": [
@@ -243,7 +245,7 @@ def test_a_watched_site_lists_its_jobs_in_the_owners_area(monkeypatch):
     assert jobs[0] == {"title": "Planner/Scheduler", "location": "Denver, Colorado",
                        "url": "https://bp.wd3.myworkdayjobs.com/bpCareers/job/Denver/"
                               "Planner-Scheduler_RQ1", "posted": "Posted 2 Days Ago"}
-    assert "DSR Supervisor" not in [job["title"] for job in jobs]
+    assert not {"DSR Supervisor", "Automation Specialist"} & {job["title"] for job in jobs}
     assert jobs[1]["location"] == ""                       # several places: its posting says
     assert jobs[-1]["title"] == "Analyst" and len(jobs) == 20
 

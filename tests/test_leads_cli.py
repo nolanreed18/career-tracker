@@ -186,7 +186,9 @@ def test_watch_lists_new_jobs_from_the_companies_careers_sites(monkeypatch, caps
             {"title": "Drilling Manager", "location": "Denver, Colorado", "url": "https://bp/1",
              "posted": "Posted 9 Days Ago"},                                  # known already
             {"title": "Planner/Scheduler", "location": "", "url": "https://bp/2",
-             "posted": "Posted Today"}],
+             "posted": "Posted Today"},
+            {"title": "Measurement Tech", "location": "", "url": "https://bp/5",
+             "posted": "Posted Today"}],                     # several places, none watched
         "https://suncor.wd1.myworkdayjobs.com/Suncor_External": [
             {"title": "Instrumentation Technician", "location": "Commerce City, CO, USA",
              "url": "https://suncor/3", "posted": "Posted 30+ Days Ago"}],
@@ -195,8 +197,9 @@ def test_watch_lists_new_jobs_from_the_companies_careers_sites(monkeypatch, caps
     }
     monkeypatch.setattr(posting, "site_jobs", lambda url: sites.get(url))
     monkeypatch.setattr(posting, "employer_posting", lambda url: posting.Posting(
-        "", "", "Denver, Colorado", {"https://bp/2": "Pay $138,000 - $162,000. A 9/80 schedule.",
-                                     "https://suncor/3": "Four 10-hour days."}[url]))
+        "", "", "Kermit, Texas / Midland, Texas" if url == "https://bp/5" else "Denver, Colorado",
+        {"https://bp/2": "Pay $138,000 - $162,000. A 9/80 schedule.",
+         "https://bp/5": "Meters.", "https://suncor/3": "Four 10-hour days."}[url]))
     assert leads.main(["watch"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["jobs"] == [

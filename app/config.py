@@ -79,11 +79,12 @@ DEAL_BREAKER_CAP = 3.0
 # Companies to watch (What I'm looking for): the review lists each one's
 # careers site for jobs in these places. A Workday site is searched for each
 # word; Greenhouse and Lever list every job, kept when its location matches
-# WATCH_PLACE (a Workday job listed in several places is kept for the review
-# to check). Each new job's posting is read for its pay and schedule, up to
-# WATCH_MAX_JOBS a morning.
+# WATCH_PLACE (a Workday job listed in several places is kept until its
+# posting names them, then dropped if none matches). Each new job's posting is
+# read for its pay and schedule, up to WATCH_MAX_JOBS a morning. Denver City
+# is in Texas.
 WATCH_SEARCH = ["Colorado", "Denver"]
-WATCH_PLACE = r"Colorado|Denver|\bCO\b"
+WATCH_PLACE = r"Colorado|Denver(?! City)|\bCO\b"
 WATCH_MAX_JOBS = 40
 WATCH_SUMMARY_CHARS = 1200          # of each posting, for the review to rate it by
 

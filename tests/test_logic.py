@@ -155,6 +155,14 @@ def test_companies_to_watch_are_read_as_names_and_links():
     assert logic.watch_list(None) == []
 
 
+def test_a_watched_place_is_colorado_not_denver_city_texas():
+    for where in ["Denver, Colorado", "Commerce City, CO, USA", "Houston, Texas / Denver, Colorado",
+                  "United States of America - Colorado - Denver"]:
+        assert logic.watch_place(where), where
+    for where in ["Denver City, Texas", "Kermit, Texas / Midland, Texas", "Costa Rica", "", None]:
+        assert not logic.watch_place(where), where
+
+
 def test_workday_dates_and_a_postings_stated_pay_are_read():
     today = date(2026, 11, 1)
     assert [logic.workday_posted(t, today) for t in (
