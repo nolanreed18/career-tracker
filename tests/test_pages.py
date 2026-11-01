@@ -708,6 +708,30 @@ def test_weak_leads_are_hidden_until_asked_for(phone):
     assert "Excel Reporting Clerk" in shown and "Analytics Engineer" not in shown
 
 
+def test_a_compressed_schedule_wears_a_green_badge(monkeypatch):
+    seed()
+    data.add_leads([logic.clean_lead({
+        "source": "LinkedIn", "title": "Data Analyst", "company": "CPChem", "fit": {"role": 8},
+        "schedule": "9/80", "fit_reason": "Strong role; a 9/80 schedule."})[0]], TODAY)
+    at = run(LEADS)                                              # a computer: the table
+    widget(at.radio, "Show").set_value("all").run()
+    table = at.dataframe[0].value
+    assert table.set_index("title").loc["Data Analyst", "schedule"] == "9/80"
+    monkeypatch.setattr(ui, "device", lambda: "phone")           # a phone: the cards
+    at = run(LEADS)
+    widget(at.radio, "Show").set_value("all").run()
+    card_head = next(m.value for m in at.markdown if "Data Analyst" in m.value)
+    assert ":green-badge[9/80 schedule]" in card_head
+    assert any(f"Schedule\u00a0+{config.SCHEDULE_BONUS:g}" in c.value for c in at.caption)
+
+    app_id = data.add_application(data.company_id_for("Acme", TODAY), "Analyst", "saved",
+                                  TODAY, posting="Analyst — Acme\n\nWe work a 4/10 schedule.")
+    at = new_app(APPS)
+    at.session_state["open_application"] = app_id
+    at.run()
+    assert any(":green-badge[4/10 schedule]" in m.value for m in at.markdown)
+
+
 def test_todays_glassdoor_links_open_the_right_form(phone):
     data.add_leads([logic.clean_lead({
         "source": "Glassdoor", "title": "Analyst", "company": "Zeta", "fit_score": 8})[0]], TODAY)

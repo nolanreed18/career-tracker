@@ -638,23 +638,59 @@ def test_a_phones_browser_gets_the_phone_layout_and_everything_else_the_computer
     assert [logic.device_from_agent(a) for a in computers] == ["computer"] * 6
 
 
+def test_a_compressed_schedule_is_read_from_what_a_posting_says():
+    says = {"This role offers a 9/80 work schedule.": "9/80",
+            "Enjoy every other Friday off!": "9/80",
+            "We work a 4/10 schedule": "4/10", "4x10s, Monday to Thursday": "4/10",
+            "four 10-hour days": "4/10", "Four (4) ten-hour shifts": "4/10",
+            "A compressed work week is available.": "compressed week"}
+    for text, label in says.items():
+        assert logic.compressed_schedule(text) == label, text
+    for text in ("Apply by 4/10", "Team lunch every other Friday", "Mon–Fri, 8 to 5", "", None):
+        assert logic.compressed_schedule(text) is None, text            # a date isn't one
+    assert [logic.schedule_label(t) for t in ("4/10", " 9/80", "a 9/80 week", "weekends")] == [
+        "4/10", "9/80", "9/80", None]
+
+
+def test_a_stated_schedule_adds_its_bonus_to_the_score():
+    row = {"source": "LinkedIn", "title": "Analyst", "company": "Acme",
+           "fit": {"role": 8, "industry": 6}}
+    plain, _ = logic.clean_lead(row)
+    lead, problem = logic.clean_lead({**row, "schedule": "9/80"})
+    assert problem is None and plain["fit_score"] == 7.3
+    assert lead["fit_score"] == 7.3 + config.SCHEDULE_BONUS
+    assert logic.lead_schedule(lead["fit_detail"]) == "9/80"
+    assert logic.lead_schedule(plain["fit_detail"]) is None
+    assert logic.fit_total({"role": 10}, schedule="4/10") == 10                 # never past 10
+    assert logic.fit_total({"role": 9}, deal_breaker=True, schedule="9/80") == (
+        config.DEAL_BREAKER_CAP)                                               # nor a cap
+    _, problem = logic.clean_lead({**row, "schedule": "weekends"})
+    assert problem.startswith("schedule must be 9/80, 4/10 or compressed week")
+    only, _ = logic.clean_lead({"source": "x", "title": "t", "company": "c", "fit_score": 6,
+                                "schedule": "4/10"})
+    assert (only["fit_score"], only["fit_detail"]) == (6 + config.SCHEDULE_BONUS,
+                                                       {"schedule": "4/10"})
+
+
 def test_a_lead_table_row_says_it_all_in_a_line():
     leads = pd.DataFrame([
         {"fit_score": 8.4, "found_on": TODAY, "title": "Analyst", "company": "Acme",
          "location": "Denver, CO", "work_mode": "hybrid", "salary_min": 120000,
          "salary_max": 140000, "pay_source": "estimated", "source": "LinkedIn",
-         "job_url": "https://www.linkedin.com/jobs/view/123/?trk=x"},
+         "job_url": "https://www.linkedin.com/jobs/view/123/?trk=x",
+         "fit_detail": {"ratings": {"role": 8}, "schedule": "9/80"}},
         {"fit_score": None, "found_on": date(2026, 10, 1), "title": "BI Dev", "company": "Beta",
          "location": None, "work_mode": "remote", "salary_min": None, "salary_max": None,
-         "pay_source": None, "source": None, "job_url": None}])
+         "pay_source": None, "source": None, "job_url": None, "fit_detail": None}])
     table = logic.lead_table(leads, TODAY)
     assert table.iloc[0].to_dict() == {
         "fit": 8.4, "title": "Analyst", "company": "Acme", "where": "Denver, CO · Hybrid",
-        "pay": "~$120k–$140k", "source": "LinkedIn", "found": TODAY,
+        "pay": "~$120k–$140k", "schedule": "9/80", "source": "LinkedIn", "found": TODAY,
         "posting": "https://www.linkedin.com/jobs/view/123/"}
     second = table.iloc[1].to_dict()
     assert pd.isna(second["fit"]) and pd.isna(second["posting"])
-    assert (second["where"], second["pay"], second["source"]) == ("Remote", "—", "")
+    assert (second["where"], second["pay"], second["schedule"], second["source"]) == (
+        "Remote", "—", "", "")
     assert [logic.salary_short(*r) for r in ((135000, 160000), (90000, 90000), (125500, None),
                                              (None, 80000), (None, None))] == [
         "$135k–$160k", "$90k", "$126k+", "up to $80k", ""]

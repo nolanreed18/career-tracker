@@ -124,3 +124,15 @@ def test_a_big_day_still_makes_a_small_email():
     assert text.count("https://www.example.com/jobs/view/1234567890") == 0
     short = digest.render(TODAY, [lead(job_url="https://example.com/j/9")], [], APP, {})
     assert "     https://example.com/j/9" in short["text"]
+
+
+def test_a_compressed_schedule_shows_on_the_card_and_the_row():
+    nine_eighty = {"ratings": {"role": 9}, "deal_breaker": False, "schedule": "9/80"}
+    out = digest.render(TODAY, [lead(fit_detail=nine_eighty),
+                                lead(title="Clerk", company="Zeta", fit_score=2.1,
+                                     fit_detail={"ratings": {"role": 2}, "schedule": "4/10"})],
+                        [], APP, {})
+    html = out["html"]
+    assert "9/80&nbsp;schedule" in html                                  # a green chip
+    assert "Clerk — Zeta · Denver, CO · <strong" in html and ">4/10</strong>" in html
+    assert f"a stated 9/80 or 4/10 schedule adds {config.SCHEDULE_BONUS:g}" in html

@@ -25,6 +25,7 @@ from ui import (
     optional,
     posting_button,
     round_key,
+    schedule_badge,
     sections,
     setup,
     status_badge,
@@ -184,7 +185,9 @@ with detail_area:
         facts.append(salary)
     facts += (logic.place(app["location"], app["work_mode"])
               + ([app["source"]] if app["source"] else []))
-    st.markdown(f"{status_badge(app['status'])} {md(' · '.join(facts))}")
+    st.markdown(f"{status_badge(app['status'])} "
+                f"{schedule_badge(logic.compressed_schedule(app['posting']))} "
+                f"{md(' · '.join(facts))}")
     if app["tailored"]:
         st.markdown(f"{badge('green', 'Resume ready')} "
                     f"{logic.plural(int(app['tailored']), 'tailored version')} with cover letter, "

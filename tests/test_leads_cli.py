@@ -103,6 +103,8 @@ def test_rubric_spells_out_the_pay_rules(capsys):
     assert rubric["pay"]["sources"] == config.PAY_SOURCES
     assert "estimate" in rubric["pay"]["rule"] and rubric["pay"]["research"] == config.PAY_RESEARCH
     assert rubric["pay"]["research_fit"] == config.PAY_RESEARCH_FIT
+    assert rubric["schedule"]["bonus"] == config.SCHEDULE_BONUS
+    assert "never guess" in rubric["schedule"]["rule"]
 
 
 def test_digest_renders_todays_leads_and_what_needs_doing(tmp_path, capsys):

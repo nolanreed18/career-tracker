@@ -112,10 +112,13 @@ def pay_html(lead: dict) -> str:
 
 def rating_chips(detail) -> str:
     detail = logic.value(detail)
-    if not isinstance(detail, dict) or not detail.get("ratings"):
+    if not isinstance(detail, dict) or not (detail.get("ratings") or detail.get("schedule")):
         return ""
-    ratings = detail["ratings"]
+    ratings = detail.get("ratings") or {}
     chips = []                       # smaller than pill(): the div carries the font, and
+    if schedule := detail.get("schedule"):
+        chips.append(f'<span style="{CHIP};color:#fff;background-color:{GREEN}">'
+                     f'{e(schedule)}&nbsp;schedule</span>')
     for key, (label, _, _) in config.FIT_CATEGORIES.items():   # 20 cards × 6 chips add up
         if key not in ratings:
             continue
@@ -185,7 +188,10 @@ def compact_row(lead: dict, linked: bool = True) -> str:
     return (f'<tr><td style="{ROW_STYLE}"><strong style="color:{TEXT2}">'
             f'{logic.fit_text(lead.get("fit_score")) or "–"}</strong> &nbsp;{title} — '
             f'{e(lead.get("company"))}'
-            + (f" · {e(location)}" if logic.value(location) else "") + "</td></tr>")
+            + (f" · {e(location)}" if logic.value(location) else "")
+            + (f' · <strong style="color:{GREEN}">{e(schedule)}</strong>'
+               if (schedule := logic.lead_schedule(lead.get("fit_detail"))) else "")
+            + "</td></tr>")
 
 
 def rows_table(leads: list[dict], linked: bool, what: str, url: str) -> str:
@@ -338,7 +344,8 @@ def render(today: date, leads: list[dict], attention: list[logic.Attention], app
                 f'color:{MUTED};{F}">' + (" · ".join(facts) + "<br>" if facts else "")
                 + f'Scores are weighted averages of 1–10 ratings against <a href="{e(leads_url)}" '
                 f'style="color:{CYAN}">what you\'re looking for</a>: {weights}. A deal-breaker '
-                f'caps the score at {config.DEAL_BREAKER_CAP:g}. '
+                f'caps the score at {config.DEAL_BREAKER_CAP:g}; a stated 9/80 or 4/10 '
+                f'schedule adds {config.SCHEDULE_BONUS:g}. '
                 f'{pill(f"{WARNING}&nbsp;pay", YELLOW_TEXT, YELLOW_BG)} marks an estimate or missing '
                 f'pay; pay the review couldn\'t find is left out of the score.</td></tr>')
 

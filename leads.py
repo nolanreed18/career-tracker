@@ -62,6 +62,10 @@ def main(argv: list[str]) -> int:
                     "research_fit": config.PAY_RESEARCH_FIT,
                     "rule": "rate pay only when a salary is given (listed, or your "
                             "estimate with a pay_note); otherwise leave pay out of fit"},
+            "schedule": {"bonus": config.SCHEDULE_BONUS,
+                         "rule": "give schedule only when the alert or the posting says the "
+                                 "job runs a 9/80 or 4/10 (or other compressed) week; never "
+                                 "guess it from the employer"},
             "deal_breaker_cap": config.DEAL_BREAKER_CAP,
             "strong_fit": config.STRONG_FIT,
             "maybe_fit": config.MAYBE_FIT,
