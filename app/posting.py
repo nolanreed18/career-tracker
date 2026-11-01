@@ -195,19 +195,19 @@ def site_jobs(url) -> list[dict] | None:
     """The jobs a watched careers site lists in config.WATCH_SEARCH's places,
     as {"title", "location", "url", "posted"} (Workday's "Posted 2 Days Ago";
     "" elsewhere). A Workday job listed in several places is kept, its
-    location left blank for its posting to say. None when the site isn't a
+    location left blank for its posting to say (leads.py watch drops it
+    when none of them is a watched place). None when the site isn't a
     Workday, Greenhouse or Lever one, or can't be read."""
     url = str(url or "").strip()
     if not careers_site(url):
         return None
-    place = re.compile(config.WATCH_PLACE)
     found = {}
     try:
         searches = config.WATCH_SEARCH if WORKDAY_SITE.match(url) else [""]
         for term in searches:
             for title, link, where, posted in _listed(url, term, pages=5):
                 several = bool(re.fullmatch(r"\d+ Locations", str(where or "")))
-                if several or place.search(str(where or "")):
+                if several or logic.watch_place(where):
                     found[link] = {"title": str(title or "").strip(),
                                    "location": "" if several else _workday_place(where or ""),
                                    "url": link, "posted": str(posted or "")}
