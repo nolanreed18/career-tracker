@@ -44,6 +44,12 @@ only they can do (accounts, secrets, clicking merge).
   searches priced by `AI_SEARCH_PRICE`) runs inside the Add tap on a lead and
   behind "Find it on the employer's site" (`ui.prepare_application`,
   `ui.find_company_posting`): still one click, one call, logged like the rest.
+  Before the call, free: `posting.on_careers_site` searches a Workday,
+  Greenhouse or Lever site already known for the employer (this
+  application's link or another's, `data.company_apply_links`) for the title,
+  and `logic.pick_posting` takes only an exact title match, never a guess;
+  after it, a careers-site address Claude returns is searched the same way.
+  LinkedIn's guest pages don't show the employer's Apply link.
   `applications.apply_url` / `apply_note` / `apply_state` (`config.APPLY_STATES`,
   null = not looked for) hold what it found and where the search stands:
   `ui.apply_status` says so on the application, and the state is written

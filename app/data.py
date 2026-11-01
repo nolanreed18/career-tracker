@@ -361,6 +361,17 @@ def update_application(application_id: int, **fields) -> None:
     _update("applications", "application_id", application_id, fields, APPLICATION_FIELDS)
 
 
+def company_apply_links(company_id: int) -> list[str]:
+    """The employer's-site links saved on a company's applications, newest
+    first: where to look for another of its postings."""
+    frame = _read("""
+        select apply_url from applications
+        where company_id = %s and coalesce(apply_url, '') <> ''
+        order by application_id desc
+    """, (company_id,))
+    return [str(link) for link in frame["apply_url"]] if not frame.empty else []
+
+
 def delete_application(application_id: int) -> None:
     """Deletes its history and interviews with it."""
     _delete("applications", "application_id", application_id)

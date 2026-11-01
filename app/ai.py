@@ -139,7 +139,9 @@ Rules:
   SmartRecruiters, Oracle, Phenom): never LinkedIn, Indeed, Glassdoor or
   another job board or aggregator. A staffing agency that posted the job
   counts as the employer. Workday and similar pages may not open: the
-  address from a search result is enough, the app checks it.
+  address from a search result is enough, the app checks it. On Workday,
+  Greenhouse or Lever, the careers site's own address is enough when you
+  can't reach the posting's page: the app searches that site for the title.
 - Answer with one JSON object and nothing else:
   {"url": "the posting's address on the employer's site: your best candidate,
            even when unsure; \"\" only when nothing there fits",

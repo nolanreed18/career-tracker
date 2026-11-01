@@ -178,3 +178,46 @@ def test_other_links_and_unreadable_feeds_give_nothing_without_an_error(monkeypa
         raise posting.PostingError("The site answered 403 instead of the posting: paste it.")
     monkeypatch.setattr(posting, "_get", refused)
     assert posting.employer_posting("https://acme.wd5.myworkdayjobs.com/jobs/job/Denver/Analyst_R1") is None
+
+
+def test_a_careers_site_is_searched_for_the_title(monkeypatch):
+    asked = []
+    monkeypatch.setattr(posting, "_post_json", lambda url, body: asked.append((url, body)) or {
+        "jobPostings": [
+            {"title": "Sr. IT Manager", "externalPath": "/job/Lone-Tree-CO/Sr-IT-Manager_R2",
+             "locationsText": "Lone Tree, CO"},
+            {"title": "Sr Business Intelligence Developer", "locationsText": "2 Locations",
+             "externalPath": "/job/Lone-Tree-CO/Sr-Business-Intelligence-Developer_R0030488"}]})
+    site = "https://snc.wd1.myworkdayjobs.com/en-US/SNC_External_Career_Site/"
+    assert posting.careers_site(site) and not posting.careers_site("https://www.linkedin.com/jobs")
+    assert posting.on_careers_site(site, "Senior Business Intelligence Developer") == (
+        "https://snc.wd1.myworkdayjobs.com/SNC_External_Career_Site/job/Lone-Tree-CO/"
+        "Sr-Business-Intelligence-Developer_R0030488")
+    assert asked[0][0] == ("https://snc.wd1.myworkdayjobs.com/wday/cxs/snc/"
+                           "SNC_External_Career_Site/jobs")
+    assert asked[0][1]["searchText"] == "Senior Business Intelligence Developer"
+    assert posting.on_careers_site(site, "Data Engineer") is None            # not listed there
+
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: (
+        '{"jobs": [{"title": "Analyst", "absolute_url": "https://boards.greenhouse.io/acme/jobs/1",'
+        ' "location": {"name": "Austin, TX"}}, {"title": "Analyst", "absolute_url": '
+        '"https://boards.greenhouse.io/acme/jobs/2", "location": {"name": "Denver, CO"}}]}'))
+    assert posting.on_careers_site("https://boards.greenhouse.io/acme", "Analyst",
+                                   "Denver, CO") == "https://boards.greenhouse.io/acme/jobs/2"
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: (
+        '[{"text": "Data Engineer II", "hostedUrl": "https://jobs.lever.co/acme/x", '
+        '"categories": {"location": "Remote"}}]'))
+    assert posting.on_careers_site("https://jobs.lever.co/acme", "Data Engineer 2") == (
+        "https://jobs.lever.co/acme/x")
+
+
+def test_a_site_that_cant_be_searched_gives_nothing_without_an_error(monkeypatch):
+    def refuse(*args, **kwargs):
+        raise posting.PostingError("The careers site answered 500.")
+
+    monkeypatch.setattr(posting, "_post_json", refuse)
+    assert posting.on_careers_site("https://acme.wd5.myworkdayjobs.com/Careers", "Analyst") is None
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: '{"error": "no board"}')
+    assert posting.on_careers_site("https://jobs.lever.co/acme", "Analyst") is None
+    assert posting.on_careers_site("https://careers.acme.com/jobs", "Analyst") is None
+    assert posting.on_careers_site("", "Analyst") is None

@@ -156,8 +156,12 @@ def posting_button(app: dict, key: str) -> None:
 
 
 def find_company_posting(app: dict, today) -> list[str]:
-    """ai.find_posting for one application: the link and note saved, the
-    call logged (a failed one too). Returns what to tell the owner."""
+    """Look for the application's posting on the employer's own site and save
+    the link and note. First, free: a careers site already known for this
+    employer (this application's link or another one's) searched for the
+    title. Else ai.find_posting, logged (a failed call too); when Claude
+    finds only the careers site, the app searches it for the title. Returns
+    what to tell the owner."""
     import ai  # here, not at the top: the SDK is slow to import and only this needs it
 
     app_id = int(app["application_id"])
@@ -165,6 +169,11 @@ def find_company_posting(app: dict, today) -> list[str]:
     # search stands even when the owner leaves the page while it runs.
     data.update_application(app_id, apply_state="looking",
                             apply_note=f"Looking since {data.now():%-I:%M %p}.")
+    known = [app.get("apply_url")] + data.company_apply_links(int(app["company_id"]))
+    for site in dict.fromkeys(link for link in known if posting.careers_site(link)):
+        if exact := posting.on_careers_site(site, app["role"], app.get("location")):
+            return _save_found(app, exact, "", "", "Found on the employer's careers site by "
+                               "its title.", "", "free")
     try:
         found, usage = ai.find_posting(app["company"], app["role"], app.get("location"),
                                        app.get("source"), app.get("posting") or "")
@@ -181,29 +190,43 @@ def find_company_posting(app: dict, today) -> list[str]:
         raise
     data.log_ai_usage("find posting", usage.model, usage.input_tokens, usage.output_tokens,
                       usage.cost_usd, today)
-    title, location, note = found["title"], found["location"], found["note"]
-    checked = posting.employer_posting(found["url"]) if found["url"] else None
+    url, note = found["url"], found["note"]
+    exact = posting.on_careers_site(url, found["title"] or app["role"],
+                                    found["location"] or app.get("location")) if url else None
+    if exact and exact != url:              # Claude reached the site; the app found the posting
+        url, note = exact, "Found on the employer's careers site by its title."
+    return _save_found(app, url, found["title"], found["location"], note,
+                       found["description"], f"${usage.cost_usd:.2f}")
+
+
+def _save_found(app: dict, url: str, title: str, location: str, note: str,
+                description: str, cost: str) -> list[str]:
+    """Save where the posting is on the employer's site (or that it isn't
+    there), read it from there when the site has it as data, fill an empty
+    posting box, and say how it went."""
+    app_id = int(app["application_id"])
+    checked = posting.employer_posting(url) if url else None
     if checked:
         title, location = checked.title or title, checked.location or location   # as listed there
         note = f"Read from the employer's site. {note}".strip()
     copied = ""                      # the job board wouldn't give the posting: take the employer's
-    if found["url"] and not logic.value(app.get("posting")):
+    if url and not logic.value(app.get("posting")):
         if checked and len(checked.text) >= config.POSTING_MIN_CHARS:
             data.update_application(app_id, posting=checked.as_text())
             copied = " Posting read from there."
-        elif len(found["description"].strip()) >= config.POSTING_MIN_CHARS:
-            text = found["description"].strip()[:config.POSTING_MAX_CHARS]
+        elif len(description.strip()) >= config.POSTING_MIN_CHARS:
+            text = description.strip()[:config.POSTING_MAX_CHARS]
             data.update_application(app_id, posting=posting.Posting(
                 title or app["role"], app["company"], location, text).as_text())
             copied = " Posting copied from there by Claude: check it before tailoring."
-    if found["url"] and location:
+    if url and location:
         note = f"Listed there as {title or app['role']} in {location}. {note}".strip()
-    data.update_application(app_id, apply_url=found["url"], apply_note=note,
-                            apply_state="found" if found["url"] else "missing")
-    if found["url"]:
+    data.update_application(app_id, apply_url=url, apply_note=note,
+                            apply_state="found" if url else "missing")
+    if url:
         return [f"Found it on the employer's site: {title or app['role']}"
-                + (f", {location}" if location else "") + f" (${usage.cost_usd:.2f})." + copied]
-    return [f"Not found on the employer's site: {note} (${usage.cost_usd:.2f})."]
+                + (f", {location}" if location else "") + f" ({cost})." + copied]
+    return [f"Not found on the employer's site: {note} ({cost})."]
 
 
 def prepare_application(application_id: int, today) -> list[str]:

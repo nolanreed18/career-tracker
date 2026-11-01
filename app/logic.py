@@ -257,6 +257,31 @@ def words(text) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", str(text or "").lower()))
 
 
+# Abbreviations a careers site may spell out, or not, in a job title.
+TITLE_WORDS = {"sr": "senior", "jr": "junior", "mgr": "manager", "assoc": "associate",
+               "ii": "2", "iii": "3", "iv": "4"}
+
+
+def title_key(title) -> str:
+    """A job title for matching however a site writes it: lower-case words,
+    common abbreviations spelled out ("Sr." and "Senior" match)."""
+    return " ".join(TITLE_WORDS.get(word, word) for word in words(title).split())
+
+
+def pick_posting(jobs, title, location="") -> str | None:
+    """Among a careers site's open jobs, as (title, address, location), the
+    address of the one with this title: when several share it, the one
+    listed in `location`'s city, else the first. None when none has it."""
+    want = title_key(title)
+    same = [(url, place) for listed, url, place in jobs
+            if url and want and title_key(listed) == want]
+    city = words(str(location or "").split(",")[0])
+    for url, place in same:
+        if city and city in words(place):
+            return url
+    return same[0][0] if same else None
+
+
 def lead_key(company, title) -> str:
     """The same job from different sites gets the same key: company and
     title, lower-cased, with punctuation and extra spaces dropped. The

@@ -38,8 +38,9 @@ def no_real_database(monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
     monkeypatch.setattr(data, "_over_http", False)
     # Nor the web: a test that reads a posting stands posting._get (or fetch) in.
-    monkeypatch.setattr(posting.httpx, "get",
-                        lambda url, **kwargs: pytest.fail(f"a test fetched {url}"))
+    for method in ("get", "post"):
+        monkeypatch.setattr(posting.httpx, method,
+                            lambda url, **kwargs: pytest.fail(f"a test fetched {url}"))
     data.reset_connection()
     yield
     data.reset_connection()
