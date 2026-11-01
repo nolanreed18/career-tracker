@@ -19,7 +19,10 @@ database, hosted free on Streamlit Community Cloud.
   caps it at 3. Pay is rated only when the job has a pay range: the one the
   alert listed, or an estimate the review found online (shown with a yellow
   warning and where it came from). When it found nothing, the lead says
-  **Pay not listed** and the score rests on the other categories. Each lead
+  **Pay not listed** and the score rests on the other categories. A job
+  whose alert or posting says it runs a 9/80 or 4/10 week scores half a point
+  more and carries a green schedule badge (so does an application whose
+  posting says so). Each lead
   shows its ratings, and **How scoring works** on the What I'm looking for
   section lists the categories, weights and pay rules (they live in
   `app/config.py`). Today's arrivals carry a **New** badge and the **New

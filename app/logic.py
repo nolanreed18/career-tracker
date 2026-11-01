@@ -378,6 +378,11 @@ def clean_lead(row: dict) -> tuple[dict | None, str | None]:
         parsed = pd.to_datetime(posted, errors="coerce")
         posted = None if pd.isna(parsed) else parsed.date()
     lead["posted_on"] = posted
+    schedule = None
+    if value(row.get("schedule")):
+        schedule = schedule_label(row["schedule"])
+        if not schedule:
+            return None, f"schedule must be 9/80, 4/10 or compressed week: {row}"
     ratings = row.get("fit")
     if ratings:
         if not isinstance(ratings, dict):
@@ -398,8 +403,9 @@ def clean_lead(row: dict) -> tuple[dict | None, str | None]:
                 return None, f"fit rating for {category} must be 1-10: {row}"
             cleaned[category] = int(round(rating))
         deal_breaker = str(row.get("deal_breaker", "")).strip().lower() in ("true", "yes", "1")
-        lead["fit_score"] = fit_total(cleaned, deal_breaker)
-        lead["fit_detail"] = {"ratings": cleaned, "deal_breaker": deal_breaker}
+        lead["fit_score"] = fit_total(cleaned, deal_breaker, schedule)
+        lead["fit_detail"] = {"ratings": cleaned, "deal_breaker": deal_breaker,
+                              **({"schedule": schedule} if schedule else {})}
     else:
         score = value(row.get("fit_score"))
         if score is not None:
@@ -409,25 +415,66 @@ def clean_lead(row: dict) -> tuple[dict | None, str | None]:
                 return None, f"fit_score isn't a number: {row}"
             if not 1 <= score <= 10:
                 return None, f"fit_score must be 1-10: {row}"
+            if schedule:
+                score = min(round(score + config.SCHEDULE_BONUS, 1), 10)
         lead["fit_score"] = score
-        lead["fit_detail"] = None
+        lead["fit_detail"] = {"schedule": schedule} if schedule else None
     lead["dedupe_key"] = lead_key(lead["company"], lead["title"])
     return lead, None
 
 
-def fit_total(ratings: dict, deal_breaker: bool = False) -> float | None:
+def fit_total(ratings: dict, deal_breaker: bool = False,
+              schedule: str | None = None) -> float | None:
     """The score from category ratings (1-10 each): their weighted average
-    (config.FIT_CATEGORIES), to one decimal, capped at DEAL_BREAKER_CAP when a
-    deal-breaker applies. Categories not rated are left out of the average.
-    None when nothing is rated."""
+    (config.FIT_CATEGORIES), to one decimal, plus SCHEDULE_BONUS (up to 10)
+    for a compressed schedule, capped at DEAL_BREAKER_CAP when a deal-breaker
+    applies. Categories not rated are left out of the average. None when
+    nothing is rated."""
     weights = {k: config.FIT_CATEGORIES[k][1] for k in ratings if k in config.FIT_CATEGORIES}
     if not weights:
         return None
     total = sum(ratings[k] * w for k, w in weights.items()) / sum(weights.values())
+    if schedule:
+        total = min(total + config.SCHEDULE_BONUS, 10)
     if deal_breaker:
         total = min(total, config.DEAL_BREAKER_CAP)
     return round(total, 1)
 
+
+
+# How postings write a compressed schedule. "4/10" alone could be a date, so it
+# counts only beside a word that makes it a schedule.
+SCHEDULES = [
+    ("9/80", re.compile(r"\b9\s*/\s*80\b|\bnine[\s/-]*eighty\b|"
+                        r"\b(?:every other|alternat(?:e|ing)) fridays? off\b", re.I)),
+    ("4/10", re.compile(r"\b4\s*/\s*10s?\s+(?:schedule|work|shift|week)|\b4\s*x\s*10s?\b|"
+                        r"\b4\s*-\s*10s\b|\bfour\s+(?:\(4\)\s+)?(?:10|ten)[\s-]*hour|"
+                        r"\bfour tens\b|\b4\s+(?:10|ten)[\s-]*hour", re.I)),
+    ("compressed week", re.compile(r"\bcompressed (?:work ?week|work schedule|schedule)", re.I)),
+]
+
+
+def lead_schedule(detail) -> str | None:
+    """The compressed schedule a lead's fit_detail records, if any."""
+    detail = value(detail)
+    return detail.get("schedule") if isinstance(detail, dict) else None
+
+
+def schedule_label(text) -> str | None:
+    """The review's word for a lead's schedule ("9/80", "4/10", "compressed
+    week", or a phrase saying one) as one of those three; else None."""
+    short = str(text or "").strip().lower()
+    return short if short in ("9/80", "4/10", "compressed week") else compressed_schedule(short)
+
+
+def compressed_schedule(text) -> str | None:
+    """"9/80", "4/10" or "compressed week" when the text says the job runs
+    one (a posting, an alert, or the review's own word for it); else None."""
+    text = str(text or "")
+    for label, pattern in SCHEDULES:
+        if pattern.search(text):
+            return label
+    return None
 
 
 def pay_state(salary_min, salary_max, pay_source) -> tuple[str, str]:
@@ -1005,8 +1052,8 @@ def match_endings(tailored: dict, master: dict) -> dict:
 def lead_table(leads: pd.DataFrame, today: date) -> pd.DataFrame:
     """Leads as a computer's table shows them, one row each in the leads'
     order: fit, title, company, where, pay in thousands (with ~ when the
-    daily review estimated it), source, the day it was found, and the
-    posting link."""
+    daily review estimated it), a compressed schedule, source, the day it
+    was found, and the posting link."""
     rows = []
     for lead in leads.itertuples():
         pay = salary_short(lead.salary_min, lead.salary_max)
@@ -1015,10 +1062,11 @@ def lead_table(leads: pd.DataFrame, today: date) -> pd.DataFrame:
         rows.append({"fit": None if blank(lead.fit_score) else float(lead.fit_score),
                      "title": lead.title, "company": lead.company,
                      "where": " · ".join(place(lead.location, lead.work_mode)),
-                     "pay": pay or "—", "source": value(lead.source) or "",
+                     "pay": pay or "—", "schedule": lead_schedule(lead.fit_detail) or "",
+                     "source": value(lead.source) or "",
                      "found": lead.found_on, "posting": job_link(lead.job_url)})
-    return pd.DataFrame(rows, columns=["fit", "title", "company", "where", "pay", "source",
-                                       "found", "posting"])
+    return pd.DataFrame(rows, columns=["fit", "title", "company", "where", "pay", "schedule",
+                                       "source", "found", "posting"])
 
 
 def salary_short(low, high) -> str:

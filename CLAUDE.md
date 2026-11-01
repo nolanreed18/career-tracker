@@ -93,7 +93,11 @@ only they can do (accounts, secrets, clicking merge).
   and the pay rules (`PAY_SOURCES`, `PAY_RESEARCH`; the review looks pay up only
   for jobs rating `PAY_RESEARCH_FIT`+ on role and location): pay is rated only when a
   lead has a salary, listed or estimated; `logic.clean_lead` refuses a pay
-  rating without one, and unknown pay stays out of the score.
+  rating without one, and unknown pay stays out of the score. A lead the alert
+  or posting says runs a 9/80 or 4/10 week (`schedule` in its fit_detail,
+  `logic.compressed_schedule` / `schedule_label`) scores `SCHEDULE_BONUS`
+  more and wears `ui.schedule_badge`; an application's badge is read from its
+  posting text. Never guessed from the employer.
   **Status / kind lists are repeated in `schema.sql` CHECKs** (statuses,
   kinds, lead statuses, `DISMISS_REASONS`, `RESUME_SOURCE_KINDS`, `PROJECT_KINDS`): change
   both (tests fail if they drift). A lead's dedupe key is company|title (`logic.lead_key`); stale

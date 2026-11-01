@@ -483,15 +483,26 @@ def pay_badge(salary_min, salary_max, pay_source) -> str:
                  + (" (estimate)" if state == "estimated" else ""))
 
 
-def fit_breakdown(detail) -> str:
-    """'Role 9 · Industry 6 · …' from a lead's fit_detail, with a red badge
-    when a deal-breaker capped the score; '' when there is no breakdown."""
-    detail = logic.value(detail)
-    if not isinstance(detail, dict) or not detail.get("ratings"):
+def schedule_badge(schedule) -> str:
+    """A green badge for a compressed schedule ("9/80 schedule"); '' without one."""
+    if not schedule:
         return ""
-    ratings = detail["ratings"]
+    return badge("green", "Compressed week" if schedule == "compressed week"
+                 else f"{schedule} schedule")
+
+
+def fit_breakdown(detail) -> str:
+    """'Role 9 · Industry 6 · …' from a lead's fit_detail, with the schedule
+    bonus when it has one and a red badge when a deal-breaker capped the
+    score; '' when there is no breakdown."""
+    detail = logic.value(detail)
+    if not isinstance(detail, dict) or not (detail.get("ratings") or detail.get("schedule")):
+        return ""
+    ratings = detail.get("ratings") or {}
     parts = [f"{label.split(' ')[0]}\u00a0{ratings[key]}"           # no break before the number
              for key, (label, _, _) in config.FIT_CATEGORIES.items() if key in ratings]
+    if detail.get("schedule"):
+        parts.append(f"Schedule\u00a0+{config.SCHEDULE_BONUS:g}")
     text = " · ".join(parts)
     return f"{badge('red', 'Deal-breaker')} {text}" if detail.get("deal_breaker") else text
 

@@ -76,6 +76,11 @@ FIT_CATEGORIES = {
 # Any deal-breaker from the profile caps the score here, whatever the rest says.
 DEAL_BREAKER_CAP = 3.0
 
+# A job whose alert or posting says it runs a compressed schedule (a 9/80 or a
+# 4/10 week) scores this much higher, up to 10: not a must-have, but worth a
+# lot. Unknown schedules (most jobs) score as before.
+SCHEDULE_BONUS = 0.5
+
 # Where a lead's pay came from: "listed" in the alert or the posting, or
 # "estimated" by the daily review from what it found online (pay_note says
 # from what). A lead with no pay at all has neither, and no pay rating.

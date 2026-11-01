@@ -25,6 +25,7 @@ from ui import (
     pay_badge,
     prepare_application,
     round_key,
+    schedule_badge,
     sections,
     setup,
 )
@@ -63,7 +64,8 @@ def lead_card(lead) -> None:
         title = md(lead.title)
         if url := logic.job_link(lead.job_url):       # the title opens the posting
             title = f"[{title}]({url.replace(')', '%29').replace(' ', '%20')})"
-        head = " · ".join(part for part in (new, fit) if part)
+        head = " · ".join(part for part in (new, fit, schedule_badge(
+            logic.lead_schedule(lead.fit_detail))) if part)
         st.markdown(f"{head + ' · ' if head else ''}**{title}**\u00a0—\u00a0{md(lead.company)}")
         st.caption(f"{describe(lead)} · {pay_line(lead)}")
         if breakdown := fit_breakdown(lead.fit_detail):
@@ -121,11 +123,13 @@ def in_batches(frame, key: str, draw) -> None:
 
 LEAD_COLUMNS = {                     # sized to fit the page's width without scrolling
     "fit": st.column_config.NumberColumn("Fit", format="%.1f", width=52),
-    "title": st.column_config.TextColumn("Title", width=310),
-    "company": st.column_config.TextColumn("Company", width=150),
-    "where": st.column_config.TextColumn("Where", width=145),
+    "title": st.column_config.TextColumn("Title", width=280),
+    "company": st.column_config.TextColumn("Company", width=140),
+    "where": st.column_config.TextColumn("Where", width=130),
     "pay": st.column_config.TextColumn("Pay", width=110,
                                        help="In thousands; ~ means the daily review estimated it"),
+    "schedule": st.column_config.TextColumn("Schedule", width=64,
+                                            help="A 9/80 or 4/10 week the alert or posting states"),
     "source": st.column_config.TextColumn("Source", width=76),
     "found": st.column_config.DateColumn("Found", format="MMM D", width=64),
     "posting": st.column_config.LinkColumn("Posting", display_text="Open", width=64),
@@ -334,6 +338,9 @@ if section == "What I'm looking for":
                    f"{config.STRONG_FIT}+ is a strong fit, {config.MAYBE_FIT}+ is worth a look. "
                    "The weights live in app/config.py.")
         st.markdown(f"**Pay.** {config.PAY_RESEARCH}")
+        st.markdown(f"**Schedule.** A job whose alert or posting says it runs a 9/80 or 4/10 "
+                    f"week scores {config.SCHEDULE_BONUS:g} higher (up to 10) and carries "
+                    f"{schedule_badge('9/80')}. One that doesn't say scores as before.")
         st.markdown(f"**Dismissals.** When you dismiss a lead you say why; the review reads "
                     f"the last {config.DISMISSAL_DAYS} days of reasons as a hint of what you "
                     "don't want, alongside the companies to skip above. Leads nobody touches "

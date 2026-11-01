@@ -40,7 +40,8 @@ the inbox, never in this public repository.
 
 3. **Pull out every job**: title, company, location, work mode (remote /
    hybrid / onsite, if stated), the pay exactly as the email gives it (if it
-   does), the job link, posted date, and the source site (LinkedIn, Indeed,
+   does), a compressed schedule if it mentions one (9/80, 4/10), the job
+   link, posted date, and the source site (LinkedIn, Indeed,
    Glassdoor, Built In, Dice, Wellfound, Welcome to the Jungle). The job link
    is the one the email itself puts on that job, **kept exactly as it is**,
    tracking parameters and all: never shorten it, rebuild it from an ID, or
@@ -99,6 +100,11 @@ the inbox, never in this public repository.
      range, Senior Data Analyst, Denver"`).
    - Nothing solid: leave `salary` out. Never relabel a listed range, and
      never write an estimate as listed.
+   - Whenever you read a posting here, also look for a compressed schedule:
+     a 9/80, a 4/10 (four 10-hour days), "every other Friday off", a
+     compressed work week. The owner values one highly. Note it only when
+     the posting or the email says so, never from what you know of the
+     employer, and don't search just for it.
 
 6. **Rate each new job on the rubric categories, 1–10**, against the
    profile only (never your own idea of a good job): 10 means the profile's
@@ -115,9 +121,11 @@ the inbox, never in this public repository.
 7. **Save them.** Write a JSON list to the scratchpad, one object per job:
    `source`, `title`, `company` (required), and `location`, `work_mode`,
    `salary`, `pay_source`, `pay_note`, `job_url`, `posted_on` (YYYY-MM-DD),
+   `schedule` (`"9/80"`, `"4/10"` or `"compressed week"`, only when stated),
    `fit` (an object with a 1–10 rating for each rubric category you rated,
    keyed as `rubric` lists them), `deal_breaker` (true/false) and
-   `fit_reason`. Then:
+   `fit_reason`. A schedule adds the rubric's `schedule.bonus` to the score;
+   mention it in `fit_reason`. Then:
 
    ```
    python3 leads.py add <that file>
