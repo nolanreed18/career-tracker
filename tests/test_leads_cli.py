@@ -34,6 +34,37 @@ def test_profile_prints_what_youre_looking_for_and_recent_dismissals(capsys):
         "dismissed_on": data.today().isoformat()}]
 
 
+def test_profile_save_changes_only_the_fields_given(tmp_path, capsys):
+    data.save_job_profile(data.today(), target_roles="Data Analyst", min_salary=140000,
+                          skip_companies="Robert Half")
+    changes = tmp_path / "changes.json"
+    changes.write_text(json.dumps({"watch_companies": (
+        "bp https://bpinternational.wd3.myworkdayjobs.com/bpCareers\n"
+        "Acme https://careers.acme.com")}))
+    assert leads.main(["profile-save", str(changes)]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("saved: watch_companies")
+    assert "Acme's link isn't a Workday, Greenhouse or Lever careers site" in out
+    profile = data.job_profile()
+    assert profile["watch_companies"].startswith("bp https://")
+    assert (profile["target_roles"], profile["min_salary"], profile["skip_companies"]) == (
+        "Data Analyst", 140000, "Robert Half")                              # kept as they were
+    assert leads.main(["profile-save", str(changes)]) == 0
+    assert capsys.readouterr().out.startswith("nothing changed")
+
+
+def test_profile_save_refuses_what_it_cant_use(tmp_path, capsys):
+    changes = tmp_path / "changes.json"
+    for bad, says in ((["a list"], "must hold a JSON object"),
+                      ({"favourite_colour": "blue"}, "unknown profile fields"),
+                      ({"min_salary": "lots"}, "min_salary must be a whole number"),
+                      ({"watch_companies": ["bp"]}, "watch_companies must be text")):
+        changes.write_text(json.dumps(bad))
+        assert leads.main(["profile-save", str(changes)]) == 1
+        assert says in capsys.readouterr().err
+    assert data.job_profile() is None                                      # nothing saved
+
+
 def test_rubric_prints_the_scoring_categories(capsys):
     assert leads.main(["rubric"]) == 0
     rubric = json.loads(capsys.readouterr().out)

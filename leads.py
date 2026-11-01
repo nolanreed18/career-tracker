@@ -2,6 +2,9 @@
 
     python leads.py profile          what you're looking for, as JSON, with the
                                      companies to skip and recent dismissals
+    python leads.py profile-save changes.json
+                                     change what you're looking for: only the
+                                     fields given, the rest kept
     python leads.py rubric           today's date (owner's time zone) and the scoring
                                      categories, weights and thresholds, as JSON
     python leads.py known            every stored lead's dedupe key, one per line
@@ -29,6 +32,11 @@ title, location, job_url, posted_on, and from its posting salary with
 pay_source "listed" when it states one, schedule when it says one) plus a
 summary of the posting to rate it by; a site that can't be read is a
 problem, not an error.
+
+changes.json is an object of profile fields and their new values (the
+fields `profile` prints, e.g. {"watch_companies": "bp https://...\nSuncor
+https://..."}); a list field is given whole. A Claude session uses it when
+the owner asks for a change, instead of the owner typing it into the app.
 
 run.json gives the digest what the database doesn't know: app_url (the
 app's address; required), and optionally emails_read, sources ({"LinkedIn":
@@ -60,6 +68,23 @@ def main(argv: list[str]) -> int:
         since = data.today() - timedelta(days=config.DISMISSAL_DAYS)
         profile["dismissed_recently"] = logic.dismissal_notes(data.dismissed_recently(since))
         print(json.dumps(profile, default=str, indent=2))
+        return 0
+    if command == "profile-save" and len(argv) == 2:
+        changes = json.loads(Path(argv[1]).read_text(encoding="utf-8"))
+        problem = profile_problem(changes)
+        if problem:
+            print(problem, file=sys.stderr)
+            return 1
+        data.migrate()                     # the live table may predate a field
+        current = data.job_profile() or {}
+        changed = sorted(f for f, v in changes.items() if v != current.get(f))
+        data.save_job_profile(data.today(), **{
+            **{field: current.get(field) for field in data.PROFILE_FIELDS}, **changes})
+        print(f"saved: {', '.join(changed)}" if changed else "nothing changed")
+        for name, url in logic.watch_list(changes.get("watch_companies")):
+            if not posting.careers_site(url):
+                print(f"note: {name}'s link isn't a Workday, Greenhouse or Lever careers "
+                      "site, so the review can't watch it")
         return 0
     if command == "rubric":
         print(json.dumps({
@@ -125,6 +150,24 @@ def main(argv: list[str]) -> int:
         return 0
     print(__doc__, file=sys.stderr)
     return 2
+
+
+def profile_problem(changes) -> str | None:
+    """Why a profile-save file can't be used, or None."""
+    if not isinstance(changes, dict) or not changes:
+        return "changes.json must hold a JSON object of profile fields to change"
+    unknown = set(changes) - data.PROFILE_FIELDS
+    if unknown:
+        return (f"unknown profile fields {sorted(unknown)}; the fields are "
+                f"{sorted(data.PROFILE_FIELDS)}")
+    salary = changes.get("min_salary")
+    if salary is not None and (isinstance(salary, bool) or not isinstance(salary, int)
+                               or salary < 0):
+        return "min_salary must be a whole number of dollars a year, or null"
+    for field, value in changes.items():
+        if field != "min_salary" and value is not None and not isinstance(value, str):
+            return f"{field} must be text (lines separated by \\n), or null"
+    return None
 
 
 def watch(profile: dict) -> dict:
