@@ -563,6 +563,26 @@ def test_a_known_careers_site_is_searched_for_the_title_before_asking_claude(mon
     assert data.application(second)["apply_url"] == site               # and only found the site
 
 
+def test_a_job_from_a_watched_careers_site_is_its_own_employer_link(monkeypatch):
+    import ai
+    import posting
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    seed()
+    link = "https://bp.wd3.myworkdayjobs.com/bpCareers/job/Denver/Planner-Scheduler_RQ1"
+    app_id = data.add_application(data.company_id_for("bp", TODAY), "Planner/Scheduler",
+                                  "saved", TODAY, job_url=link)
+    monkeypatch.setattr(posting, "on_careers_site", lambda url, title, location=None: (
+        link if url == link else None))
+    monkeypatch.setattr(posting, "employer_posting", lambda url: None)
+    monkeypatch.setattr(ai, "find_posting", lambda *args: pytest.fail("Claude was asked"))
+    at = new_app(APPS)
+    at.session_state["open_application"] = app_id
+    at.run()
+    click(at, "Find it on the employer's site")
+    assert data.application(app_id)["apply_url"] == link
+    assert at.success[0].value.endswith("(free).")
+
+
 def test_when_claude_finds_only_the_careers_site_the_app_finds_the_posting(monkeypatch):
     import ai
     import posting
@@ -682,10 +702,13 @@ def test_the_profile_form_saves():
     widget(at.text_area, "Roles I want").set_value("Data Analyst")
     widget(at.number_input, "Lowest base salary I'd take ($/yr)").set_value(100000)
     widget(at.multiselect, "Work modes I'd take").set_value(["remote"])
+    widget(at.text_area, "Companies to watch").set_value(
+        "bp https://bpinternational.wd3.myworkdayjobs.com/bpCareers")
     click(at, "Save")
     profile = data.job_profile()
     assert (profile["target_roles"], profile["min_salary"], profile["work_modes"]) == (
         "Data Analyst", 100000, "remote")
+    assert profile["watch_companies"].startswith("bp https://")
 
 
 def test_weak_leads_are_hidden_until_asked_for(phone):

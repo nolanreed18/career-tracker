@@ -76,6 +76,23 @@ the inbox, never in this public repository.
    jobs already stored as `company|title` (lower-case, punctuation
    dropped). Skip jobs already there, and count how many you skipped.
 
+   Then check the companies the owner watches:
+
+   ```
+   python3 leads.py watch
+   ```
+
+   It lists each new job on those companies' own careers sites, in the
+   owner's area, already checked against what's known and the companies to
+   skip: add them to this run's jobs as they are. Each is a leads.json row,
+   with `source` ("bp careers site"), `job_url` (the employer's own posting),
+   and, read from that posting, `salary` with `pay_source` "listed" when it
+   states one and `schedule` when it says one, plus a `summary` of the
+   posting to rate it by. Don't look up pay for them in step 5 (the posting
+   was already read), and count them under their `source` in step 8's
+   `sources`. A `problems` entry means a site couldn't be read: say so in
+   the run's final message, not in the digest.
+
 5. **Find the pay** for each new job whose email gave none, but only when
    its role and location would both rate at least the rubric's
    `pay.research_fit` against the profile. Leave the rest unresearched:

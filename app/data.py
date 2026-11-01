@@ -112,6 +112,8 @@ MIGRATIONS = [
     "drop table if exists contacts",
     "drop table if exists career_entries",
     "drop table if exists positions",
+    # 2026-11: employers whose careers sites the review checks itself.
+    "alter table job_profile add column if not exists watch_companies text",
 ]
 
 
@@ -422,7 +424,8 @@ def delete_interview(interview_id: int) -> None:
 # ---- job search profile -----------------------------------------------------
 
 PROFILE_FIELDS = {"target_roles", "locations", "work_modes", "min_salary", "must_haves",
-                  "nice_to_haves", "deal_breakers", "about_me", "skip_companies"}
+                  "nice_to_haves", "deal_breakers", "about_me", "skip_companies",
+                  "watch_companies"}
 
 
 def job_profile() -> dict | None:

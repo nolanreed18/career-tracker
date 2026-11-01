@@ -49,7 +49,12 @@ only they can do (accounts, secrets, clicking merge).
   application's link or another's, `data.company_apply_links`) for the title,
   and `logic.pick_posting` takes only an exact title match, never a guess;
   after it, a careers-site address Claude returns is searched the same way.
-  LinkedIn's guest pages don't show the employer's Apply link.
+  LinkedIn's guest pages don't show the employer's Apply link. Companies to
+  watch (profile `watch_companies`, `logic.watch_list`): `leads.py watch`
+  lists their careers sites' jobs in `config.WATCH_SEARCH`'s places
+  (`posting.site_jobs`, sharing `_listed` with `on_careers_site`), drops the
+  known and skipped, and reads each posting's stated pay
+  (`logic.listed_pay`) and schedule for the review to score.
   `applications.apply_url` / `apply_note` / `apply_state` (`config.APPLY_STATES`,
   null = not looked for) hold what it found and where the search stands:
   `ui.apply_status` says so on the application, and the state is written

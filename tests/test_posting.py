@@ -221,3 +221,42 @@ def test_a_site_that_cant_be_searched_gives_nothing_without_an_error(monkeypatch
     assert posting.on_careers_site("https://jobs.lever.co/acme", "Analyst") is None
     assert posting.on_careers_site("https://careers.acme.com/jobs", "Analyst") is None
     assert posting.on_careers_site("", "Analyst") is None
+
+
+def test_a_watched_site_lists_its_jobs_in_the_owners_area(monkeypatch):
+    pages = {0: {"total": 23, "jobPostings": [
+        {"title": "Planner/Scheduler", "postedOn": "Posted 2 Days Ago",
+         "locationsText": "United States of America - Colorado - Denver",
+         "externalPath": "/job/Denver/Planner-Scheduler_RQ1"},
+        {"title": "DSR Supervisor", "locationsText": "China - Remote",          # not the area
+         "externalPath": "/job/China/DSR_RQ2"}] + [
+        {"title": f"Lead {n}", "locationsText": "2 Locations", "postedOn": "Posted Today",
+         "externalPath": f"/job/x/Lead_{n}"} for n in range(18)]},
+        20: {"total": 23, "jobPostings": [
+            {"title": "Analyst", "locationsText": "Denver, CO",
+             "externalPath": "/job/Denver/Analyst_RQ3"}]}}
+    asked = []
+    monkeypatch.setattr(posting, "_post_json", lambda url, body: asked.append(body) or (
+        pages[body["offset"]] if body["searchText"] == config.WATCH_SEARCH[0] else {}))
+    jobs = posting.site_jobs("https://bp.wd3.myworkdayjobs.com/bpCareers")
+    assert [body["offset"] for body in asked][:2] == [0, 20]                  # every page
+    assert jobs[0] == {"title": "Planner/Scheduler", "location": "Denver, Colorado",
+                       "url": "https://bp.wd3.myworkdayjobs.com/bpCareers/job/Denver/"
+                              "Planner-Scheduler_RQ1", "posted": "Posted 2 Days Ago"}
+    assert "DSR Supervisor" not in [job["title"] for job in jobs]
+    assert jobs[1]["location"] == ""                       # several places: its posting says
+    assert jobs[-1]["title"] == "Analyst" and len(jobs) == 20
+
+    monkeypatch.setattr(posting, "_get", lambda url, accept=None: (
+        '{"jobs": [{"title": "Analyst", "absolute_url": "https://g/1", '
+        '"location": {"name": "Denver, CO"}}, {"title": "Analyst", "absolute_url": "https://g/2",'
+        ' "location": {"name": "Austin, TX"}}]}'))
+    assert [job["url"] for job in posting.site_jobs("https://boards.greenhouse.io/acme")] == [
+        "https://g/1"]
+    assert posting.site_jobs("https://careers.acme.com") is None              # not searchable
+
+    def refuse(*args, **kwargs):
+        raise posting.PostingError("The careers site answered 500.")
+
+    monkeypatch.setattr(posting, "_post_json", refuse)
+    assert posting.site_jobs("https://bp.wd3.myworkdayjobs.com/bpCareers") is None

@@ -315,6 +315,14 @@ if section == "What I'm looking for":
             help="The daily review drops their jobs before scoring. A name matches when it "
                  "appears in the employer's name, so \"Robert Half\" also catches "
                  "\"Robert Half Technology\".")
+        watch_companies = st.text_area(
+            "Companies to watch", value=profile.get("watch_companies") or "",
+            placeholder="One per line: the name, then its careers-site link, e.g.\n"
+                        "bp https://bpinternational.wd3.myworkdayjobs.com/bpCareers",
+            help="Each morning the review checks these careers sites itself for new jobs "
+                 f"in {' or '.join(config.WATCH_SEARCH)}, often before the job boards "
+                 "list them, and reads each posting's pay. Works with Workday, Greenhouse "
+                 "and Lever sites (most large energy and chemical companies use Workday).")
         about_me = st.text_area(
             "About me", value=profile.get("about_me") or "", height=200,
             placeholder="Your experience and skills, as on a resume: years, tools, "
@@ -325,7 +333,7 @@ if section == "What I'm looking for":
             today, target_roles=target_roles, locations=locations,
             work_modes=", ".join(work_modes), min_salary=min_salary, must_haves=must_haves,
             nice_to_haves=nice_to_haves, deal_breakers=deal_breakers, about_me=about_me,
-            skip_companies=skip_companies)
+            skip_companies=skip_companies, watch_companies=watch_companies)
         done("Saved. The next daily review will use it.")
 
     with card("scoring"):
