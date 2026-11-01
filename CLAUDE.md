@@ -23,7 +23,11 @@ only they can do (accounts, secrets, clicking merge).
   (Gmail clips, and the run re-types every byte: `config.DIGEST_CARDS` /
   `DIGEST_ROWS` cap it, test_digest checks a 100-lead day) and email-safe
   (tables, every style inline, no web fonts: Outlook on a phone drops a stylesheet).
-  A new `leads.py` command also goes in `.claude/settings.json`.
+  A new `leads.py` command also goes in `.claude/settings.json`. When the
+  owner asks a Claude session to change What I'm looking for (companies to
+  watch or skip, the salary floor…), it does so itself with `leads.py
+  profile-save` (only the fields given change), never ad-hoc SQL, rather
+  than handing the owner text to paste.
 - Claude inside the app is `app/ai.py` only: the key is `ANTHROPIC_API_KEY`
   in secrets (or `.env`), never printed; every call sits behind a button the
   owner clicks and is logged to `ai_usage` with its cost (`config.AI_MODEL`;
