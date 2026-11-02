@@ -1,6 +1,6 @@
 """data.py against a real (throwaway) Postgres with the real schema."""
 
-from datetime import date, time
+from datetime import date, time, timedelta
 
 import psycopg
 import pytest
@@ -59,13 +59,20 @@ def test_update_refuses_unknown_columns():
         data.add_application(acme, "B", "applied", TODAY, salary=1)
 
 
-def test_deleting_an_application_takes_its_history_and_interviews_along():
+def test_deleting_an_application_takes_its_history_interviews_and_lone_company_along():
     acme = data.company_id_for("Acme", TODAY)
     app_id = data.add_application(acme, "A", "applied", TODAY)
+    data.add_application(data.company_id_for("Beta", TODAY), "B", "applied", TODAY)
     data.add_interview(app_id, TODAY)
     data.delete_application(app_id)
     assert data.events(app_id).empty and data.interviews().empty
-    assert data.companies()["applications"].tolist() == [0]
+    assert data.companies()["name"].tolist() == ["Beta"]             # Acme had nothing left
+    data.update_application(int(data.applications()["application_id"].iloc[0]),
+                            company_id=data.company_id_for("Gamma", TODAY))
+    assert data.companies()["name"].tolist() == ["Gamma"]            # Beta is now orphaned
+    data.company_id_for("Orphan", TODAY)
+    data.migrate()                                                   # sweeps the old ones too
+    assert data.companies()["name"].tolist() == ["Gamma"]
 
 
 def test_every_configured_value_is_allowed_by_the_schema_and_nothing_else():
@@ -181,7 +188,7 @@ def test_migrate_brings_an_older_job_leads_table_up_to_date(database):
     data.migrate()                                                   # safe to run again
     data.add_leads(leads({"title": "Analyst"}), TODAY)
     data.set_lead_status(int(data.job_leads()["lead_id"][0]), "dismissed",
-                         ["not enough experience", "too much travel"], TODAY)   # the CHECK was remade
+                         ["not enough experience", "too much travel"], TODAY)   # the remade CHECK
     with psycopg.connect(database, autocommit=True) as conn:
         columns = dict(conn.execute("""
             select column_name, data_type from information_schema.columns
@@ -286,8 +293,8 @@ def test_an_estimated_pay_is_noted_on_the_application_a_lead_becomes():
 
 def test_leads_found_are_one_days_new_leads_best_first():
     data.add_leads(leads({"title": "Old"}), date(2026, 10, 13))
-    data.add_leads(leads({"title": "Weak", "fit_score": 3}) + leads({"title": "Good", "fit_score": 8})
-                   + leads({"title": "Gone"}), TODAY)
+    data.add_leads(leads({"title": "Weak", "fit_score": 3})
+                   + leads({"title": "Good", "fit_score": 8}) + leads({"title": "Gone"}), TODAY)
     data.set_lead_status(int(data.job_leads()[data.job_leads()["title"] == "Gone"]["lead_id"]
                              .iloc[0]), "dismissed")
     assert data.leads_found(TODAY)["title"].tolist() == ["Good", "Weak"]
@@ -349,7 +356,7 @@ def test_the_project_bank_keeps_projects_and_their_reviews():
     assert data.project(first)["review"] is None
     with pytest.raises(ValueError, match="unknown project fields"):
         data.add_project(TODAY, kind="work", title="X", review={})
-    with pytest.raises(ValueError, match="cannot update"):
+    with pytest.raises(ValueError, match="unknown career_projects update fields"):
         data.update_project(first, TODAY, created_on=TODAY)
     data.delete_project(first)
     assert data.projects()["title"].tolist() == ["Budget app"]
@@ -406,13 +413,18 @@ def test_a_posting_and_tailored_versions_live_with_the_application():
 
 
 def test_lead_stats_count_the_reviewed_the_average_and_the_inbox_above_each_mark():
-    assert data.lead_stats() == {"reviewed": 0, "average_fit": None, "waiting": [0, 0]}
+    assert data.lead_stats(TODAY) == {"reviewed": 0, "average_fit": None, "waiting": [0, 0]}
     data.add_leads(leads({"title": "A", "fit_score": 9.2}, {"title": "B", "fit_score": 8.1},
                          {"title": "C", "fit_score": 5.0}, {"title": "D"}), TODAY)
-    stats = data.lead_stats()
+    stats = data.lead_stats(TODAY)
     assert stats["reviewed"] == 4 and stats["waiting"] == [2, 1]
     assert round(stats["average_fit"], 2) == round((9.2 + 8.1 + 5.0) / 3, 2)   # unscored skipped
     top = int(data.job_leads("new").iloc[0]["lead_id"])
     data.move_lead_to_applications(top, TODAY)                     # A leaves the inbox
-    assert data.lead_stats()["waiting"] == [1, 0] and data.lead_stats()["reviewed"] == 4
-    assert data.lead_stats(marks=(7.0,))["waiting"] == [1]
+    assert data.lead_stats(TODAY)["waiting"] == [1, 0]
+    assert data.lead_stats(TODAY)["reviewed"] == 4
+    assert data.lead_stats(TODAY, marks=(7.0,))["waiting"] == [1]
+    data.add_leads(leads({"title": "Old", "fit_score": 9.5}),
+                   TODAY - timedelta(days=config.LEAD_STALE_DAYS + 1))
+    assert data.lead_stats(TODAY)["waiting"] == [1, 0]             # stale: hidden, so not waiting
+    assert data.lead_stats(TODAY)["reviewed"] == 5

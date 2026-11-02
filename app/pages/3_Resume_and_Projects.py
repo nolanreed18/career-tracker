@@ -109,7 +109,7 @@ def role_editor(role: dict, key: str, project: bool) -> dict:
 if section == "Master":
     master = data.resume_master()
     content = None if master is None else master["content"]
-    if content is None or not content.get("name") and not content.get("roles"):
+    if content is None or (not content.get("name") and not content.get("roles")):
         empty("description", "No master resume yet",
               "Upload your resume under Build from files and let Claude turn it into data.")
     else:
@@ -132,9 +132,9 @@ if section == "Master":
             except ValueError as problem:
                 st.warning(f"Couldn't lay out the Word file: {problem}")
             else:
-                st.download_button(
-                    "Download Word file", file, mime=DOCX, type="primary",
-                    file_name=f"{logic.file_stem(content.get('name', ''), 'Resume', 'Master')}.docx")
+                stem = logic.file_stem(content.get("name", ""), "Resume", "Master")
+                st.download_button("Download Word file", file, mime=DOCX, type="primary",
+                                   file_name=f"{stem}.docx")
         if content.get("conflicts"):
             with card("conflicts"):
                 st.markdown(f"{badge('orange', 'Check')} **The sources disagreed on these**")
@@ -346,8 +346,9 @@ if section == "Projects":
             pick_key = round_key("project_pick")
             if (wanted := st.session_state.pop("open_project", None)) in ids:
                 st.session_state[pick_key] = wanted
-            labels = {int(r["project_id"]): f"{r['title']} · {details[int(r['project_id'])]['score']}"
-                      f"/100" for r in ordered}
+            labels = {int(r["project_id"]):
+                      f"{r['title']} · {details[int(r['project_id'])]['score']}/100"
+                      for r in ordered}
             picked = st.selectbox("Project", ids, format_func=labels.get, key=pick_key)
         with detail_area:
             project = data.project(picked)
@@ -499,7 +500,8 @@ def tailored_roles(tailored: dict, kind: str, tailor_id: int) -> list[dict]:
         st.markdown(f"**{md(role['employer'])}**{md(title)}{md(when)}")
         frame = st.data_editor(tailored_frame(role["bullets"]), column_config=TAILORED_COLUMNS,
                                num_rows="dynamic", hide_index=True, width="stretch",
-                               key=f"tailored_{tailor_id}_{kind}{n}", row_height=TAILORED_ROW_HEIGHT)
+                               key=f"tailored_{tailor_id}_{kind}{n}",
+                               row_height=TAILORED_ROW_HEIGHT)
         edited.append({**role, "bullets": tailored_from(frame)})
     return edited
 

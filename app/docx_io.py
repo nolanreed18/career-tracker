@@ -213,7 +213,8 @@ def _set_right_tab(p, twips: int) -> None:
 def _column_width(body) -> int:
     sect = body.find(qn("w:sectPr"))
     col = None if sect is None else sect.find(f"{qn('w:cols')}/{qn('w:col')}")
-    return int(col.get(qn("w:w"))) if col is not None and col.get(qn("w:w")) else DEFAULT_COLUMN_TWIPS
+    width = None if col is None else col.get(qn("w:w"))
+    return int(width) if width else DEFAULT_COLUMN_TWIPS
 
 
 def _header(header, name: str, contact: str, width: int):
@@ -230,7 +231,8 @@ def _header(header, name: str, contact: str, width: int):
     _set_run_text(name_run, name)
     new.append(name_run)
     if contact:
-        model = next((r for r in with_text if "@" in _text(r)), with_text[-1] if with_text else name_run)
+        fallback = with_text[-1] if with_text else name_run
+        model = next((r for r in with_text if "@" in _text(r)), fallback)
         contact_run = copy.deepcopy(model)
         _set_run_text(contact_run, "\t" + contact)
         new.append(contact_run)

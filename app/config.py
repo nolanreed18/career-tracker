@@ -25,9 +25,6 @@ STATUSES = [
 OPEN_STATUSES = ["saved", "applied", "screening", "interviewing", "offer"]
 CLOSED_STATUSES = ["accepted", "rejected", "withdrawn"]
 
-# Reaching any of these counts as a response for the response rate.
-RESPONDED_STATUSES = ["screening", "interviewing", "offer", "accepted"]
-
 WORK_MODES = ["onsite", "hybrid", "remote"]
 
 INTERVIEW_FORMATS = ["phone", "video", "onsite", "take-home"]
@@ -35,11 +32,12 @@ INTERVIEW_FORMATS = ["phone", "video", "onsite", "take-home"]
 # Job leads from alert emails. "moved" means it became an application.
 LEAD_STATUSES = ["new", "moved", "dismissed"]
 
-# Why a lead was dismissed: one reason or several (stored comma-separated).
-# The daily review reads the recent ones as a hint of what the owner doesn't want.
 # Where the employer-site search for an application stands (applications.apply_state;
 # null: not looked for yet). Repeated in schema.sql's CHECK.
 APPLY_STATES = ["looking", "found", "missing", "failed"]
+
+# Why a lead was dismissed: one reason or several (stored comma-separated).
+# The daily review reads the recent ones as a hint of what the owner doesn't want.
 DISMISS_REASONS = ["wrong role", "not enough experience", "too much travel", "location",
                    "pay", "company", "already applied", "other"]
 
@@ -113,9 +111,9 @@ PAY_RESEARCH = (
 )
 
 # Fit scores (1-10) at or above this are a strong match: highlighted in the
-# app, listed first in the daily email, and what the Job Leads inbox opens on.
-# 8 while only exceptional roles are worth the owner's time (7 was the
-# rubric's own bar; the review's scoring doesn't change with this).
+# app and listed first in the daily email. 8 while only exceptional roles are
+# worth the owner's time (7 was the rubric's own bar; the review's scoring
+# doesn't change with this).
 STRONG_FIT = 8
 HOME_FIT_MARKS = (8.0, 9.0)   # Home counts the inbox leads at or above each of these
 DIGEST_CARDS = 20             # leads shown as full cards in the digest email, best first

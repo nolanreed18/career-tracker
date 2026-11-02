@@ -1,17 +1,17 @@
 """The daily job-alert review's way into the database.
 
-    python leads.py profile          what you're looking for, as JSON, with the
+    python3 leads.py profile          what you're looking for, as JSON, with the
                                      companies to skip and recent dismissals
-    python leads.py profile-save changes.json
+    python3 leads.py profile-save changes.json
                                      change what you're looking for: only the
                                      fields given, the rest kept
-    python leads.py rubric           today's date (owner's time zone) and the scoring
+    python3 leads.py rubric           today's date (owner's time zone) and the scoring
                                      categories, weights and thresholds, as JSON
-    python leads.py known            every stored lead's dedupe key, one per line
-    python leads.py watch            new jobs on the careers sites of the profile's
+    python3 leads.py known            every stored lead's dedupe key, one per line
+    python3 leads.py watch            new jobs on the careers sites of the profile's
                                      companies to watch, as JSON
-    python leads.py add leads.json   add scored leads; prints how many were new
-    python leads.py digest run.json  the digest email for today's leads, as JSON
+    python3 leads.py add leads.json   add scored leads; prints how many were new
+    python3 leads.py digest run.json  the digest email for today's leads, as JSON
                                      {"subject", "html", "text"}
 
 leads.json is a list of objects with source, title and company (required),
@@ -30,8 +30,9 @@ watch prints {"jobs": [...], "problems": [...]}: each job not seen before,
 in config.WATCH_SEARCH's places, as a leads.json row (source, company,
 title, location, job_url, posted_on, and from its posting salary with
 pay_source "listed" when it states one, schedule when it says one) plus a
-summary of the posting to rate it by; a site that can't be read is a
-problem, not an error.
+summary of the posting to rate it by (the postings of the first
+config.WATCH_MAX_JOBS jobs are read; later rows have no summary or pay, and
+problems says so); a site that can't be read is a problem, not an error.
 
 changes.json is an object of profile fields and their new values (the
 fields `profile` prints, e.g. {"watch_companies": "bp https://...\nSuncor
@@ -40,8 +41,8 @@ the owner asks for a change, instead of the owner typing it into the app.
 
 run.json gives the digest what the database doesn't know: app_url (the
 app's address; required), and optionally emails_read, sources ({"LinkedIn":
-4, ...}), already_known, duplicates, and problem (what went wrong, if
-anything).
+4, ...}: alert emails per site), watched (jobs that came from `watch`),
+already_known, duplicates, and problem (what went wrong, if anything).
 """
 
 import json
@@ -174,7 +175,7 @@ def watch(profile: dict) -> dict:
     """New jobs on the watched companies' careers sites (see the docstring)."""
     today, known = data.today(), data.known_lead_keys()
     skip = logic.skip_list(profile.get("skip_companies"))
-    jobs, problems = [], []
+    jobs, problems, unread = [], [], 0
     for name, url in logic.watch_list(profile.get("watch_companies")):
         listed = posting.site_jobs(url)
         if listed is None:
@@ -189,8 +190,9 @@ def watch(profile: dict) -> dict:
             row = {"source": f"{name} careers site", "company": name, "title": job["title"],
                    "location": job["location"], "job_url": job["url"],
                    "posted_on": logic.workday_posted(job["posted"], today)}
-            if len(jobs) < config.WATCH_MAX_JOBS and (
-                    found := posting.employer_posting(job["url"])):
+            if len(jobs) >= config.WATCH_MAX_JOBS:
+                unread += 1                      # listed, but its posting wasn't read
+            elif found := posting.employer_posting(job["url"]):
                 if not row["location"] and found.location and not logic.watch_place(
                         found.location):
                     continue                     # its several places are all elsewhere
@@ -201,6 +203,10 @@ def watch(profile: dict) -> dict:
                     row["schedule"] = schedule
                 row["summary"] = found.text[:config.WATCH_SUMMARY_CHARS]
             jobs.append(row)
+    if unread:
+        problems.append(f"{unread} jobs past the first {config.WATCH_MAX_JOBS}: their postings "
+                        "weren't read, so they have no summary or pay (rate them from the "
+                        "title and location, or look the posting up as in step 5)")
     return {"jobs": jobs, "problems": problems}
 
 

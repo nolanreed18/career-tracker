@@ -1,22 +1,19 @@
-"""Small helpers every page uses: sign-in, the look, labels and badges."""
+"""What every page shares: sign-in, the look, the components the stylesheet
+draws (cards, pill selectors, empty states, disclosures, deletes, badges,
+Claude's spark), and the employer-site posting search that Job Leads' Add
+and Applications' "Find it" both run."""
 
 import hmac
-import os
 import time
 
 import streamlit as st
 
 import config
 import data
+import db
 import logic
 import posting
 import theme
-
-# Icons for places that can't show a badge: selectbox options, table cells.
-STATUS_ICONS = {
-    "saved": "🔖", "applied": "📨", "screening": "📞", "interviewing": "🗣️",
-    "offer": "🎉", "accepted": "✅", "rejected": "✖️", "withdrawn": "↩️",
-}
 
 # Badge colours. Blue = in progress, green = good, orange = needs attention,
 # red = overdue or closed, grey = neutral; violet marks a second category.
@@ -24,10 +21,8 @@ STATUS_COLORS = {
     "saved": "gray", "applied": "blue", "screening": "blue", "interviewing": "blue",
     "offer": "green", "accepted": "green", "rejected": "red", "withdrawn": "gray",
 }
-ATTENTION_BADGES = {
-    "overdue": ("red", "Overdue"), "due": ("orange", "Due"), "interview": ("blue", "Interview"),
-    "follow_up": ("orange", "Follow up"), "stale_saved": ("gray", "Saved"),
-}
+ATTENTION_COLORS = {"overdue": "red", "due": "orange", "interview": "blue",
+                    "follow_up": "orange", "stale_saved": "gray"}
 FIT_COLORS = {"strong": "green", "maybe": "blue", "weak": "gray"}
 
 # Characters Streamlit markdown would treat as formatting. `$` matters most:
@@ -57,7 +52,7 @@ def setup(title: str, subtitle: str | None = None) -> None:
     use for side-by-side layouts."""
     st.set_page_config(
         page_title=title if title == "Career Tracker" else f"{title} · Career Tracker",
-        page_icon="💼",
+        page_icon=":material/work:",
         layout="centered" if on_phone() else "wide",
     )
     require_password()
@@ -155,13 +150,29 @@ def posting_button(app: dict, key: str) -> None:
                  f"{len(found.text):,} characters. Check it, then tailor.")
 
 
+def known_company_posting(app: dict) -> tuple[str, str] | None:
+    """Where the application's posting is on the employer's own site when the
+    app can tell for free, without Claude: the job link itself when it is a
+    Workday, Greenhouse or Lever posting (a watched company's lead), else a
+    careers site already known for this employer (this application's links
+    or another one's) searched for the title. (address, note), or None."""
+    link = logic.job_link(app.get("job_url"))
+    if posting.employer_link(link):
+        return link, "The job link is the employer's own posting."
+    known = ([app.get("apply_url"), app.get("job_url")]
+             + data.company_apply_links(int(app["company_id"])))
+    for site in dict.fromkeys(link for link in known if posting.careers_site(link)):
+        if exact := posting.on_careers_site(site, app["role"], app.get("location")):
+            return exact, "Found on the employer's careers site by its title."
+    return None
+
+
 def find_company_posting(app: dict, today) -> list[str]:
     """Look for the application's posting on the employer's own site and save
-    the link and note. First, free: a careers site already known for this
-    employer (this application's link or another one's) searched for the
-    title. Else ai.find_posting, logged (a failed call too); when Claude
-    finds only the careers site, the app searches it for the title. Returns
-    what to tell the owner."""
+    the link and note. First, free: known_company_posting. Else
+    ai.find_posting, logged (a failed call too); when Claude finds only the
+    careers site, the app searches it for the title. Returns what to tell
+    the owner."""
     import ai  # here, not at the top: the SDK is slow to import and only this needs it
 
     app_id = int(app["application_id"])
@@ -169,12 +180,8 @@ def find_company_posting(app: dict, today) -> list[str]:
     # search stands even when the owner leaves the page while it runs.
     data.update_application(app_id, apply_state="looking",
                             apply_note=f"Looking since {data.now():%-I:%M %p}.")
-    known = ([app.get("apply_url"), app.get("job_url")]      # a watched site's job is its own
-             + data.company_apply_links(int(app["company_id"])))
-    for site in dict.fromkeys(link for link in known if posting.careers_site(link)):
-        if exact := posting.on_careers_site(site, app["role"], app.get("location")):
-            return _save_found(app, exact, "", "", "Found on the employer's careers site by "
-                               "its title.", "", "free")
+    if known := known_company_posting(app):
+        return _save_found(app, known[0], "", "", known[1], "", "free")
     try:
         found, usage = ai.find_posting(app["company"], app["role"], app.get("location"),
                                        app.get("source"), app.get("posting") or "")
@@ -232,11 +239,10 @@ def _save_found(app: dict, url: str, title: str, location: str, note: str,
 
 def prepare_application(application_id: int, today) -> list[str]:
     """What the Add tap on a lead does after saving the application: read
-    the posting from its link, then look for it on the employer's own site
-    (when the Claude key is set). Each step says how it went; neither stops
-    the other."""
-    import ai
-
+    the posting from its link, then look for it on the employer's own site:
+    free when the app can tell (known_company_posting), else with Claude
+    when the key is set. Each step says how it went; neither stops the
+    other."""
     app = data.application(application_id)
     notes, unread = [], None
     if logic.value(app.get("job_url")) and not logic.value(app.get("posting")):
@@ -248,7 +254,9 @@ def prepare_application(application_id: int, today) -> list[str]:
             app["posting"] = found.as_text()
             data.update_application(application_id, posting=app["posting"])
             notes.append(f"Posting read ({len(found.text):,} characters).")
-    if ai.ready():
+    if known := known_company_posting(app):
+        notes += _save_found(app, known[0], "", "", known[1], "", "free")
+    elif claude_ready():
         notes += find_company_posting(app, today)
     if unread and not logic.value(data.application(application_id)["posting"]):
         notes.insert(0, unread)          # said only when the employer's site didn't fill it
@@ -258,8 +266,6 @@ def prepare_application(application_id: int, today) -> list[str]:
 def apply_status(app: dict) -> None:
     """One line saying where the employer-site search stands for this
     application (applications.apply_state), with what to do next."""
-    import ai
-
     state, note = app.get("apply_state"), md(app.get("apply_note") or "")
     if state == "found":
         st.caption(note)
@@ -273,12 +279,13 @@ def apply_status(app: dict) -> None:
     elif state == "failed":
         st.caption(f"{badge('red', 'Search didn’t finish')} {note} Tap Find it on the "
                    "employer's site to try again.")
-    elif ai.ready():
+    elif claude_ready():
         st.caption("Not looked for on the employer's site yet.")
 
 
 def claude_ready() -> bool:
-    """Whether the Claude key is set (ai.ready, imported only when needed)."""
+    """Whether the Claude key is set (ai.ready; the SDK is slow to import, so
+    only when asked)."""
     import ai
     return ai.ready()
 
@@ -298,9 +305,7 @@ def claude_submit(label: str, key: str, **kwargs) -> bool:
 def find_posting_button(app: dict, key: str) -> None:
     """A button that has Claude look for the posting on the employer's own
     site and saves the link (find_company_posting); shown when the key is set."""
-    import ai
-
-    if not ai.ready():
+    if not claude_ready():
         return
     if claude_button("Find it on the employer's site", f"find_posting_{key}", width="stretch",
                      help="Claude searches the web for this posting on the employer's own "
@@ -361,30 +366,19 @@ def empty(icon: str, title: str, text: str) -> None:
 
 # ---- sign-in ----------------------------------------------------------------
 
-def _secret(name: str):
-    """A value from the app's secrets online, or the environment (.env) on a
-    computer; None when it isn't set."""
-    try:
-        if name in st.secrets:
-            return st.secrets[name]
-    except FileNotFoundError:  # no secrets file at all
-        pass
-    return os.environ.get(name)
-
-
 def _app_password() -> str | None:
-    return _secret("APP_PASSWORD")
+    return db.secret("APP_PASSWORD")
 
 
 def _google_ready() -> bool:
     """Sign in with Google is set up: the [auth] section is in the secrets."""
-    return _secret("auth") is not None
+    return db.secret("auth") is not None
 
 
 def _allowed_emails() -> set[str]:
     """ALLOWED_EMAILS: who may sign in with Google, comma-separated. Kept in
     the secrets, not this public repo."""
-    return {e.strip().lower() for e in str(_secret("ALLOWED_EMAILS") or "").split(",")
+    return {e.strip().lower() for e in str(db.secret("ALLOWED_EMAILS") or "").split(",")
             if e.strip()}
 
 
@@ -461,8 +455,8 @@ def status_badge(status: str) -> str:
 
 
 def attention_badge(kind: str) -> str:
-    color, text = ATTENTION_BADGES.get(kind, ("gray", kind.replace("_", " ").capitalize()))
-    return badge(color, text)
+    return badge(ATTENTION_COLORS.get(kind, "gray"),
+                 logic.ATTENTION_LABELS.get(kind, kind.replace("_", " ").capitalize()))
 
 
 def fit_badge(score) -> str:
@@ -506,11 +500,6 @@ def fit_breakdown(detail) -> str:
         parts.append(f"Schedule\u00a0+{config.SCHEDULE_BONUS:g}")
     text = " · ".join(parts)
     return f"{badge('red', 'Deal-breaker')} {text}" if detail.get("deal_breaker") else text
-
-
-def status_label(status: str) -> str:
-    """Icon plus name, for selectbox options and table cells."""
-    return f"{STATUS_ICONS.get(status, '')} {status.capitalize()}".strip()
 
 
 def optional(options: list[str]) -> list[str]:

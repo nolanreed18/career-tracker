@@ -29,7 +29,8 @@ PLAIN = ("<html><head><title>Data Engineer | Beta</title><script>var x = 1</scri
 def test_linkedins_guest_copy_gives_title_employer_place_and_text():
     found = posting.parse_linkedin(LINKEDIN)
     assert (found.title, found.company, found.location) == ("Senior Analyst", "bp", "Denver, CO")
-    assert found.text == "Job Description\n\nWe build things.\n• SQL & Python\n• Power BI\n\nPay: $100k"
+    assert found.text == ("Job Description\n\nWe build things.\n• SQL & Python\n• Power BI\n\n"
+                          "Pay: $100k")
     assert found.as_text().startswith("Senior Analyst — bp · Denver, CO\n\nJob Description\n\n")
     with pytest.raises(posting.PostingError, match="didn't hand over"):
         posting.parse_linkedin("<html><body>Sign in to view this job</body></html>")
@@ -50,7 +51,8 @@ def test_a_plain_page_is_read_as_its_heading_and_main_text():
 
 def test_text_is_capped(monkeypatch):
     monkeypatch.setattr(config, "POSTING_MAX_CHARS", 12)
-    assert posting.text_of(posting.lxml.html.fromstring("<p>" + "word " * 20 + "</p>")) == "word word wo"
+    paragraph = posting.lxml.html.fromstring("<p>" + "word " * 20 + "</p>")
+    assert posting.text_of(paragraph) == "word word wo"
 
 
 def test_fetch_reads_linkedin_through_its_guest_copy(monkeypatch):
@@ -93,12 +95,14 @@ def test_fetch_turns_a_refusal_or_a_dead_network_into_advice(monkeypatch):
 WORKDAY = """{"jobPostingInfo": {"title": "Senior Development Systems Engineer",
   "jobDescription": "<p>Job Description</p><p>bpx energy builds things.</p><ul><li>SQL</li></ul>",
   "location": "United States of America - Texas - Houston",
-  "additionalLocations": ["United States of America - Colorado - Denver"], "jobReqId": "RQ117112"}}"""
+  "additionalLocations": ["United States of America - Colorado - Denver"],
+  "jobReqId": "RQ117112"}}"""
 
 
 def test_a_workday_link_is_read_from_its_data_feed(monkeypatch):
     asked = []
-    monkeypatch.setattr(posting, "_get", lambda url, accept=None: asked.append((url, accept)) or WORKDAY)
+    monkeypatch.setattr(posting, "_get",
+                        lambda url, accept=None: asked.append((url, accept)) or WORKDAY)
     found = posting.employer_posting("https://bpinternational.wd3.myworkdayjobs.com/en-US/bpCareers/job/"
                                      "United-States-of-America---Texas---Houston/"
                                      "Senior-Development-Systems-Engineer_RQ117112?source=x")
@@ -116,7 +120,8 @@ def test_greenhouse_and_lever_links_are_read_from_their_feeds(monkeypatch):
         '{"title": "Analyst", "location": {"name": "Denver, CO"}, '
         '"content": "&lt;p&gt;Build &lt;b&gt;dashboards&lt;/b&gt;.&lt;/p&gt;"}'))
     found = posting.employer_posting("https://boards.greenhouse.io/acme/jobs/4012345")
-    assert (found.title, found.location, found.text) == ("Analyst", "Denver, CO", "Build dashboards.")
+    assert (found.title, found.location, found.text) == (
+        "Analyst", "Denver, CO", "Build dashboards.")
     monkeypatch.setattr(posting, "_get", lambda url, accept=None: (
         '{"text": "Data Engineer", "categories": {"location": "Remote"}, '
         '"descriptionPlain": "Remote role.", "lists": [{"text": "Requirements", '
@@ -159,12 +164,21 @@ def test_an_applications_links_are_read_employer_first(monkeypatch):
     assert (found.title, link) == ("Senior Analyst", "https://www.linkedin.com/jobs/view/7/")
     found, link = posting.from_links("https://www.glassdoor.com/partner/jobListing.htm?"
                                      "jobListingId=1", "https://careers.beta.com/1")
-    assert (found.title, link) == ("Data Engineer", "https://careers.beta.com/1")  # Glassdoor refused
+    assert (found.title, link) == ("Data Engineer", "https://careers.beta.com/1")  # Glassdoor: no
     with pytest.raises(posting.PostingError, match="Glassdoor doesn't let"):
         posting.from_links("https://www.glassdoor.com/partner/jobListing.htm?jobListingId=1",
                            "https://www.indeed.com/viewjob?jk=1")   # the job link's reason
     with pytest.raises(posting.PostingError, match="no posting link"):
         posting.from_links(None, "")
+
+
+def test_an_employers_own_posting_link_is_recognised():
+    assert posting.employer_link("https://bp.wd3.myworkdayjobs.com/bpCareers/job/Denver/Planner_RQ1")
+    assert posting.employer_link("https://boards.greenhouse.io/acme/jobs/7")
+    assert posting.employer_link("https://jobs.lever.co/acme/0f8e3e9a-1b2c-4d5e-8f90-123456789abc")
+    assert not posting.employer_link("https://bp.wd3.myworkdayjobs.com/bpCareers")   # the site
+    assert not posting.employer_link("https://www.linkedin.com/jobs/view/1/")
+    assert not posting.employer_link(None)
 
 
 def test_other_links_and_unreadable_feeds_give_nothing_without_an_error(monkeypatch):
@@ -177,7 +191,8 @@ def test_other_links_and_unreadable_feeds_give_nothing_without_an_error(monkeypa
     def refused(url, accept=None):
         raise posting.PostingError("The site answered 403 instead of the posting: paste it.")
     monkeypatch.setattr(posting, "_get", refused)
-    assert posting.employer_posting("https://acme.wd5.myworkdayjobs.com/jobs/job/Denver/Analyst_R1") is None
+    assert posting.employer_posting(
+        "https://acme.wd5.myworkdayjobs.com/jobs/job/Denver/Analyst_R1") is None
 
 
 def test_a_careers_site_is_searched_for_the_title(monkeypatch):

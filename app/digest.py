@@ -1,7 +1,9 @@
 """The daily review's digest email, rendered from the leads it added: a
-summary up top, every lead with its score, pay and posting link, what the
-tracker says needs doing today, and links into the app. Pure: no database
-and no Streamlit (leads.py gathers the data and prints the result).
+summary up top, the best leads as cards with their score, pay, ratings and
+posting link (config.DIGEST_CARDS of them, the rest as one-line rows up to
+DIGEST_ROWS a section, then a count), what the tracker says needs doing
+today, and links into the app. Pure: no database and no Streamlit (leads.py
+gathers the data and prints the result).
 
 The markup is what email clients allow: tables, every style inline (the
 owner reads it in Outlook on a phone, which ignores a stylesheet), no web
@@ -15,13 +17,13 @@ from datetime import date
 import config
 import logic
 
-BLUE, CYAN, GREEN, ORANGE, RED, GRAY = "#2563eb", "#06b6d4", "#10b981", "#f59e0b", "#f43f5e", "#64748b"
-BG, CARD, BORDER, TEXT, TEXT2, MUTED = "#f8fafc", "#ffffff", "#e2e8f0", "#0f172a", "#475569", "#64748b"
+BLUE, CYAN, GREEN, ORANGE, RED = "#2563eb", "#06b6d4", "#10b981", "#f59e0b", "#f43f5e"
+GRAY, BG, CARD, BORDER = "#64748b", "#f8fafc", "#ffffff", "#e2e8f0"
+TEXT, TEXT2, MUTED = "#0f172a", "#475569", "#64748b"
 YELLOW_BG, YELLOW_TEXT = "#fef9c3", "#854d0e"
 FONT = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
-ATTENTION = {"overdue": (RED, "Overdue"), "due": (ORANGE, "Due today"),
-             "interview": (BLUE, "Interview"), "follow_up": (ORANGE, "Follow up"),
-             "stale_saved": (GRAY, "Saved")}
+ATTENTION_COLORS = {"overdue": RED, "due": ORANGE, "interview": BLUE, "follow_up": ORANGE,
+                    "stale_saved": GRAY}                   # the labels: logic.ATTENTION_LABELS
 WARNING = "&#9888;&#xFE0E;"          # a text-style warning sign, coloured by its span
 TEXT_FULL = 10                       # leads written out in full (with links) in the text version
 LINK_MAX = 200                       # longer links (opaque redirects) are left to the app
@@ -134,10 +136,10 @@ def rating_chips(detail) -> str:
 
 
 def where(lead: dict) -> str:
-    location, mode = logic.value(lead.get("location")), logic.value(lead.get("work_mode"))
-    if mode and location and mode in location.lower():
-        mode = None
-    return " · ".join(str(p) for p in (lead.get("source"), location, mode) if p)
+    """'LinkedIn · Denver, CO · Hybrid' (the mode left out when the location
+    says it)."""
+    return " · ".join(str(p) for p in [lead.get("source")]
+                      + logic.place(lead.get("location"), lead.get("work_mode")) if p)
 
 
 def link(lead: dict) -> str | None:
@@ -229,9 +231,11 @@ def tile(number, label: str, color: str) -> str:
 def attention_rows(items: list[logic.Attention]) -> str:
     rows = []
     for item in items:
-        color, label = ATTENTION.get(item.kind, (GRAY, item.kind))
+        color = ATTENTION_COLORS.get(item.kind, GRAY)
+        chip = pill(logic.ATTENTION_LABELS.get(item.kind, item.kind).replace(" ", "&nbsp;"),
+                    "#fff", color)
         rows.append(f'<tr><td style="padding:8px 0;border-bottom:1px solid {BORDER};'
-                    f'font-size:14px;{TEXT_STYLE}">{pill(label.replace(" ", "&nbsp;"), "#fff", color)} '
+                    f'font-size:14px;{TEXT_STYLE}">{chip} '
                     f'<strong>{e(item.headline)}</strong><br>'
                     f'<span style="color:{TEXT2};font-size:13px">{e(item.detail)}</span>'
                     '</td></tr>')
@@ -255,8 +259,9 @@ def render(today: date, leads: list[dict], attention: list[logic.Attention], app
     """{"subject", "html", "text"} for the digest. `leads` are the rows the
     review added today (data.leads_found), best first; `attention` is what
     Home would list (logic.needs_attention); `notes` may give emails_read,
-    sources ({site: emails}), already_known, duplicates and problem;
-    `waiting` are strong leads from earlier days still in the inbox."""
+    sources ({site: emails}), watched (jobs from the watched careers sites),
+    already_known, duplicates and problem; `waiting` are strong leads from
+    earlier days still in the inbox."""
     notes = notes or {}
     waiting = list(waiting)
     problem = logic.value(notes.get("problem"))
@@ -266,11 +271,14 @@ def render(today: date, leads: list[dict], attention: list[logic.Attention], app
     leads_url, apps_url = page(app_url, "Job_Leads"), page(app_url, "Applications")
     emails = notes.get("emails_read")
     sources = notes.get("sources") or {}
+    watched = int(notes.get("watched") or 0)
     read_line = ""
     if emails:
         read_line = f"from {logic.plural(int(emails), 'alert email')}"
         if sources:
             read_line += " (" + ", ".join(f"{e(k)} {v}" for k, v in sources.items()) + ")"
+    if watched:
+        read_line += (" and " if read_line else "") + f"{watched} from the careers sites you watch"
     headline = ("The review stopped before it finished." if problem else
                 "Nothing new today." if not leads else
                 f"{logic.plural(len(leads), 'new lead')} · {len(strong)} strong · "
@@ -336,17 +344,20 @@ def render(today: date, leads: list[dict], attention: list[logic.Attention], app
     facts = []
     if emails:
         facts.append(f"Read {logic.plural(int(emails), 'alert email')}")
+    if watched:
+        facts.append(f"{watched} from watched careers sites")
     if notes.get("already_known"):
         facts.append(f"{notes['already_known']} already in the tracker")
     if notes.get("duplicates"):
         facts.append(f"{notes['duplicates']} listed twice")
+    warning = pill(f"{WARNING}&nbsp;pay", YELLOW_TEXT, YELLOW_BG)
     rows.append(f'<tr><td style="padding:22px 0 0 0;font-size:12px;line-height:18px;'
                 f'color:{MUTED};{F}">' + (" · ".join(facts) + "<br>" if facts else "")
                 + f'Scores are weighted averages of 1–10 ratings against <a href="{e(leads_url)}" '
                 f'style="color:{CYAN}">what you\'re looking for</a>: {weights}. A deal-breaker '
                 f'caps the score at {config.DEAL_BREAKER_CAP:g}; a stated 9/80 or 4/10 '
                 f'schedule adds {config.SCHEDULE_BONUS:g}. '
-                f'{pill(f"{WARNING}&nbsp;pay", YELLOW_TEXT, YELLOW_BG)} marks an estimate or missing '
+                f'{warning} marks an estimate or missing '
                 f'pay; pay the review couldn\'t find is left out of the score.</td></tr>')
 
     html_out = (f'<!DOCTYPE html><html><head><meta charset="utf-8">'
@@ -379,7 +390,8 @@ def render_text(today: date, leads: list[dict], attention: list[logic.Attention]
         lines.append("Nothing new today.")
     by_tier = tiers(leads)
     full = by_tier["strong"][:TEXT_FULL]           # in full, with their links
-    others = by_tier["strong"][TEXT_FULL:] + by_tier["maybe"] + by_tier["weak"] + by_tier["unscored"]
+    others = (by_tier["strong"][TEXT_FULL:] + by_tier["maybe"] + by_tier["weak"]
+              + by_tier["unscored"])
     for lead in full:
         state, pay = logic.pay_state(lead.get("salary_min"), lead.get("salary_max"),
                                      lead.get("pay_source"))
@@ -402,7 +414,7 @@ def render_text(today: date, leads: list[dict], attention: list[logic.Attention]
         lines.append("")
     if attention:
         lines.append("On your plate today:")
-        lines += [f"- {ATTENTION.get(i.kind, (None, i.kind))[1]}: {i.headline}: {i.detail}"
+        lines += [f"- {logic.ATTENTION_LABELS.get(i.kind, i.kind)}: {i.headline}: {i.detail}"
                   for i in attention]
         lines.append("")
     lines.append(f"Job Leads: {page(app_url, 'Job_Leads')}")

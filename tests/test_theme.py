@@ -50,11 +50,13 @@ def test_config_toml_draws_the_light_look_first():
 def test_apply_switches_the_process_theme():
     theme.apply(theme.DARK)
     assert theme.current() == theme.DARK
-    assert config.get_option("theme.backgroundColor") == theme.PALETTES[theme.DARK]["backgroundColor"]
+    assert (config.get_option("theme.backgroundColor")
+            == theme.PALETTES[theme.DARK]["backgroundColor"])
     assert config.get_option("theme.sidebar.backgroundColor") == "#0d121e"
     theme.apply(theme.LIGHT)
     assert theme.current() == theme.LIGHT
-    assert config.get_option("theme.backgroundColor") == theme.PALETTES[theme.LIGHT]["backgroundColor"]
+    assert (config.get_option("theme.backgroundColor")
+            == theme.PALETTES[theme.LIGHT]["backgroundColor"])
     config.set_option("theme.backgroundColor", "#123456")      # neither palette: not applied yet
     assert theme.current() is None
 

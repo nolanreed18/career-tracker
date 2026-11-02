@@ -103,6 +103,14 @@ GREENHOUSE = re.compile(r"^https://(?:boards|job-boards)\.greenhouse\.io/([^/?#]
 LEVER = re.compile(r"^https://jobs\.lever\.co/([^/?#]+)/([0-9a-f-]{36})")
 
 
+def employer_link(url) -> bool:
+    """Whether the address is a posting on the employer's own Workday,
+    Greenhouse or Lever site (the kind a watched company's lead carries),
+    so there is nothing left to find."""
+    url = str(url or "").strip()
+    return any(system.match(url) for system in (WORKDAY, GREENHOUSE, LEVER))
+
+
 def employer_posting(url) -> Posting | None:
     """The posting as the employer's site has it, from data rather than a
     page's loose text: a Workday, Greenhouse or Lever feed, or any other
@@ -132,8 +140,8 @@ def employer_posting(url) -> Posting | None:
             data = _json(f"https://api.lever.co/v0/postings/{company}/{posting_id}")
             parts = [str(data.get("descriptionPlain") or "")]
             for block in data.get("lists") or []:
-                parts.append(f"{block.get('text', '')}\n"
-                             + text_of(lxml.html.fromstring(f"<ul>{block.get('content', '')}</ul>")))
+                items = lxml.html.fromstring(f"<ul>{block.get('content', '')}</ul>")
+                parts.append(f"{block.get('text', '')}\n{text_of(items)}")
             return Posting(str(data.get("text") or ""), "",
                            str((data.get("categories") or {}).get("location") or ""),
                            "\n\n".join(p for p in parts if p.strip())[:config.POSTING_MAX_CHARS])

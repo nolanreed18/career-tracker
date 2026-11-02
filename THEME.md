@@ -461,7 +461,8 @@ def stylesheet(mode: str, phone: bool = False) -> str:
     background: transparent; border: none; color: var(--ct-text2); font-weight: 600;
     white-space: nowrap; cursor: pointer;
     transition: background var(--ct-ease), color var(--ct-ease); }}
-[data-testid="stRadioOption"] > div > div > div:not([data-testid]) {{ display: none; }}  /* the dot */
+/* The radio's dot: hidden, the pill's colour says which one is chosen. */
+[data-testid="stRadioOption"] > div > div > div:not([data-testid]) {{ display: none; }}
 [data-testid="stRadioOption"] div, [data-testid="stRadioOption"] p {{ color: inherit; }}
 [data-testid="stRadioOption"] p {{ font-size: 0.8rem; }}
 [data-testid="stRadioOption"]:hover {{ background: var(--ct-track-hover); color: var(--ct-text); }}
@@ -477,8 +478,7 @@ def stylesheet(mode: str, phone: bool = False) -> str:
 /* No "Press Enter to submit form" hint inside inputs: it sits on the value. */
 [data-testid="InputInstructions"] {{ display: none; }}
 
-/* Tabs, expanders, sidebar navigation. */
-[data-testid="stTab"] p {{ font-weight: 600; font-size: 0.85rem; }}
+/* Expanders and sidebar navigation. */
 [data-testid="stExpander"] details {{ background: var(--ct-card); border-radius: 12px;
     transition: border-color var(--ct-ease); }}
 [data-testid="stExpander"] details:hover {{ border-color: var(--ct-blue); }}

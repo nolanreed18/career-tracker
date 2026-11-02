@@ -113,6 +113,10 @@ def test_a_recent_past_interview_counts_as_an_update():
 
 # ---- pipeline ---------------------------------------------------------------
 
+def test_every_attention_kind_has_its_order_and_label():
+    assert set(logic.ATTENTION_LABELS) == set(logic.ORDER)
+
+
 def test_pipeline_counts_every_status_in_order():
     pipe = logic.pipeline(apps({"status": "applied"}, {"status": "applied"},
                                {"status": "offer"}))
@@ -351,7 +355,8 @@ def test_a_projects_spreadsheet_becomes_text_for_claude():
         {"Company": "FHR", "ProjectTitle": None, "QuickSummary": "skipped: no title"},
     ])
     text = logic.projects_text(frame)
-    assert text.startswith("Project: USMCA Tool\nCompany: FHR\nRank: 5\nSummary: Compliance checks.")
+    assert text.startswith("Project: USMCA Tool\nCompany: FHR\nRank: 5\n"
+                           "Summary: Compliance checks.")
     assert "Result: Zero misses." in text and "skipped" not in text
     assert logic.projects_text(pd.DataFrame(columns=["ProjectTitle"])) == ""
 
@@ -459,6 +464,7 @@ def test_a_tailored_version_is_measured_against_the_master_and_ends_bullets_its_
     assert [b["text"] for b in stripped["roles"][0]["bullets"]] == ["Did x for finance", "Did y"]
     assert logic.match_endings(tailored, {"roles": []}) == tailored
     assert logic.place("Remote", "remote") == ["Remote"]
+    assert logic.place("Remote (US)", "remote") == ["Remote (US)"]       # the location says it
     assert logic.place("Denver, CO", "hybrid") == ["Denver, CO", "Hybrid"]
     assert logic.place("Plainview, TX", "remote") == ["Plainview, TX", "Remote"]
     assert logic.place(None, "onsite") == ["Onsite"] and logic.place("", None) == []
@@ -474,7 +480,8 @@ def test_a_job_board_link_is_told_from_an_employers_own_site():
     assert logic.is_job_board("https://www.linkedin.com/jobs/view/1/")
     assert logic.is_job_board("https://www.indeed.com/viewjob?jk=1") and logic.is_job_board("https://builtin.com/job/1")
     assert not logic.is_job_board("https://bp.wd3.myworkdayjobs.com/en-US/bpx/job/R1")
-    assert not logic.is_job_board("https://boards.greenhouse.io/acme/jobs/1") and not logic.is_job_board(None)
+    assert not logic.is_job_board("https://boards.greenhouse.io/acme/jobs/1")
+    assert not logic.is_job_board(None)
 
 
 def test_dismiss_reasons_are_split_from_their_stored_form():
@@ -633,7 +640,8 @@ def test_a_projects_bullet_goes_into_the_masters_pool_where_it_belongs():
     assert logic.add_to_master(added, work, "Rebuilt the rates tool.", 4)[1] == "already"
     assert logic.add_to_master(master, {**work, "employer": "Beta"}, "x", 3)[1] == ""
     personal, where = logic.add_to_master(master, {"title": "Fitness tracker"}, "Built it.", 3)
-    assert where == "Fitness tracker" and personal["projects"][0]["bullets"][0]["text"] == "Built it."
+    assert where == "Fitness tracker"
+    assert personal["projects"][0]["bullets"][0]["text"] == "Built it."
     fresh, where = logic.add_to_master(master, {"title": "Budget app"}, "Built a budget.", 3)
     assert where == "Budget app" and fresh["projects"][-1]["employer"] == "Budget app"
     assert [logic.project_rank(s) for s in (1, 5, 8, 10, None, "x")] == [1, 2, 4, 5, 3, 3]

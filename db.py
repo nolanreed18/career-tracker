@@ -32,12 +32,18 @@ LOCAL_TZ = ZoneInfo("America/Chicago")
 load_dotenv(ROOT / ".env")
 
 
-def _streamlit_secret() -> str | None:
-    """DATABASE_URL from st.secrets, but only inside a running Streamlit app.
+def secret(name: str):
+    """A secret by name: the environment first (.env on a computer, the
+    cloud session's variables), else the running app's secrets on Community
+    Cloud; None when neither has it. The one lookup for DATABASE_URL,
+    ANTHROPIC_API_KEY, APP_PASSWORD, ALLOWED_EMAILS and the [auth] section.
 
-    Looked up through sys.modules so a script never imports Streamlit, and
-    gated on runtime.exists() so a script keeps the .env message.
+    Streamlit is looked up through sys.modules so a script never imports it,
+    and gated on runtime.exists() so a script keeps the .env message.
     """
+    value = os.environ.get(name)
+    if value is not None:
+        return value
     st = sys.modules.get("streamlit")
     if st is None:
         return None
@@ -46,13 +52,13 @@ def _streamlit_secret() -> str | None:
     if not runtime.exists():
         return None
     try:
-        return st.secrets["DATABASE_URL"]
+        return st.secrets[name]
     except (KeyError, FileNotFoundError):  # no such key, or no secrets at all
         return None
 
 
 def get_dsn() -> str:
-    dsn = os.environ.get("DATABASE_URL") or _streamlit_secret()
+    dsn = secret("DATABASE_URL")
     if not dsn:
         raise SystemExit(
             "DATABASE_URL is not set. Add it to .env at the project root, "

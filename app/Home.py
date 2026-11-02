@@ -29,7 +29,7 @@ setup("Career Tracker", f"{today:%A, %B %-d}")
 apps = data.applications()
 interviews = data.interviews()
 
-stats = data.lead_stats()
+stats = data.lead_stats(today)
 tiles = st.columns(2 + len(config.HOME_FIT_MARKS), gap="xsmall", wrap=False)
 tiles[0].metric("Reviewed", stats["reviewed"], border=True)
 tiles[1].metric("Avg fit", "—" if stats["average_fit"] is None
