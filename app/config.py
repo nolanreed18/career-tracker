@@ -1,7 +1,9 @@
 """Knobs. Anything you might want to tune lives here.
 
-The lists below are also enforced by CHECK constraints in schema.sql; change
-both together (tests/test_data.py fails if they drift apart).
+The status and kind lists (statuses, work modes, lead statuses, apply states,
+pay sources, dismiss reasons, resume source kinds, project kinds) are also
+enforced by CHECK constraints in schema.sql; change both together
+(tests/test_data.py fails if they drift apart).
 """
 
 # An open application with no update for this many days is flagged on Home

@@ -1,8 +1,10 @@
-"""Shared database helpers.
+"""Shared database helpers: the secrets, a Postgres connection, and SQL over
+Neon's HTTPS endpoint for the daily review's cloud session (HttpCursor).
 
-DATABASE_URL comes from the environment, which scripts fill from .env next to
-this file. A running Streamlit app with no .env -- Community Cloud -- falls
-back to st.secrets. Neither path ever prints the value.
+DATABASE_URL (and every other secret) comes from the environment, which
+scripts fill from .env next to this file. A running Streamlit app with no
+.env -- Community Cloud -- falls back to st.secrets. Neither path ever
+prints the value.
 """
 
 import datetime

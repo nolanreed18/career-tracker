@@ -1,6 +1,8 @@
 """Word files for the resume tools: reading an uploaded file as text with
-its structure (for Claude), and writing the master resume's data back into a
-Word file modelled on the owner's own resume. No database, no Streamlit.
+its structure (for Claude), writing a resume (the master or a tailored
+version) back into a Word file modelled on the owner's own resume, a cover
+letter in the same look, and measuring the template's column. No database,
+no Streamlit.
 
 The writer never styles anything itself. It finds one example of each kind
 of paragraph in the template (the heading with the rule under it, an

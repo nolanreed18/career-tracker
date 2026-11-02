@@ -1,5 +1,7 @@
-"""A job posting read from its web page, for tailoring the resume: the
-title, employer, place and description as text.
+"""Job postings from the web: a posting read from its link (title,
+employer, place and description as text, for tailoring the resume), the
+employer's own copy from a Workday, Greenhouse or Lever feed, a careers
+site searched for a title, and a watched careers site's list of open jobs.
 
 LinkedIn hands anyone a guest copy of a posting (its jobs-guest endpoint),
 which is what fetch() reads for a LinkedIn link. Indeed and Glassdoor
@@ -7,7 +9,8 @@ answer a server with 401 or 403, so those links come back as a
 PostingError that says to paste the posting instead. Any other page is
 read as it is: its JobPosting data (schema.org JSON-LD, which most career
 sites and applicant-tracking systems publish) when it has it, else the
-page's main text. Pure except fetch() and _get().
+page's main text. The network is reached only through _get() and
+_post_json(), which the tests stand in for.
 """
 
 import html

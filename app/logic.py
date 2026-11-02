@@ -1,6 +1,8 @@
 """Pure calculations over the frames data.py returns: what needs attention,
-the stats, formatting, and reading an imported spreadsheet. No database and
-no Streamlit, so all of it is tested directly.
+Home's pipeline and weekly counts, formatting, job leads (cleaning, scoring,
+pay, schedules, the watched careers sites), the master resume and its
+tailored versions, and the project bank. No database and no Streamlit, so
+all of it is tested directly.
 """
 
 import calendar

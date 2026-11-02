@@ -8,8 +8,10 @@ One connection per process, in autocommit, shared by every page. Neon
 suspends idle databases, so a connection idle for PING_AFTER_IDLE_S or more
 is pinged before use and replaced if it has died. The first connection a
 process opens also runs schema.sql -- every statement in it is "if not
-exists" -- so a brand-new database gets its tables the first time the app
-opens, with nothing to run by hand.
+exists" -- and then MIGRATIONS, so a brand-new database gets its tables the
+first time the app opens and an older one catches up, with nothing to run by
+hand. The daily review's cloud session can't open a connection: use_http()
+sends each statement over Neon's HTTPS endpoint instead (db.HttpCursor).
 """
 
 import json
