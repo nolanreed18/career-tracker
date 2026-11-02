@@ -88,10 +88,12 @@ the inbox, never in this public repository.
    with `source` ("bp careers site"), `job_url` (the employer's own posting),
    and, read from that posting, `salary` with `pay_source` "listed" when it
    states one and `schedule` when it says one, plus a `summary` of the
-   posting to rate it by. Don't look up pay for them in step 5 (the posting
-   was already read), and count them under their `source` in step 8's
-   `sources`. A `problems` entry means a site couldn't be read: say so in
-   the run's final message, not in the digest.
+   posting to rate it by. A row with a `summary` had its posting read: don't
+   look up its pay in step 5. A row without one (past the first
+   `WATCH_MAX_JOBS`, which `problems` says) is treated like an alert job.
+   Count them in step 8's `watched`, not in `sources` (those are alert
+   emails). Any other `problems` entry means a site couldn't be read: say
+   so in the run's final message, not in the digest.
 
 5. **Find the pay** for each new job whose email gave none, but only when
    its role and location would both rate at least the rubric's
@@ -156,14 +158,16 @@ the inbox, never in this public repository.
 
    ```json
    {"app_url": "<the app link from the scheduled task's prompt>",
-    "emails_read": 5, "sources": {"LinkedIn": 4, "Indeed": 1},
+    "emails_read": 5, "sources": {"LinkedIn": 4, "Indeed": 1}, "watched": 2,
     "already_known": 2, "duplicates": 1, "problem": null}
    ```
 
-   (`problem`: what failed, if a step did; otherwise null.) Then:
+   (`sources`: alert emails per site; `watched`: jobs that came from
+   `leads.py watch`; `problem`: what failed, if a step did, otherwise null.)
+   Then:
 
    ```
-   python3 leads.py digest run.json
+   python3 leads.py digest <that file>
    ```
 
    It prints `subject`, `html` and `text`. Send one email with

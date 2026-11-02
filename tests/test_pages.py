@@ -184,6 +184,25 @@ def test_an_interview_is_added_edited_and_deleted_on_its_application():
     assert data.interviews(busy)["round"].tolist() == ["Onsite"]
 
 
+def test_the_list_is_searched_and_the_history_section_lists_every_update():
+    seed()
+    at = run(APPS)
+    widget(at.text_input, "Search").set_value("beta").run()
+    assert widget(at.selectbox, "Open an application").options == ["Beta — PM"]
+    assert at.dataframe[0].value["status"].tolist() == ["Interviewing"]     # a plain name
+    widget(at.text_input, "Search").set_value("nobody").run()
+    assert any("Nothing matches" in h.value for h in at.get("html"))
+    widget(at.text_input, "Search").set_value("").run()
+    busy = int(data.applications().query("role == 'PM'")["application_id"].iloc[0])
+    data.set_status(busy, "interviewing", TODAY, "Second round booked")
+    at.session_state["open_application"] = busy
+    at.run()
+    widget(at.radio, "Section").set_value("History").run()
+    history = at.dataframe[-1].value
+    assert history["status"].tolist() == ["Interviewing", "Interviewing"]
+    assert history["note"].tolist() == ["", "Second round booked"]
+
+
 def test_tables_show_blanks_not_none_for_missing_values():
     seed()
     data.add_application(data.company_id_for("Acme", TODAY), "Saved one", "saved", TODAY)
@@ -384,8 +403,8 @@ def test_a_lead_shows_listed_pay_plainly_and_a_warning_when_pay_is_missing_or_es
     assert any("Analytics Engineer" not in c and "\\$120,000\u2060–\u2060\\$140,000" in c
                for c in captions)
     assert any(":yellow-badge[:material/warning: Pay not listed]" in c for c in captions)
-    assert any(":yellow-badge[:material/warning: \\~\\$130,000\u2060–\u2060\\$150,000 (estimate)] · "
-               "Levels.fyi range, Data Engineer, Denver" in c for c in captions)
+    estimate = ":yellow-badge[:material/warning: \\~\\$130,000\u2060–\u2060\\$150,000 (estimate)]"
+    assert any(f"{estimate} · Levels.fyi range, Data Engineer, Denver" in c for c in captions)
 
 
 def test_dismissing_a_lead_asks_why_and_restore_brings_it_back(phone):
@@ -459,6 +478,32 @@ def test_moving_a_lead_creates_the_application_and_reads_its_posting(monkeypatch
     assert saved["apply_url"] is None                          # no Claude key: no search
     assert at.session_state["flash"] == ("Added to Applications as Saved. "
                                          "Posting read (260 characters).")
+
+
+def test_a_watched_companys_lead_is_its_own_apply_link_with_no_search_and_no_key(monkeypatch,
+                                                                                phone):
+    import posting
+    link = "https://bp.wd3.myworkdayjobs.com/bpCareers/job/Denver/Planner-Scheduler_RQ1"
+    data.add_leads([logic.clean_lead({"source": "bp careers site", "title": "Planner/Scheduler",
+                                      "company": "bp", "fit_score": 8, "job_url": link,
+                                      "location": "Denver, Colorado"})[0]], TODAY)
+    monkeypatch.setattr(posting, "fetch", lambda url: posting.Posting(
+        "Planner/Scheduler", "bp", "Denver, Colorado", "Plan the schedule. " * 20))
+    monkeypatch.setattr(posting, "on_careers_site",
+                        lambda *args: pytest.fail("the site was searched for its own posting"))
+    monkeypatch.setattr(posting, "employer_posting", lambda url: posting.Posting(
+        "Planner/Scheduler", "", "Denver, Colorado", "Plan the schedule. " * 20))
+    at = run(LEADS)
+    widget(at.button, "Add").click().run()
+    app = data.applications().query("company == 'bp'").iloc[0]
+    saved = data.application(int(app["application_id"]))
+    assert (saved["apply_url"], saved["apply_state"]) == (link, "found")
+    assert saved["apply_note"] == ("Listed there as Planner/Scheduler in Denver, Colorado. Read "
+                                   "from the employer's site. The job link is the employer's own "
+                                   "posting.")
+    assert at.session_state["flash"].endswith(
+        "Found it on the employer's site: Planner/Scheduler, Denver, Colorado (free).")
+    assert data.ai_usage_since(TODAY)[0] == 0                         # no key, no Claude
 
 
 def test_adding_a_lead_has_claude_find_it_on_the_employers_site(monkeypatch, phone):
@@ -829,8 +874,8 @@ def test_building_the_master_lands_on_the_master_section(monkeypatch):
     import docx_fixture
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     data.add_resume_source("Resume.docx", "resume", "## Sample", docx_fixture.template(), TODAY)
-    monkeypatch.setattr(ai, "structure_resume",
-                        lambda texts: (docx_fixture.SAMPLE, ai.Usage("claude-opus-5-5", 6000, 8000)))
+    monkeypatch.setattr(ai, "structure_resume", lambda texts: (
+        docx_fixture.SAMPLE, ai.Usage("claude-opus-5-5", 6000, 8000)))
     at = run(RESUME)
     widget(at.radio, "Section").set_value("Build from files").run()
     click(at, "Build the master with Claude")
@@ -909,7 +954,27 @@ def test_tailor_section_makes_a_version_with_both_downloads_and_saves_edits(monk
     click(at, "Save")
     saved = data.tailored(int(version["tailor_id"]))["content"]
     assert saved["cover_letter"] == "Dear Hiring Team,\n\nEdited."
-    assert saved["roles"][0]["bullets"][0]["original"] == "Built a pipeline that saved 2 hours a day."
+    assert (saved["roles"][0]["bullets"][0]["original"]
+            == "Built a pipeline that saved 2 hours a day.")
+
+
+def test_a_failed_tailoring_shows_the_error_and_still_logs_its_cost(monkeypatch):
+    import ai
+    import docx_fixture
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    data.save_resume_master(docx_fixture.SAMPLE, TODAY)
+    data.add_application(data.company_id_for("Acme Corp.", TODAY), "Analyst", "saved", TODAY,
+                         posting="We need SQL.")
+    monkeypatch.setattr(ai, "tailor", lambda *args: (_ for _ in ()).throw(ai.AIError(
+        "Claude's answer ran past the token limit and was cut off. Try again.",
+        ai.Usage("claude-opus-5-5", 6000, 8000))))
+    at = run(RESUME)
+    widget(at.radio, "Section").set_value("Resume Builder").run()
+    click(at, "Tailor with Claude")
+    assert at.error[0].value.startswith("Claude's answer ran past the token limit")
+    assert data.ai_usage_since(TODAY) == (1, 0.184)                  # the failed call cost that
+    assert data.tailored_versions(int(data.applications()["application_id"].iloc[0])).empty
+    assert any(c.value == "No tailored version yet." for c in at.caption)
 
 
 def test_a_tailored_version_longer_than_the_master_gets_a_warning():
@@ -1019,7 +1084,7 @@ def test_an_application_shows_its_resume_flag_and_opens_resume_builder():
     assert at.dataframe[0].value.set_index("role").loc["Data Analyst", "resume"]
     assert any(":green-badge[Resume ready] 1 tailored version with cover letter" in m.value
                for m in at.markdown)
-    widget(at.button, "Resume Builder").click().run()     # the page switch itself is outside AppTest
+    widget(at.button, "Resume Builder").click().run()     # the page switch is outside AppTest
     assert at.session_state["tailor_application"] == app_id
     assert at.session_state["resume_goto"] == "Resume Builder"
 
@@ -1068,7 +1133,7 @@ def test_projects_import_score_review_and_feed_the_master(monkeypatch):
     assert not any(b.label.startswith("Import") for b in at.button)       # nothing left to import
     assert any(m.value == ":green-badge[1 strong] :red-badge[1 need detail]"   # no "0 thin"
                for m in at.markdown)
-    assert at.dataframe[0].value["Project"].tolist() == ["Valve study", "Rates tool"]  # weakest first
+    assert at.dataframe[0].value["Project"].tolist() == ["Valve study", "Rates tool"]  # weakest 1st
     valves, rates = int(bank.loc["Valve study", "project_id"]), int(bank.loc["Rates tool",
                                                                              "project_id"])
     assert widget(at.selectbox, "Project").value == valves

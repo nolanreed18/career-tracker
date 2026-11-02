@@ -42,10 +42,6 @@ _last_used = 0.0
 _schema_ready = False
 
 
-class InUse(Exception):
-    """A delete refused because other rows still point at this one."""
-
-
 def today() -> date:
     return datetime.now(db.LOCAL_TZ).date()
 
@@ -114,6 +110,14 @@ MIGRATIONS = [
     "drop table if exists positions",
     # 2026-11: employers whose careers sites the review checks itself.
     "alter table job_profile add column if not exists watch_companies text",
+    # 2026-11: a company is a name now (the Companies page went); the details
+    # nothing wrote since, and the rows no application points at, go.
+    "alter table companies drop column if exists website",
+    "alter table companies drop column if exists industry",
+    "alter table companies drop column if exists location",
+    "alter table companies drop column if exists notes",
+    """delete from companies c
+        where not exists (select 1 from applications a where a.company_id = c.company_id)""",
 ]
 
 
@@ -226,10 +230,15 @@ def _insert(table: str, key: str, fields: dict) -> int:
         return cur.fetchone()[0]
 
 
-def _update(table: str, key: str, key_value: int, fields: dict, allowed: set[str]) -> None:
+def _check_fields(what: str, fields: dict, allowed: set[str]) -> None:
+    """Refuse a write that names a column the table doesn't take."""
     unknown = set(fields) - allowed
     if unknown:
-        raise ValueError(f"cannot update {sorted(unknown)} on {table}")
+        raise ValueError(f"unknown {what} fields {sorted(unknown)}")
+
+
+def _update(table: str, key: str, key_value: int, fields: dict, allowed: set[str]) -> None:
+    _check_fields(f"{table} update", fields, allowed)
     if not fields:
         return
     cleaned = {k: _clean(v) for k, v in fields.items()}
@@ -245,25 +254,31 @@ def _update(table: str, key: str, key_value: int, fields: dict, allowed: set[str
         cur.execute(query, {**cleaned, "_key": key_value})
 
 
-def _delete(table: str, key: str, key_value: int, in_use_message: str = "") -> None:
+def _delete(table: str, key: str, key_value: int) -> None:
     query = sql.SQL("delete from {} where {} = %s").format(
         sql.Identifier(table), sql.Identifier(key))
-    try:
-        with _cursor() as cur:
-            cur.execute(query, (key_value,))
-    except psycopg.errors.IntegrityError as exc:
-        # ForeignKeyViolation or RestrictViolation, depending on the Postgres version.
-        raise InUse(in_use_message or "other records still use this one") from exc
+    with _cursor() as cur:
+        cur.execute(query, (key_value,))
 
 
 # ---- companies --------------------------------------------------------------
 
 def companies() -> pd.DataFrame:
+    """Every employer with its applications count, by name. A company exists
+    while an application points at it."""
     return _read("""
         select c.*, count(a.application_id) as applications
         from companies c left join applications a using (company_id)
         group by c.company_id
         order by lower(c.name)
+    """)
+
+
+def _prune_companies(cur) -> None:
+    """Drop the companies no application points at any more."""
+    cur.execute("""
+        delete from companies c
+        where not exists (select 1 from applications a where a.company_id = c.company_id)
     """)
 
 
@@ -322,9 +337,7 @@ def add_application(company_id: int, role: str, status: str, on: date,
     `on`. The first history row is dated applied_on when there is one -- an
     application entered late, or imported, keeps its real age.
     """
-    unknown = set(fields) - APPLICATION_FIELDS
-    if unknown:
-        raise ValueError(f"unknown application fields {sorted(unknown)}")
+    _check_fields("application", fields, APPLICATION_FIELDS)
     if status != "saved" and applied_on is None:
         applied_on = on
     with _transaction():
@@ -360,7 +373,12 @@ def set_status(application_id: int, status: str, on: date, note: str | None = No
 
 
 def update_application(application_id: int, **fields) -> None:
-    _update("applications", "application_id", application_id, fields, APPLICATION_FIELDS)
+    """Change an application's details; moving it to another company drops
+    the old one when nothing else points at it."""
+    with _transaction() as cur:
+        _update("applications", "application_id", application_id, fields, APPLICATION_FIELDS)
+        if "company_id" in fields:
+            _prune_companies(cur)
 
 
 def company_apply_links(company_id: int) -> list[str]:
@@ -375,8 +393,11 @@ def company_apply_links(company_id: int) -> list[str]:
 
 
 def delete_application(application_id: int) -> None:
-    """Deletes its history and interviews with it."""
-    _delete("applications", "application_id", application_id)
+    """Deletes its history, interviews and tailored resumes with it, and its
+    company when that was its last application."""
+    with _transaction() as cur:
+        _delete("applications", "application_id", application_id)
+        _prune_companies(cur)
 
 
 def events(application_id: int) -> pd.DataFrame:
@@ -406,9 +427,7 @@ def interviews(application_id: int | None = None) -> pd.DataFrame:
 
 
 def add_interview(application_id: int, scheduled_on: date, **fields) -> int:
-    unknown = set(fields) - INTERVIEW_FIELDS
-    if unknown:
-        raise ValueError(f"unknown interview fields {sorted(unknown)}")
+    _check_fields("interview", fields, INTERVIEW_FIELDS)
     return _insert("interviews", "interview_id", {
         "application_id": application_id, "scheduled_on": scheduled_on, **fields})
 
@@ -434,9 +453,7 @@ def job_profile() -> dict | None:
 
 def save_job_profile(on: date, **fields) -> None:
     """Create or replace what you're looking for (there is only one)."""
-    unknown = set(fields) - PROFILE_FIELDS
-    if unknown:
-        raise ValueError(f"unknown profile fields {sorted(unknown)}")
+    _check_fields("profile", fields, PROFILE_FIELDS)
     cleaned = {k: _clean(fields.get(k)) for k in sorted(PROFILE_FIELDS)}
     columns = ["profile_id", *cleaned, "updated_on"]
     query = sql.SQL("""
@@ -467,17 +484,19 @@ def lead(lead_id: int) -> dict | None:
     return _one("select * from job_leads where lead_id = %s", (lead_id,))
 
 
-def lead_stats(marks: tuple[float, ...] = config.HOME_FIT_MARKS) -> dict:
+def lead_stats(today: date, marks: tuple[float, ...] = config.HOME_FIT_MARKS) -> dict:
     """How the lead pipeline stands: how many postings the review has scored
     in all (reviewed), their average fit, and how many still sit new in the
-    inbox at or above each mark (waiting, in the marks' order)."""
+    inbox at or above each mark (waiting, in the marks' order; stale leads,
+    which the inbox hides, aren't counted)."""
     counts = ", ".join(
-        f"count(*) filter (where status = 'new' and fit_score >= %s) as waiting_{n}"
-        for n in range(len(marks)))
+        f"count(*) filter (where status = 'new' and found_on >= %s and fit_score >= %s) "
+        f"as waiting_{n}" for n in range(len(marks)))
+    since = today - timedelta(days=config.LEAD_STALE_DAYS)       # as logic.is_stale draws it
     row = _one(f"""
         select count(*) as reviewed, avg(fit_score) as average_fit{", " + counts if marks else ""}
         from job_leads
-    """, tuple(marks)) or {}
+    """, tuple(p for mark in marks for p in (since, mark))) or {}
     return {"reviewed": int(row.get("reviewed") or 0),
             "average_fit": None if row.get("average_fit") is None else float(row["average_fit"]),
             "waiting": [int(row.get(f"waiting_{n}") or 0) for n in range(len(marks))]}
@@ -553,7 +572,7 @@ def strong_leads_waiting(today: date) -> pd.DataFrame:
     stale), best first: the digest's reminder."""
     return _read("""
         select * from job_leads
-        where status = 'new' and found_on < %s and found_on > %s and fit_score >= %s
+        where status = 'new' and found_on < %s and found_on >= %s and fit_score >= %s
         order by fit_score desc, found_on desc, lead_id
     """, (today, today - timedelta(days=config.LEAD_STALE_DAYS), config.STRONG_FIT))
 
@@ -618,9 +637,7 @@ def project(project_id: int) -> dict | None:
 
 
 def add_project(on: date, **fields) -> int:
-    unknown = set(fields) - PROJECT_FIELDS
-    if unknown:
-        raise ValueError(f"unknown project fields {sorted(unknown)}")
+    _check_fields("project", fields, PROJECT_FIELDS)
     return _insert("career_projects", "project_id",
                    {**fields, "created_on": on, "updated_on": on})
 
@@ -694,7 +711,8 @@ def set_resume_template(source_id: int | None, on: date) -> None:
 def resume_template() -> bytes | None:
     """The Word file the export is modelled on, or None."""
     row = _one("""
-        select s.bytes from resume_master m join resume_sources s on s.source_id = m.template_source_id
+        select s.bytes from resume_master m
+        join resume_sources s on s.source_id = m.template_source_id
         where m.profile_id = 1 and s.bytes is not null
     """)
     return None if row is None else bytes(row["bytes"])

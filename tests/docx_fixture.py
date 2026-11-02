@@ -100,8 +100,8 @@ SAMPLE = {
     "linkedin": "linkedin.com/in/sample",
     "roles": [{"employer": "Acme Energy", "title": "Business Analyst", "location": "Denver, CO",
                "start": "Jan 2025", "end": "Present", "bullets": [
-                   {"text": "Built a pipeline that saved 2 hours a day.", "skills": ["Python", "SQL"],
-                    "source": "resume", "rank": 4, "in_master": True},
+                   {"text": "Built a pipeline that saved 2 hours a day.",
+                    "skills": ["Python", "SQL"], "source": "resume", "rank": 4, "in_master": True},
                    {"text": "Pool bullet, not on the master.", "skills": [], "source": "history",
                     "rank": 2, "in_master": False}]},
               {"employer": "Beta Chemicals", "title": "Project Engineer", "location": "Houston, TX",

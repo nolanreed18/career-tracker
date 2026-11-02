@@ -29,7 +29,6 @@ from ui import (
     sections,
     setup,
     status_badge,
-    status_label,
 )
 
 setup("Applications", "Add one, find one, keep it up to date")
@@ -42,9 +41,8 @@ def rating_index(rating) -> int:
 
 
 today = data.today()
-companies = data.companies()
-# Ones still in use: a company whose applications were all deleted drops out.
-company_names = companies.loc[companies["applications"] > 0, "name"].tolist()
+companies = data.companies()          # every one has an application (data prunes the rest)
+company_names = companies["name"].tolist()
 
 
 # ---- add --------------------------------------------------------------------
@@ -58,7 +56,7 @@ if disclosure("Add an application", "add_application"):
         role = st.text_input("Role")
         status_col, date_col = st.columns(2)
         status = status_col.selectbox("Status", config.STATUSES, index=1,
-                                      format_func=status_label, help=STATUS_HELP)
+                                      format_func=str.capitalize, help=STATUS_HELP)
         applied_on = date_col.date_input("Applied on", value=today,
                                          help="Ignored while the status is Saved.")
         job_url = st.text_input("Job posting link")
@@ -115,7 +113,7 @@ with list_area:
     if show == "Open":
         view = view[view["status"].isin(config.OPEN_STATUSES)]
     elif show == "Closed":
-        view = view[~view["status"].isin(config.OPEN_STATUSES)]
+        view = view[view["status"].isin(config.CLOSED_STATUSES)]
     if search.strip():
         term = search.strip()
         view = view[view["company"].str.contains(term, case=False, regex=False)
@@ -130,7 +128,7 @@ with list_area:
     elif not phone:                                 # a phone picks from the list below instead
         st.caption("Click a row to open it.")
         table = st.dataframe(                   # beside the open one: who, what, where it stands
-            view.assign(status=view["status"].map(status_label), resume=view["tailored"] > 0)[
+            view.assign(status=view["status"].map(str.capitalize), resume=view["tailored"] > 0)[
                 ["company", "role", "status", "resume"]],
             hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
             key=round_key("apps_table"),
@@ -236,7 +234,7 @@ with detail_area:
             status_col, on_col = st.columns(2)
             new_status = status_col.selectbox(
                 "Status", config.STATUSES, index=index_of(config.STATUSES, app["status"]),
-                format_func=status_label, help=STATUS_HELP)
+                format_func=str.capitalize, help=STATUS_HELP)
             on = on_col.date_input("On", value=today)
             note = st.text_input("What happened?", placeholder="e.g. Emailed the recruiter")
             step_col, step_date_col = st.columns(2)
@@ -380,7 +378,7 @@ with detail_area:
     if section == "History":
         history = data.events(picked)
         st.dataframe(
-            logic.for_display(history.assign(status=history["status"].map(status_label))[
+            logic.for_display(history.assign(status=history["status"].map(str.capitalize))[
                 ["happened_on", "status", "note"]], dates=("happened_on",)),
             hide_index=True, width="stretch",
             column_config={"happened_on": st.column_config.DateColumn("Date", format="MMM D, YYYY"),

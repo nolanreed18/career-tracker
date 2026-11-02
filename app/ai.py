@@ -1,24 +1,30 @@
-"""Claude, for the resume tools. Every call here is behind a button the
-owner clicks; nothing calls Claude on its own. The key comes from
-ANTHROPIC_API_KEY (.env locally, the app's secrets on Community Cloud) and
-is never printed. Pure apart from the API itself: no database, no Streamlit
-widgets (the key lookup mirrors db.py's secrets fallback)."""
+"""Claude, for the resume tools (building the master, tailoring, reviewing a
+project) and the employer-site posting search Job Leads and Applications
+run. Every call here is behind a button the owner clicks; nothing calls
+Claude on its own. The key comes from ANTHROPIC_API_KEY (.env locally, the
+app's secrets on Community Cloud; db.secret) and is never printed. Pure
+apart from the API itself: no database, no Streamlit widgets."""
 
 import json
-import os
 import re
 import sys
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 import anthropic
 import pydantic
 from anthropic.lib._parse._transform import transform_schema  # what parse() sends
 from pydantic import TypeAdapter
 
-import config
-import logic
-import resume_schema
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import config  # noqa: E402
+import db  # noqa: E402
+import logic  # noqa: E402
+import resume_schema  # noqa: E402
 
 SYSTEM = """You turn a person's career documents into structured resume data.
 Rules:
@@ -188,22 +194,8 @@ def cost(model: str, input_tokens: int, output_tokens: int, searches: int = 0) -
                  + searches * config.AI_SEARCH_PRICE, 4)
 
 
-def _streamlit_secret() -> str | None:
-    st = sys.modules.get("streamlit")
-    if st is None:
-        return None
-    from streamlit import runtime
-
-    if not runtime.exists():
-        return None
-    try:
-        return st.secrets["ANTHROPIC_API_KEY"]
-    except (KeyError, FileNotFoundError):
-        return None
-
-
 def api_key() -> str | None:
-    return os.environ.get("ANTHROPIC_API_KEY") or _streamlit_secret() or None
+    return db.secret("ANTHROPIC_API_KEY") or None
 
 
 def ready() -> bool:
@@ -223,7 +215,8 @@ def _explain(exc: Exception) -> str:
     if isinstance(exc, anthropic.PermissionDeniedError):
         return "The key isn't allowed to do this (a workspace or spend limit?)."
     if isinstance(exc, anthropic.NotFoundError):
-        return f"The model {config.AI_MODEL} isn't available to this key."
+        return ("The model isn't available to this key (AI_MODEL and AI_FIND_MODEL in "
+                "app/config.py).")
     if isinstance(exc, anthropic.RateLimitError):
         return "Claude is rate-limiting this key; try again in a minute."
     if isinstance(exc, anthropic.APIStatusError):
@@ -242,6 +235,16 @@ def ping() -> str:
     return f"Connected: {model.display_name}"
 
 
+def _check_stop(response, usage: Usage, cut_off_hint: str = "") -> None:
+    """A refusal or an answer cut off at the token limit is an AIError that
+    still carries what the call cost."""
+    if response.stop_reason == "refusal":
+        raise AIError("Claude declined this request.", usage)
+    if response.stop_reason == "max_tokens":
+        raise AIError("Claude's answer ran past the token limit and was cut off. Try again"
+                      + (f"; {cut_off_hint}" if cut_off_hint else "."), usage)
+
+
 def _parse(system: str, prompt: str, shape) -> tuple[dict, Usage]:
     """One structured-output call: the answer as a dict in the given pydantic
     shape and what it cost. The reply is checked here rather than by the
@@ -256,11 +259,7 @@ def _parse(system: str, prompt: str, shape) -> tuple[dict, Usage]:
     except anthropic.APIError as exc:
         raise AIError(_explain(exc)) from None
     usage = Usage(response.model, response.usage.input_tokens, response.usage.output_tokens)
-    if response.stop_reason == "refusal":
-        raise AIError("Claude declined this request.", usage)
-    if response.stop_reason == "max_tokens":
-        raise AIError("Claude's answer ran past the token limit and was cut off. Try again; "
-                      "for a tailoring, steer it with \"shorter\".", usage)
+    _check_stop(response, usage, "for a tailoring, steer it with \"shorter\".")
     text = "".join(block.text for block in response.content if block.type == "text")
     try:
         parsed = shape.model_validate_json(text)
@@ -272,7 +271,7 @@ def _parse(system: str, prompt: str, shape) -> tuple[dict, Usage]:
 def structure_resume(sources: dict[str, str]) -> tuple[dict, Usage]:
     """The master resume as data (resume_schema.Resume) from the uploaded
     files' text, keyed by kind ("resume" must be present), and what the call
-    cost. One call, structured output; the result is validated by the SDK."""
+    cost. One call, structured output, checked by _parse."""
     if "resume" not in sources:
         raise AIError("Upload the master resume first: it anchors everything else.")
     parts = [f"<document kind=\"{kind}\">\n{text.strip()}\n</document>"
@@ -375,10 +374,7 @@ def find_posting(company: str, title: str, location, source, posting: str) -> tu
             break
         messages = [messages[0], {"role": "assistant", "content": response.content}]
     usage = Usage(model, tokens_in, tokens_out, searches)
-    if response.stop_reason == "refusal":
-        raise AIError("Claude declined this request.", usage)
-    if response.stop_reason == "max_tokens":
-        raise AIError("Claude's answer ran past the token limit and was cut off. Try again.", usage)
+    _check_stop(response, usage)
     text = "".join(block.text for block in response.content if block.type == "text")
     found = re.search(r"\{.*\}", text, re.S)
     try:

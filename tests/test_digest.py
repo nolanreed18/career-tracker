@@ -43,11 +43,12 @@ def test_every_lead_is_shown_with_its_score_pay_posting_and_ratings():
     ]
     out = digest.render(TODAY, leads, [], APP,
                         {"emails_read": 2, "sources": {"LinkedIn": 2}, "already_known": 1,
-                         "duplicates": 1})
+                         "duplicates": 1, "watched": 1})
     html = out["html"]
     assert out["subject"] == "Job leads Oct 19: 4 new, 1 strong"
     assert "Monday, October 19" in html and "4 new leads · 1 strong · 2 worth a look" in html
-    assert "from 2 alert emails (LinkedIn 2)" in html
+    assert "from 2 alert emails (LinkedIn 2) and 1 from the careers sites you watch" in html
+    assert "1 from watched careers sites" in html
     assert f'href="{APP}Job_Leads"' in html and f'href="{APP}Applications"' in html
     assert 'href="https://example.com/j/1"' in html and "Analytics Engineer" in html
     assert 'href="https://example.com/j/3?a=1&amp;b=2"' in html          # escaped, kept whole
@@ -60,7 +61,8 @@ def test_every_lead_is_shown_with_its_score_pay_posting_and_ratings():
     assert "Strong fits (8+)" in html and "Worth a look (4–7.9)" in html
     assert "Weak or unscored (1, hidden in the app until asked)" in html
     assert "2.1</strong> &nbsp;Clerk — Zeta · Omaha, NE" in html         # the compact list
-    assert "Read 2 alert emails · 1 already in the tracker · 1 listed twice" in html
+    assert ("Read 2 alert emails · 1 from watched careers sites · 1 already in the tracker · "
+            "1 listed twice") in html
     assert "Role 35%" in html and "what you're looking for" in html
     assert "On your plate" not in html
 

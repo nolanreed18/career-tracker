@@ -1,5 +1,6 @@
-"""Job leads: jobs from your alert emails, scored for fit by the daily
-review, and what you're looking for, which the scores are based on."""
+"""Job leads: jobs from your alert emails and the careers sites you watch,
+scored for fit by the daily review, and what you're looking for, which the
+scores are based on."""
 
 import streamlit as st
 
@@ -38,11 +39,14 @@ claude_on = claude_ready()       # Add also has Claude look for the employer's o
 
 
 def describe(lead) -> str:
-    """'LinkedIn · Denver, CO · hybrid · found yesterday', markdown-safe."""
-    location, mode = logic.value(lead.location), logic.value(lead.work_mode)
-    if mode and location and mode in location.lower():
-        mode = None                                 # "Remote (US) · remote"
-    parts = [lead.source, location, mode, f"found {logic.when(lead.found_on, today)}"]
+    """'LinkedIn · Denver, CO · Hybrid · posted Mon Oct 12 · found yesterday',
+    markdown-safe. The posting date shows when the site gave one and it
+    isn't the day the lead arrived."""
+    posted = logic.value(lead.posted_on)
+    parts = ([lead.source] + logic.place(lead.location, lead.work_mode)
+             + ([f"posted {logic.when(posted, today)}"] if posted and posted != lead.found_on
+                else [])
+             + [f"found {logic.when(lead.found_on, today)}"])
     return md(" · ".join(str(p) for p in parts if p))
 
 
@@ -228,8 +232,8 @@ if section == "Inbox":
     else:
         strong = leads["fit_score"].fillna(0) >= config.STRONG_FIT
         weak = leads["fit_score"].map(logic.is_weak)
-        fresh = leads["found_on"] == today
-        st.caption(f"{logic.plural(len(leads), 'new lead')}: {int(fresh.sum())} today, "
+        arrived_today = leads["found_on"] == today
+        st.caption(f"{logic.plural(len(leads), 'new lead')}: {int(arrived_today.sum())} today, "
                    f"{int(strong.sum())} strong (fit {config.STRONG_FIT}+), {int(weak.sum())} "
                    f"weak (under {config.MAYBE_FIT})"
                    + (f"; {len(stale)} stale under Stale." if len(stale) else "."))
@@ -239,15 +243,15 @@ if section == "Inbox":
         # It opens on today's arrivals when there are any, best fit first.
         kept = st.session_state.get("leads_show_kept")
         if kept not in SHOW:                       # also a choice since taken away
-            kept = "today" if fresh.any() else "maybe"
+            kept = "today" if arrived_today.any() else "maybe"
             st.session_state.pop("leads_show", None)
         show = st.radio("Show", list(SHOW), horizontal=True, format_func=SHOW.get,
                         index=list(SHOW).index(kept), key="leads_show",
                         label_visibility="collapsed")
         st.session_state["leads_show_kept"] = show
         if show == "today":
-            leads = leads[fresh & ~weak]                   # weak ones wait under Weak
-            if hidden := int((fresh & weak).sum()):
+            leads = leads[arrived_today & ~weak]           # weak ones wait under Weak
+            if hidden := int((arrived_today & weak).sum()):
                 st.caption(f"{logic.plural(hidden, 'weak lead')} from today "
                            f"{'is' if hidden == 1 else 'are'} under Weak.")
         elif show == "maybe":
@@ -278,7 +282,8 @@ if section == "Stale":
 if section == "Dismissed":
     dismissed = data.job_leads("dismissed")
     if dismissed.empty:
-        empty("delete_sweep", "Nothing dismissed", "Leads you dismiss wait here in case you change your mind.")
+        empty("delete_sweep", "Nothing dismissed",
+              "Leads you dismiss wait here in case you change your mind.")
     in_batches(dismissed, "dismissed", dismissed_card)
 
 # ---- profile ----------------------------------------------------------------

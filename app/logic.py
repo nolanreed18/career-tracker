@@ -9,7 +9,7 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import date, time, timedelta
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse, urlsplit
 
 import pandas as pd
 
@@ -58,6 +58,9 @@ class Attention:
 
 
 ORDER = {"overdue": 0, "due": 0, "interview": 1, "follow_up": 2, "stale_saved": 3}
+# What each kind is called on Home and in the digest (each gives it a colour).
+ATTENTION_LABELS = {"overdue": "Overdue", "due": "Due", "interview": "Interview",
+                    "follow_up": "Follow up", "stale_saved": "Saved"}
 
 
 def needs_attention(apps: pd.DataFrame, interviews: pd.DataFrame, today: date,
@@ -214,12 +217,6 @@ def salary_range(low, high) -> str:
 
 
 # ---- pay and work mode ----------------------------------------------------
-
-def parse_money(text) -> int | None:
-    """'$120k' -> 120000, '95,500' -> 95500; None if no number."""
-    numbers = parse_salary(text)
-    return numbers[0]
-
 
 def parse_salary(text) -> tuple[int | None, int | None]:
     """'$120k-$140k' -> (120000, 140000); '90000' -> (90000, None)."""
@@ -493,7 +490,6 @@ def fit_total(ratings: dict, deal_breaker: bool = False,
     return round(total, 1)
 
 
-
 # How postings write a compressed schedule. "4/10" alone could be a date, so it
 # counts only beside a word that makes it a schedule.
 SCHEDULES = [
@@ -580,8 +576,6 @@ def job_link(url) -> str | None:
     postings lose their tracking parameters (a LinkedIn alert link runs to
     600 characters; the posting itself needs only its id). Anything else is
     kept as it is."""
-    from urllib.parse import parse_qs, unquote, urlsplit
-
     url = value(url)
     if url is None:
         return None
@@ -955,8 +949,8 @@ def add_to_master(master: dict, project: dict, text: str, rank: int) -> tuple[di
         role.setdefault("bullets", []).append(bullet)
         return out, " — ".join(p for p in (role["employer"], role.get("title")) if p)
     name = _text(project.get("title"))
-    target = next((p for p in out.setdefault("projects", []) if _same_text(p.get("employer"), name)),
-                  None)
+    target = next((p for p in out.setdefault("projects", [])
+                   if _same_text(p.get("employer"), name)), None)
     if target is None:
         target = {"employer": name, "title": "", "location": "", "start": "", "end": "",
                   "bullets": []}
@@ -1136,10 +1130,11 @@ def salary_short(low, high) -> str:
 
 
 def place(location, work_mode) -> list[str]:
-    """Location and work mode for a header: the mode capitalised, and left
-    out when it only repeats the location ("Remote · remote")."""
+    """Location and work mode for a header or a lead's line: the mode
+    capitalised, and left out when the location already says it ("Remote
+    (US) · remote")."""
     where = "" if blank(location) else str(location).strip()
     mode = "" if blank(work_mode) else str(work_mode).strip().capitalize()
-    if where and mode and where.lower() == mode.lower():
+    if where and mode and mode.lower() in where.lower():
         mode = ""
     return [part for part in (where, mode) if part]

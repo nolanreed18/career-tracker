@@ -120,7 +120,8 @@ def test_structure_resume_needs_the_resume_and_handles_a_refusal(monkeypatch):
     fake_client(monkeypatch, messages=FakeMessages(None, stop_reason="refusal"))
     with pytest.raises(ai.AIError, match="declined"):
         ai.structure_resume({"resume": "x"})
-    fake_client(monkeypatch, messages=FakeMessages(None, error=api_error(anthropic.RateLimitError, 429)))
+    fake_client(monkeypatch,
+                messages=FakeMessages(None, error=api_error(anthropic.RateLimitError, 429)))
     with pytest.raises(ai.AIError, match="rate-limiting"):
         ai.structure_resume({"resume": "x"})
 

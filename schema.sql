@@ -5,13 +5,11 @@
 -- Nothing here defaults to current_date or now(). The status / kind lists are
 -- repeated from app/config.py; change both together.
 
+-- Employers, by name only: a row exists while an application points at it
+-- (data.delete_application and update_application drop the ones left over).
 create table if not exists companies (
     company_id   bigint generated always as identity primary key,
     name         text not null check (btrim(name) <> ''),
-    website      text,
-    industry     text,
-    location     text,
-    notes        text,
     created_on   date not null
 );
 -- One row per company, whatever the capitalisation.
@@ -89,9 +87,10 @@ create table if not exists job_profile (
     updated_on     date not null
 );
 
--- Jobs found in alert emails, scored for fit. "moved" ones became an
--- application; the same job from several sites is stored once (dedupe_key:
--- company, title and location, lower-cased, punctuation dropped).
+-- Jobs found in alert emails or on a watched careers site, scored for fit.
+-- "moved" ones became an application; the same job from several sites is
+-- stored once (dedupe_key: company and title, lower-cased, punctuation
+-- dropped; the location is left out, sites word it differently).
 create table if not exists job_leads (
     lead_id         bigint generated always as identity primary key,
     source          text not null check (btrim(source) <> ''),
@@ -107,7 +106,8 @@ create table if not exists job_leads (
     posted_on       date,
     found_on        date not null,
     fit_score       numeric(3,1) check (fit_score between 1 and 10),
-    fit_detail      jsonb,             -- {"ratings": {category: 1-10}, "deal_breaker": bool}
+    fit_detail      jsonb,             -- {"ratings": {category: 1-10}, "deal_breaker": bool,
+                                       --  "schedule": "9/80" | "4/10" | "compressed week"}
     fit_reason      text,
     status          text not null check (status in ('new', 'moved', 'dismissed')),
     -- One reason or several, comma-separated, each from the list.
@@ -121,7 +121,6 @@ create table if not exists job_leads (
 );
 create unique index if not exists job_leads_dedupe on job_leads (dedupe_key);
 
--- App settings, one row per key: "theme" is "light" or "dark".
 -- The master resume as data (app/resume_schema.py says the shape), the files
 -- it was built from, and what each Claude call cost.
 create table if not exists resume_sources (
@@ -150,6 +149,7 @@ create table if not exists ai_usage (
     happened_on    date not null
 );
 
+-- App settings, one row per key: "theme" is "light" or "dark".
 create table if not exists settings (
     key    text primary key,
     value  text not null

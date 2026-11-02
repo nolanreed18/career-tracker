@@ -218,6 +218,27 @@ def test_watch_lists_new_jobs_from_the_companies_careers_sites(monkeypatch, caps
     assert problem is None and lead["salary_min"] == 138000
 
 
+def test_watch_reads_postings_up_to_the_cap_and_says_so_past_it(monkeypatch, capsys):
+    import posting
+    data.save_job_profile(data.today(), watch_companies=(
+        "bp https://bp.wd3.myworkdayjobs.com/bpCareers"))
+    monkeypatch.setattr(config, "WATCH_MAX_JOBS", 1)
+    monkeypatch.setattr(posting, "site_jobs", lambda url: [
+        {"title": f"Role {n}", "location": "Denver, Colorado", "url": f"https://bp/{n}",
+         "posted": ""} for n in range(3)])
+    read = []
+    monkeypatch.setattr(posting, "employer_posting", lambda url: read.append(url) or (
+        posting.Posting("", "", "", "Pay $100,000 - $120,000.")))
+    assert leads.main(["watch"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert read == ["https://bp/0"]                                   # one posting read
+    assert [j.get("salary") for j in out["jobs"]] == ["$100,000-$120,000", None, None]
+    assert "summary" not in out["jobs"][1]
+    assert out["problems"] == ["2 jobs past the first 1: their postings weren't read, so they "
+                               "have no summary or pay (rate them from the title and location, "
+                               "or look the posting up as in step 5)"]
+
+
 def test_an_unknown_command_shows_how_to_use_it(capsys):
     assert leads.main(["dance"]) == 2
-    assert "python leads.py add" in capsys.readouterr().err
+    assert "python3 leads.py add" in capsys.readouterr().err

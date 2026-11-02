@@ -3,10 +3,13 @@
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.coverage
 
-# Personal data: exports, imports and backups never go to GitHub.
+# Personal data: exports and backups never go to GitHub.
 data/
 *.csv
 
+# Secrets and personal tool settings.
 .streamlit/secrets.toml
+.claude/settings.local.json
 .DS_Store

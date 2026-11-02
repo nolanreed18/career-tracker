@@ -8,8 +8,9 @@ target-version = "py313"
 src = [".", "app", "tests"]
 
 [tool.ruff.lint]
-# Unused and undefined names, syntax errors, import order. Nothing stylistic.
-select = ["F", "E9", "I"]
+# Unused and undefined names, syntax errors, import order, and the line
+# length above. Nothing else stylistic.
+select = ["F", "E9", "E501", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
