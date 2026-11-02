@@ -4,9 +4,9 @@
 
 One run writes one CSV per table, each stamped with the same local
 (America/Chicago) timestamp, and keeps the ten most recent runs. It also runs
-weekly in GitHub Actions (.github/workflows/backup.yml), which keeps each
-run's CSVs as a downloadable artifact. data/ is gitignored: it holds personal
-information.
+weekly in GitHub Actions (.github/workflows/backup.yml), which locks the
+run's CSVs in a password-protected 7z file and keeps that as a downloadable
+artifact. data/ is gitignored: it holds personal information.
 
 A run that fails part-way removes what it had written -- half a run would
 look like a backup and not be one -- and exits non-zero, so a scheduled run

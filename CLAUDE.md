@@ -7,16 +7,18 @@ only they can do (accounts, secrets, clicking merge).
 
 ## Rules
 - `.env` holds `DATABASE_URL`. **Never read, print or copy it**; use `db.py`.
+  Every secret is read through `db.secret(name)` (the environment, else the
+  running app's `st.secrets`): no other lookup.
 - The repo and app are **public** (Streamlit's free plan allows one private
   app). `ui.setup()` puts every page behind a sign-in: Google (`st.login`, only
   emails in the `ALLOWED_EMAILS` secret) or `APP_PASSWORD`. Every page calls it
-  first, and it stays locked when neither is set up. Never commit data or secrets.
+  right after `fresh.check()`, and it stays locked when neither is set up. Never commit data or secrets.
   Backups are artifacts anyone signed in to GitHub can download: the workflow
   only ever uploads them inside a 7z file locked with `BACKUP_PASSWORD`.
   Never commit real data: `data/` and `*.csv` are gitignored.
 - The daily job-alert review (`DAILY_REVIEW.md`) runs in a cloud session and
   reaches the database only through `leads.py`, over Neon's HTTPS endpoint
-  (`db.HttpCursor`, switched on when `CLAUDE_CODE_REMOTE` is set). Keep its
+  (`db.HttpCursor`, switched on when `CLAUDE_CODE_REMOTE` is `"true"`). Keep its
   queries to what `HttpCursor` supports: one statement each, no transactions.
   Its digest email is `app/digest.py` (pure, like `logic.py`), printed by
   `leads.py digest`; the run pastes it into Gmail, so keep it under 100 KB
@@ -48,17 +50,23 @@ only they can do (accounts, secrets, clicking merge).
   searches priced by `AI_SEARCH_PRICE`) runs inside the Add tap on a lead and
   behind "Find it on the employer's site" (`ui.prepare_application`,
   `ui.find_company_posting`): still one click, one call, logged like the rest.
-  Before the call, free: `posting.on_careers_site` searches a Workday,
-  Greenhouse or Lever site already known for the employer (this
-  application's link or another's, `data.company_apply_links`) for the title,
-  and `logic.pick_posting` takes only an exact title match, never a guess;
-  after it, a careers-site address Claude returns is searched the same way.
-  LinkedIn's guest pages don't show the employer's Apply link. Companies to
-  watch (profile `watch_companies`, `logic.watch_list`): `leads.py watch`
-  lists their careers sites' jobs in `config.WATCH_SEARCH`'s places
-  (`posting.site_jobs`, sharing `_listed` with `on_careers_site`), drops the
-  known and skipped, and reads each posting's stated pay
-  (`logic.listed_pay`) and schedule for the review to score.
+  Before the call, free and with no key needed (`ui.known_company_posting`):
+  a job link that is itself a Workday, Greenhouse or Lever posting
+  (`posting.employer_link`, a watched company's lead) is the answer; else
+  `posting.on_careers_site` searches such a site already known for the
+  employer (this application's links or another's,
+  `data.company_apply_links`) for the title, and `logic.pick_posting` takes
+  only a title match (after `logic.title_key`: Sr./Senior, II/2), never a
+  guess; after the call, a careers-site address Claude returns is searched
+  the same way. LinkedIn's guest pages don't show the employer's Apply link.
+  Companies to watch (profile `watch_companies`, `logic.watch_list`):
+  `leads.py watch` lists their careers sites' jobs (`posting.site_jobs`,
+  sharing `_listed` with `on_careers_site`; a Workday site is searched for
+  each `config.WATCH_SEARCH` word, and a job is kept only when
+  `logic.watch_place` matches `config.WATCH_PLACE`), drops the known and
+  skipped, and reads the first `WATCH_MAX_JOBS` postings' stated pay
+  (`logic.listed_pay`) and schedule for the review to score (the rest are
+  listed unread, and `problems` says so).
   `applications.apply_url` / `apply_note` / `apply_state` (`config.APPLY_STATES`,
   null = not looked for) hold what it found and where the search stands:
   `ui.apply_status` says so on the application, and the state is written
@@ -77,11 +85,13 @@ only they can do (accounts, secrets, clicking merge).
   master's pool (source "project", unticked).
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
-- **All SQL lives in `app/data.py`**; calculations in `app/logic.py` (pure: no
-  database, no Streamlit). Pages only lay out and call those two.
+- **All SQL lives in `app/data.py`** (`backup.py`'s copy aside); calculations
+  in `app/logic.py` (pure: no database, no Streamlit). Pages lay out and call
+  those two, plus `ai`, `docx_io` and `posting` for what they do; the
+  employer-site search flow that writes as it goes lives in `ui.py`.
 - **The look lives in `app/theme.py`**: a light palette (the default) and a dark
-  one as Streamlit theme options, applied per run by `ui.setup()` from the
-  `settings` table ("theme"), plus one stylesheet. `.streamlit/config.toml`
+  one as Streamlit theme options, read from the `settings` table ("theme")
+  once per process and applied by `ui.setup()`, plus one stylesheet. `.streamlit/config.toml`
   must equal the light palette (`tests/test_theme.py` checks). `THEME.md`
   carries the look to other apps: its code blocks are `app/theme.py`,
   `config.toml` and ui's look helpers word for word (test_theme checks), so
@@ -108,14 +118,18 @@ only they can do (accounts, secrets, clicking merge).
   more and wears `ui.schedule_badge`; an application's badge is read from its
   posting text. Never guessed from the employer.
   **Status / kind lists are repeated in `schema.sql` CHECKs** (statuses,
-  kinds, lead statuses, `DISMISS_REASONS`, `RESUME_SOURCE_KINDS`, `PROJECT_KINDS`): change
-  both (tests fail if they drift). A lead's dedupe key is company|title (`logic.lead_key`); stale
+  work modes, lead statuses, `APPLY_STATES`, `PAY_SOURCES`, `DISMISS_REASONS`,
+  `RESUME_SOURCE_KINDS`, `PROJECT_KINDS`): change both (tests fail if they
+  drift). A `companies` row exists only while an application points at it
+  (`data.delete_application` and `update_application` prune the rest). A lead's dedupe key is company|title (`logic.lead_key`); stale
   leads (`LEAD_STALE_DAYS`) are a view, not a status. Add a table → add it to `backup.TABLES` and the
   `TABLES` list in `conftest.py`.
 - `schema.sql` must stay re-runnable (`if not exists`): `data.py` runs it on the
-  first connection of each process. Changing an existing table → also add an
-  idempotent statement to `data.MIGRATIONS` (run after schema.sql, and by
-  `leads.py add` over HTTPS), so the live database updates itself.
+  first connection of each process (`apply_schema.py` runs only it; the tests
+  use that for their throwaway database). Changing an existing table → also
+  add an idempotent statement to `data.MIGRATIONS` (run after schema.sql, and
+  by `leads.py add` and `profile-save` over HTTPS), so the live database
+  updates itself.
 - **Phone or computer**: `ui.on_phone()` (`logic.device_from_agent` on the
   User-Agent, tablets count as computers). A phone gets one centred column and the
   everyday tasks; wide editing grids show `ui.empty("computer", …)` instead.
@@ -138,7 +152,8 @@ only they can do (accounts, secrets, clicking merge).
   session state only before it is drawn (or via a flag read at the top of the page).
 
 ## Tests
-- `ruff check .` and `pytest` before every push. DB and page tests need
+- `ruff check .` (unused names, import order, 100 columns) and `pytest` before
+  every push. DB and page tests need
   `TEST_DATABASE_URL` (a throwaway Postgres; the cloud hook sets it, CI starts
   one). Never point it at Neon: `conftest.py` refuses, and the tests wipe it.
 - Page tests use `streamlit.testing.v1.AppTest` against that database with
