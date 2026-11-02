@@ -456,8 +456,8 @@ def test_companies_to_skip_are_saved_with_the_profile():
     seed()
     at = run(LEADS)
     widget(at.radio, "Section").set_value("What I'm looking for").run()
-    widget(at.text_area, "Companies to skip").set_value("Robert Half\nTEKsystems").run()
-    click(at, "Save")
+    widget(at.text_area, "Companies to skip").set_value("Robert Half\nTEKsystems")
+    click(at, "Save")                 # a form's values travel with its submit, not a rerun
     assert data.job_profile()["skip_companies"] == "Robert Half\nTEKsystems"
     assert any("**Dismissals.**" in m.value for m in at.markdown)
 
@@ -850,12 +850,12 @@ def test_resume_page_shows_the_master_and_exports_it_in_the_templates_layout():
     texts = [p.text for p in docx_io.outline(docx_io.build(data.resume_template(),
                                                            data.resume_master()["content"]))]
     assert "Built a pipeline that saved 2 hours a day." in texts
-    widget(at.text_input, "Name").set_value("Sample P. Person").run()
+    widget(at.text_input, "Name").set_value("Sample P. Person")
     click(at, "Save")
     master = data.resume_master()
     assert master["content"]["name"] == "Sample P. Person"
     assert master["content"]["conflicts"] == ["GPA: 3.88 in the history, 3.90 on the resume"]
-    widget(at.checkbox, "Clear the conflicts list: I've checked them").check().run()
+    widget(at.checkbox, "Clear the conflicts list: I've checked them").check()
     click(at, "Save")
     assert data.resume_master()["content"]["conflicts"] == []
     click(at, "Add a role")
