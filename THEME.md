@@ -662,18 +662,19 @@ def appearance(saved=None, save=None) -> None:
         if mode not in theme.MODES:
             mode = theme.DEFAULT
         theme.apply(mode)
-    if "dark_mode" not in st.session_state or st.session_state.get("theme_shown") != mode:
-        # First draw, or the choice was changed on another device: the switch
-        # follows the saved choice rather than flipping it back.
-        st.session_state["dark_mode"] = mode == theme.DARK
-        st.session_state["theme_shown"] = mode
+    # The switch starts from the mode in force and is keyed by it, so a fresh
+    # widget (another page: Streamlit forgets a widget's state across pages)
+    # or a change made on another device never reads as a flip back. Nothing
+    # is written to the widget's own session state.
+    for other in theme.MODES:
+        if other != mode:
+            st.session_state.pop(f"dark_mode_{other}", None)
     with st.sidebar:
-        dark = st.toggle("Dark mode", key="dark_mode")
+        dark = st.toggle("Dark mode", value=mode == theme.DARK, key=f"dark_mode_{mode}")
     picked = theme.DARK if dark else theme.LIGHT
     if picked != mode:
         if save:
             save(picked)
-        st.session_state["theme_shown"] = picked
         theme.apply(picked)
         st.rerun()
     if started_with != mode and not st.session_state.get("theme_rerun"):
