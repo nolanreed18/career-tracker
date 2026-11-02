@@ -1,6 +1,6 @@
 # Local work and CI: the app's runtime set plus the test runner and linter.
 -r requirements.txt
 
-pytest==9.1.1
+pytest==9.2.0
 # lint: unused and undefined names, syntax errors, import order (pyproject.toml)
-ruff==0.16.9
+ruff==0.17.3
