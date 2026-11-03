@@ -1,0 +1,58 @@
+# One button that tidies the branch list: deletes every branch whose pull
+# request was merged, as GitHub's "Automatically delete head branches"
+# setting would have. Run it from Actions -> Delete merged branches -> Run
+# workflow. It never touches main, a branch with an open pull request, or a
+# branch that has commits its merged pull request didn't include, so no
+# unmerged work can go. Nothing runs it on its own.
+name: Delete merged branches
+
+on:
+  workflow_dispatch: # the "Run workflow" button on the Actions tab
+
+permissions:
+  contents: write       # deleting a branch
+  pull-requests: read
+
+jobs:
+  delete:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Delete the branches of merged pull requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          default=$(gh api "repos/$REPO" --jq .default_branch)
+          # Branches with an open pull request stay, whatever else they did.
+          gh pr list --repo "$REPO" --state open --limit 1000 \
+            --json headRefName --jq '.[].headRefName' > open.txt
+          # Every branch now, with the commit at its tip.
+          gh api --paginate "repos/$REPO/branches?per_page=100" \
+            --jq '.[] | "\(.name) \(.commit.sha)"' > branches.txt
+          # Each merged pull request from this repository: its branch and the
+          # commit it merged.
+          gh pr list --repo "$REPO" --state merged --limit 1000 \
+            --json headRefName,headRefOid,isCrossRepository \
+            --jq '.[] | select(.isCrossRepository | not) | "\(.headRefName) \(.headRefOid)"' \
+            > merged.txt
+          deleted=0
+          kept=0
+          while read -r name sha; do
+            [ "$name" = "$default" ] && continue
+            grep -qxF "$name" open.txt && { echo "kept $name: it has an open pull request"; kept=$((kept + 1)); continue; }
+            if grep -qxF "$name $sha" merged.txt; then
+              gh api -X DELETE "repos/$REPO/git/refs/heads/$name" > /dev/null
+              echo "deleted $name"
+              deleted=$((deleted + 1))
+            elif grep -q "^$(printf '%s' "$name" | sed 's/[][\.*^$/]/\\&/g') " merged.txt; then
+              echo "kept $name: it has commits its merged pull request didn't include"
+              kept=$((kept + 1))
+            fi
+          done < branches.txt
+          echo "Deleted $deleted merged branches; kept $kept."
+          {
+            echo "### Deleted $deleted merged branches"
+            echo "Kept $kept (an open pull request, or commits that were never merged)."
+          } >> "$GITHUB_STEP_SUMMARY"

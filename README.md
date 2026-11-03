@@ -281,6 +281,15 @@ and ask it to load it into that table; it reads every column as the database
 holds it (the resume's Word file sits in `resume_sources` as a long hex
 string, which loads back as the file).
 
+## Branches
+
+Every change arrives on a branch of its own through a pull request. Tick
+**Settings → General → Pull Requests → Automatically delete head branches**
+so GitHub deletes each branch as its pull request merges. To clear the old
+ones, run **Actions → Delete merged branches → Run workflow**
+(`.github/workflows/delete-merged-branches.yml`): it deletes only branches
+whose pull request merged with nothing added since, and never `main`.
+
 ## Tests
 
 ```bash
