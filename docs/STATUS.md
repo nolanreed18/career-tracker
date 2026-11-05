@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-04
+updated: 2026-11-05
 state: Live and in daily use; four pages, the morning review and weekly backups all running.
 ---
 
@@ -28,9 +28,15 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 
 ## Next
 
-- Nothing is planned in the repository. Held back on purpose (#63): the
-  Anthropic SDK's 2.x release, a major change, since the app imports a
-  private path from the SDK; it wants a pull request of its own.
+Nothing is under way; these two wait until wanted, each its own pull request.
+
+- **Anthropic SDK 1.15 → 2.x** (held back in #63): `app/ai.py` imports a
+  private path, `anthropic.lib._parse._transform.transform_schema`, which a
+  major release can move. Replace it with the SDK's public helper (or a
+  small transform of our own), then bump and run `tests/test_ai.py`.
+- **Interview edit forms** on Applications sit in `st.expander`, which
+  CLAUDE.md avoids for add forms: switch them to `ui.disclosure()` if a click
+  ever snaps one shut.
 
 ## Needs the owner
 
@@ -45,3 +51,20 @@ Nothing pending.
 - Backups from before Nov 4 can't be opened (their password was never
   saved), so the contacts, career entries and job history tables dropped on
   Oct 29 (#53) are gone for good.
+
+### For Claude sessions
+
+- Cloud sessions can't delete branches or change repository settings
+  (GitHub answers 403). Merged branches delete themselves; the Delete merged
+  branches workflow (#65) is the button for any left over.
+- Live-database writes from a session go only through the `leads.py`
+  commands meant for them.
+- Streamlit 1.66: a keyed widget forgets its state when the page changes
+  (why `ui.appearance` keys the Dark mode toggle by the mode in force). In
+  `AppTest`, a form's values go with its submit: set a field, then click the
+  submit, with no `.run()` between.
+- The pill selector's CSS targets Streamlit's internal data-testids
+  (`stRadioOption`): after any Streamlit bump, check the pills and Dark mode
+  on screen, not just the tests.
+- Watched companies: only Workday, Greenhouse and Lever careers sites can be
+  read.

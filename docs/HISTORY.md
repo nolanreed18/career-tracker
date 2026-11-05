@@ -5,6 +5,8 @@ What changed, newest first. Dates are the day each pull request merged
 
 ## 2026-11
 
+- **2026-11-05**: STATUS takes the previous lead chat's handoff: the two
+  waiting jobs under Next, and gotchas for Claude sessions under Known issues.
 - **2026-11-04**: Backup password replaced (the old one was never saved) and a
   manual Backup run succeeded; STATUS notes the pre-Nov 4 backups can't be opened.
 - **2026-11-04**: STATUS corrected: the old branches were already cleared and
