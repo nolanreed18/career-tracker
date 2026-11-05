@@ -5,6 +5,8 @@ What changed, newest first. Dates are the day each pull request merged
 
 ## 2026-11
 
+- **2026-11-04**: Backup password replaced (the old one was never saved) and a
+  manual Backup run succeeded; STATUS notes the pre-Nov 4 backups can't be opened.
 - **2026-11-04**: STATUS corrected: the old branches were already cleared and
   "Automatically delete head branches" turned on (Nov 3), so nothing needs
   the owner (#67).

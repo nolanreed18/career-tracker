@@ -19,7 +19,8 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 - **GitHub**: only `main`; merged branches delete themselves (set Nov 3,
   2026).
 - **Weekly backup**: every Sunday, a locked 7z file on the Backup run's page.
-  The last run seen (Nov 1, 2026) succeeded.
+  The backup password was replaced on Nov 4, 2026 (the old one had never
+  been saved); a manual run with the new one succeeded (Nov 5, 03:40 UTC).
 
 ## In progress
 
@@ -41,6 +42,6 @@ Nothing pending.
   are Claude sessions, not visible from this repository).
 - The Backup run of Oct 18, 2026 failed; the ones after it succeeded. The
   cause isn't recorded.
-- The contacts, career entries and job history data were dropped from the
-  live database on Oct 29 (#53); anything in them survives only in backups
-  made before that, and those are kept 90 days.
+- Backups from before Nov 4 can't be opened (their password was never
+  saved), so the contacts, career entries and job history tables dropped on
+  Oct 29 (#53) are gone for good.
