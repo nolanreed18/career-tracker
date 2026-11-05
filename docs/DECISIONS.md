@@ -211,4 +211,4 @@ as well as the last one did.
 **History:**
 - 2026-10-16: tests on every pull request (#1).
 - 2026-11-02: workflow to delete merged branches (#65).
-- 2026-11-04: the five notes and the docs check (this pull request).
+- 2026-11-04: the five notes and the docs check (#66).

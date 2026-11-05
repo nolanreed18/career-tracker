@@ -7,7 +7,7 @@ What changed, newest first. Dates are the day each pull request merged
 
 - **2026-11-04**: The studio's five notes (`docs/OVERVIEW.md`, `STATUS.md`,
   `DECISIONS.md`, `HISTORY.md`, and `CLAUDE.md` pointing to them) and a docs
-  check on every pull request.
+  check on every pull request (#66).
 - **2026-11-02**: A one-button workflow that deletes branches already merged (#65).
 - **2026-11-01**: Streamlit 1.63 → 1.66.1; the pill dots hidden again and the
   Dark mode switch fixed so it holds across pages (#64).
