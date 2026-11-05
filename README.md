@@ -328,3 +328,4 @@ up automatically (`.claude/hooks/session-start.sh`).
 | `THEME.md` | The look, written up to copy into another app. |
 | `conftest.py`, `tests/` | The tests, against a throwaway database. |
 | `CLAUDE.md` | Rules for Claude when it works on this project. |
+| `docs/` | The project's notes: overview, status, decisions and history. |
