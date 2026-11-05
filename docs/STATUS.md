@@ -16,13 +16,14 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 - **Daily job-alert review**: a scheduled Claude session each morning
   ([`DAILY_REVIEW.md`](../DAILY_REVIEW.md)): alert emails and watched
   companies' careers sites in, scored leads and a digest email out.
+- **GitHub**: only `main`; merged branches delete themselves (set Nov 3,
+  2026).
 - **Weekly backup**: every Sunday, a locked 7z file on the Backup run's page.
   The last run seen (Nov 1, 2026) succeeded.
 
 ## In progress
 
-- Nothing in the app. This pull request brings the docs up to the studio's
-  standard (these five notes and a docs check).
+- Nothing. The docs were brought up to the studio's standard on Nov 4 (#66).
 
 ## Next
 
@@ -32,16 +33,12 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 
 ## Needs the owner
 
-1. Tick **Settings → General → Pull Requests → Automatically delete head
-   branches** on GitHub, if not done yet, so merged branches clean themselves up.
-2. Run **Actions → Delete merged branches → Run workflow** once to clear the
-   sixty-odd old branches (it has never been run).
+Nothing pending.
 
 ## Known issues
 
-- Unknown here: whether the head-branch setting above is ticked, and whether
-  the morning review is succeeding every day (its runs are Claude sessions,
-  not visible from this repository).
+- Unknown here: whether the morning review is succeeding every day (its runs
+  are Claude sessions, not visible from this repository).
 - The Backup run of Oct 18, 2026 failed; the ones after it succeeded. The
   cause isn't recorded.
 - The contacts, career entries and job history data were dropped from the
