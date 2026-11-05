@@ -5,7 +5,20 @@ Cloud from `main`. The owner is new to GitHub and coding: explain in plain
 language, do the work yourself, and end with a short numbered list of anything
 only they can do (accounts, secrets, clicking merge).
 
+## The notes
+This repository is the memory; chats are replaceable. Read these first:
+- `docs/OVERVIEW.md`: what the app is, how it's built, where things live.
+- `docs/STATUS.md`: where things stand now (replaced on each update).
+- `docs/DECISIONS.md`: each rule or choice as it stands, why, and its history.
+- `docs/HISTORY.md`: a dated log of changes, newest first.
+- The studio's way of working: `Standards/Working with me.md` in
+  github.com/nolanreed18/mothership. Secrets are named, never written down;
+  where each is kept is the mothership's `Studio/Secrets.md`.
+
 ## Rules
+- Every pull request that changes the app updates `docs/STATUS.md` and
+  `docs/HISTORY.md` (the Docs check fails otherwise; label a tooling-only
+  pull request `no-docs`). A new rule or choice goes in `docs/DECISIONS.md`.
 - `.env` holds `DATABASE_URL`. **Never read, print or copy it**; use `db.py`.
   Every secret is read through `db.secret(name)` (the environment, else the
   running app's `st.secrets`): no other lookup.

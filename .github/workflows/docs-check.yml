@@ -1,0 +1,58 @@
+# The studio's docs check. Fails a pull request when one of the five notes
+# is missing, or when it changes the app (any file outside docs/, *.md and
+# .github/) without updating docs/STATUS.md and docs/HISTORY.md. The label
+# no-docs skips the second part for a tooling-only change.
+name: Docs check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: The five notes exist
+        run: |
+          missing=0
+          for f in CLAUDE.md docs/OVERVIEW.md docs/STATUS.md docs/DECISIONS.md docs/HISTORY.md; do
+            if [ ! -f "$f" ]; then
+              echo "::error::$f is missing. Every app repository keeps the five notes (see CLAUDE.md)."
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: STATUS and HISTORY updated with the change
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          NO_DOCS: ${{ contains(github.event.pull_request.labels.*.name, 'no-docs') }}
+        run: |
+          if [ "$NO_DOCS" = "true" ]; then
+            echo "Label no-docs is set: skipping the STATUS/HISTORY check."
+            exit 0
+          fi
+          changed=$(git diff --name-only "origin/$BASE_REF...HEAD")
+          echo "Changed files:"
+          echo "$changed"
+          app=$(echo "$changed" | grep -v -E '^(docs/|\.github/)|\.md$' | grep -v '^$' || true)
+          if [ -z "$app" ]; then
+            echo "Only docs, notes or .github changed: nothing more to check."
+            exit 0
+          fi
+          if echo "$changed" | grep -qx 'docs/STATUS.md' && echo "$changed" | grep -qx 'docs/HISTORY.md'; then
+            echo "docs/STATUS.md and docs/HISTORY.md are both updated."
+            exit 0
+          fi
+          echo "These files change the app:"
+          echo "$app"
+          echo "::error::Update docs/STATUS.md and docs/HISTORY.md for this change (see CLAUDE.md), or add the label no-docs for a tooling-only change."
+          exit 1
