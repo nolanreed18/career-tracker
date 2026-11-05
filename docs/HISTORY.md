@@ -5,6 +5,9 @@ What changed, newest first. Dates are the day each pull request merged
 
 ## 2026-11
 
+- **2026-11-04**: STATUS corrected: the old branches were already cleared and
+  "Automatically delete head branches" turned on (Nov 3), so nothing needs
+  the owner (#67).
 - **2026-11-04**: The studio's five notes (`docs/OVERVIEW.md`, `STATUS.md`,
   `DECISIONS.md`, `HISTORY.md`, and `CLAUDE.md` pointing to them) and a docs
   check on every pull request (#66).
