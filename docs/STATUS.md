@@ -13,6 +13,10 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 - Four pages: Home, Job Leads, Applications, Resume and Projects. Sign-in by
   Google or password.
 - Streamlit 1.66.1, Python 3.13.
+- **Project bank**: 31 projects after Nolan's work-portfolio export (Nov 6,
+  #70): 14 new ones added, and five that were the same work as projects
+  already there blended into those entries, as he asked. The new ones are
+  drafts from his project notes, not yet reviewed by him.
 - **Daily job-alert review**: a scheduled Claude session each morning
   ([`DAILY_REVIEW.md`](../DAILY_REVIEW.md)): alert emails and watched
   companies' careers sites in, scored leads and a digest email out.
@@ -24,9 +28,7 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 
 ## In progress
 
-- Loading Nolan's work-portfolio export (19 projects) into the project bank
-  (#70): 14 new projects added, and the five that were the same work as
-  projects already there blended into those entries, as Nolan asked.
+- Nothing.
 
 ## Next
 
