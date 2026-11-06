@@ -147,7 +147,9 @@ project's result, marked as part of the same work; only demonstrated skills
 are kept (planned ones aren't); the summary says how far the project got
 (delivered, in progress, prototype, planned), whether Nolan's own part still
 needs confirming, and what the export says isn't claimed. A project whose
-title is already in the bank is left alone.
+title is already in the bank is left alone. When the same work is already in
+the bank under another name, Nolan chooses: on Nov 6 he had the five such pairs
+blended into the existing entries (`leads.py project-save`).
 **Why:** The export keeps careful limits (no double-counted results, no
 claims beyond the evidence); Claude's review and the bullets it drafts should
 see them. Nothing Nolan has edited or reviewed is overwritten.

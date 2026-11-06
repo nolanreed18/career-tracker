@@ -25,8 +25,8 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 ## In progress
 
 - Loading Nolan's work-portfolio export (19 projects) into the project bank
-  (#70). Five may be the same work as projects already there; Nolan decides
-  whether each is added or merged.
+  (#70): 14 new projects added, and the five that were the same work as
+  projects already there blended into those entries, as Nolan asked.
 
 ## Next
 

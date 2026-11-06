@@ -262,3 +262,28 @@ def test_projects_import_adds_a_portfolios_new_projects_at_the_newest_employer(t
     assert bank.loc["Idea", "summary"] == "Mine, edited."                     # left as it was
     portfolio.write_text("{}")
     assert leads.main(["projects-import", str(portfolio)]) == 1
+
+
+def test_project_save_changes_only_the_fields_given(tmp_path, capsys):
+    kept = data.add_project(data.today(), kind="work", title="Rates", employer="Acme",
+                            situation="Old.", action="Built it.")
+    edits = tmp_path / "edits.json"
+    edits.write_text(json.dumps([{"project_id": kept, "title": "Rate platform",
+                                  "situation": "Blended."}]))
+    assert leads.main(["project-save", str(edits)]) == 0
+    assert capsys.readouterr().out.startswith(f"saved {kept} (Rate platform): situation, title")
+    project = data.project(kept)
+    assert (project["title"], project["situation"], project["action"], project["employer"]) == (
+        "Rate platform", "Blended.", "Built it.", "Acme")                # the rest kept
+    for bad, says in (({"project_id": kept}, "must hold a JSON list"),
+                      ([{"title": "x"}], "whole-number project_id"),
+                      ([{"project_id": kept, "kind": "personal"}], "unknown project fields"),
+                      ([{"project_id": kept}], "nothing to change"),
+                      ([{"project_id": kept, "skills": ["SQL"]}], "every field is text"),
+                      ([{"project_id": kept, "title": " "}], "needs a title"),
+                      ([{"project_id": kept, "situation": "x"},
+                        {"project_id": kept + 99, "situation": "y"}], "no project")):
+        edits.write_text(json.dumps(bad))
+        assert leads.main(["project-save", str(edits)]) == 1
+        assert says in capsys.readouterr().err
+    assert data.project(kept)["situation"] == "Blended."               # nothing half-saved

@@ -101,6 +101,8 @@ This repository is the memory; chats are replaceable. Read these first:
   same work, only demonstrated skills, the summary saying how far it got and what
   isn't claimed; an upload stores it as projects text, `leads.py projects-import`
   adds it straight to the bank. A title already in the bank is never overwritten.
+  When the owner asks a session to rewrite or merge projects, it uses `leads.py
+  project-save` (only the fields given change), never ad-hoc SQL.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`** (`backup.py`'s copy aside); calculations
