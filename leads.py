@@ -13,6 +13,12 @@
     python3 leads.py add leads.json   add scored leads; prints how many were new
     python3 leads.py digest run.json  the digest email for today's leads, as JSON
                                      {"subject", "html", "text"}
+    python3 leads.py projects-import portfolio.json [--check]
+                                     add a work-portfolio export's projects to the
+                                     project bank (--check: show, add nothing)
+    python3 leads.py project-save edits.json
+                                     change projects in the bank: only the fields
+                                     given, the rest kept
 
 leads.json is a list of objects with source, title and company (required),
 and any of location, work_mode, salary (text like "$120k-$140k") or
@@ -38,6 +44,18 @@ changes.json is an object of profile fields and their new values (the
 fields `profile` prints, e.g. {"watch_companies": "bp https://...\nSuncor
 https://..."}); a list field is given whole. A Claude session uses it when
 the owner asks for a change, instead of the owner typing it into the app.
+
+portfolio.json is a work-portfolio export (format argus-work-portfolio).
+Each project becomes one project-bank entry at the master resume's newest
+employer (logic.portfolio_projects); a project whose title is already in
+the bank is left as it is, so the owner's edits and reviews stay. It prints
+{"employer", "added" (with --check, "would_add"), "already_in_bank"}.
+
+edits.json is a list of objects, each a project_id from the bank and the
+fields to change (title, employer, period, summary, situation, task, action,
+result, skills, bullet). A Claude session uses it when the owner asks for a
+project to be rewritten or merged. Nothing is saved unless every edit is
+valid; it prints one line per project saved.
 
 run.json gives the digest what the database doesn't know: app_url (the
 app's address; required), and optionally emails_read, sources ({"LinkedIn":
@@ -149,8 +167,61 @@ def main(argv: list[str]) -> int:
         print(json.dumps(digest.render(today, leads, attention, notes["app_url"], notes,
                                        waiting), indent=2))
         return 0
+    if command == "projects-import" and len(argv) in (2, 3) and argv[2:] in ([], ["--check"]):
+        employer = logic.newest_employer((data.resume_master() or {}).get("content"))
+        found = logic.portfolio_projects(Path(argv[1]).read_text(encoding="utf-8"), employer)
+        if not found:
+            print("not a work-portfolio export with projects", file=sys.stderr)
+            return 1
+        bank = data.projects()
+        known = set() if bank.empty else {str(t).strip().lower() for t in bank["title"]}
+        new = [fields for fields in found if fields["title"].lower() not in known]
+        checking = argv[2:] == ["--check"]
+        for fields in [] if checking else new:
+            data.add_project(data.today(), **fields)
+        print(json.dumps({"employer": employer,
+                          "would_add" if checking else "added": [f["title"] for f in new],
+                          "already_in_bank": [f["title"] for f in found if f not in new]},
+                         indent=2))
+        return 0
+    if command == "project-save" and len(argv) == 2:
+        edits = json.loads(Path(argv[1]).read_text(encoding="utf-8"))
+        problem = project_edits_problem(edits)
+        if problem:
+            print(f"nothing saved: {problem}", file=sys.stderr)
+            return 1
+        for edit in edits:
+            fields = {k: v for k, v in edit.items() if k != "project_id"}
+            data.update_project(int(edit["project_id"]), data.today(), **fields)
+            print(f"saved {edit['project_id']} ({data.project(int(edit['project_id']))['title']}): "
+                  + ", ".join(sorted(fields)))
+        return 0
     print(__doc__, file=sys.stderr)
     return 2
+
+
+PROJECT_EDIT_FIELDS = data.PROJECT_FIELDS - {"kind"}
+
+
+def project_edits_problem(edits) -> str | None:
+    """Why a project-save file can't be used, or None."""
+    if not isinstance(edits, list) or not edits:
+        return "edits.json must hold a JSON list of edits"
+    for edit in edits:
+        if not isinstance(edit, dict) or not isinstance(edit.get("project_id"), int):
+            return "every edit needs a whole-number project_id"
+        unknown = set(edit) - PROJECT_EDIT_FIELDS - {"project_id"}
+        if unknown:
+            return f"unknown project fields: {', '.join(sorted(unknown))}"
+        if len(edit) == 1:
+            return f"project {edit['project_id']} has nothing to change"
+        if not all(v is None or isinstance(v, str) for k, v in edit.items() if k != "project_id"):
+            return f"project {edit['project_id']}: every field is text (or null)"
+        if "title" in edit and not (edit["title"] or "").strip():
+            return f"project {edit['project_id']} needs a title"
+        if data.project(edit["project_id"]) is None:
+            return f"no project {edit['project_id']} in the bank"
+    return None
 
 
 def profile_problem(changes) -> str | None:

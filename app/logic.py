@@ -7,6 +7,7 @@ all of it is tested directly.
 
 import calendar
 import copy
+import json
 import math
 import re
 from dataclasses import dataclass
@@ -884,6 +885,99 @@ def parse_projects_text(text) -> list[dict]:
         if fields.get("title"):
             found.append(fields)
     return found
+
+
+PORTFOLIO_FORMAT = "argus-work-portfolio"
+PORTFOLIO_OUTCOMES = {"delivered": "Delivered", "in-progress": "In progress",
+                      "prototype": "A prototype", "planned": "Planned, not built yet"}
+
+
+def _iso_day(text) -> str:
+    try:
+        day = date.fromisoformat(_text(text))
+    except ValueError:
+        return _text(text)
+    return f"{day:%b} {day.day}, {day.year}"
+
+
+def portfolio_projects(content, employer: str | None = None) -> list[dict] | None:
+    """A work-portfolio export (JSON, format argus-work-portfolio) as
+    project-bank fields, one per project in its order: the project's overall
+    STAR, its dated milestones added to the result as part of the same work
+    (never extra results), and a summary saying how far it got and what
+    isn't claimed. Only demonstrated skills, never planned ones. None when
+    content isn't such an export."""
+    if isinstance(content, (bytes, str)):
+        try:
+            content = json.loads(content)
+        except ValueError:
+            return None
+    if not isinstance(content, dict) or content.get("format") != PORTFOLIO_FORMAT:
+        return None
+    labels = {s.get("id"): _text(s.get("label")) for s in content.get("skills", [])}
+    order = list(labels)
+    stories = content.get("stories", [])
+    out = []
+    for proj in content.get("projects", []):
+        mine = [s for s in stories if s.get("projectId") == proj.get("id")]
+        if not mine or not _text(proj.get("name")):
+            continue
+        main = next((s for s in mine if s.get("kind") == "project"), mine[0])
+        milestones = sorted((s for s in mine if s is not main), key=lambda s: _text(s.get("date")))
+        star = main.get("star") or {}
+        summary = [_text(main.get("title")).rstrip(".") + "."]
+        status = PORTFOLIO_OUTCOMES.get(main.get("outcome"), _text(main.get("outcome")))
+        if status:
+            as_of = _iso_day(main.get("evidenceAsOf"))
+            summary.append(f"{status}{f' (as of {as_of})' if as_of else ''}.")
+        if main.get("contribution") not in (None, "documented"):
+            summary.append("Your own part in it still needs confirming.")
+        if _text(main.get("limitations")):
+            summary.append("Not claimed: " + _text(main["limitations"]))
+        result = [_text(star.get("result"))]
+        if milestones:
+            result.append("Milestones (part of the same work, not extra results):")
+        for stone in milestones:
+            mstar = stone.get("star") or {}
+            when = _iso_day(stone.get("date")) or "Undated"
+            outcome = stone.get("outcome")
+            note = "" if outcome in (None, "delivered") else \
+                f" ({PORTFOLIO_OUTCOMES.get(outcome, outcome).lower()})"
+            result.append(f"- {when}, {_text(stone.get('title'))}{note}: "
+                          + " ".join(t for t in (_text(mstar.get("action")),
+                                                 _text(mstar.get("result"))) if t))
+        used = {k for s in mine for k in s.get("skills", [])}
+        skills = [labels[k] for k in order if k in used and labels[k]]
+        skills += sorted(k for k in used if k not in labels)
+        out.append({"title": _text(proj["name"]), "kind": "work" if employer else "personal",
+                    "employer": employer or None, "summary": " ".join(summary),
+                    "situation": _text(star.get("situation")) or None,
+                    "task": _text(star.get("task")) or None,
+                    "action": _text(star.get("action")) or None,
+                    "result": "\n".join(t for t in result if t) or None,
+                    "skills": ", ".join(skills) or None})
+    return out
+
+
+def portfolio_text(projects: list[dict]) -> str:
+    """portfolio_projects' projects as a projects spreadsheet's text
+    (projects_text's blocks), which parse_projects_text reads back."""
+    blocks = []
+    for fields in projects:
+        lines = [f"Project: {fields['title']}"]
+        for label, key in (("Company", "employer"), ("Summary", "summary"),
+                           ("Situation", "situation"), ("Task", "task"), ("Action", "action"),
+                           ("Result", "result"), ("Skills", "skills")):
+            if not blank(fields.get(key)):
+                lines.append(f"{label}: {fields[key]}")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+def newest_employer(master: dict | None) -> str | None:
+    """The employer of the master's newest role, or None."""
+    roles = [r for r in roles_by_date((master or {}).get("roles", [])) if r.get("employer")]
+    return roles[0]["employer"] if roles else None
 
 
 def master_employers(master: dict | None) -> list[str]:

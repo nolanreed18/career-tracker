@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-05
+updated: 2026-11-06
 state: Live and in daily use; four pages, the morning review and weekly backups all running.
 ---
 
@@ -8,11 +8,15 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 ## Live
 
 - **The app** runs on Streamlit Community Cloud from `main`, as last
-  changed by pull request #65 (Nov 2, 2026). The app has no version
+  changed by pull request #70 (Nov 6, 2026). The app has no version
   numbers; the latest merged pull request is the version.
 - Four pages: Home, Job Leads, Applications, Resume and Projects. Sign-in by
   Google or password.
 - Streamlit 1.66.1, Python 3.13.
+- **Project bank**: 31 projects after Nolan's work-portfolio export (Nov 6,
+  #70): 14 new ones added, and five that were the same work as projects
+  already there blended into those entries, as he asked. The new ones are
+  drafts from his project notes, not yet reviewed by him.
 - **Daily job-alert review**: a scheduled Claude session each morning
   ([`DAILY_REVIEW.md`](../DAILY_REVIEW.md)): alert emails and watched
   companies' careers sites in, scored leads and a digest email out.
@@ -24,7 +28,7 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 
 ## In progress
 
-- Nothing. The docs were brought up to the studio's standard on Nov 4 (#66).
+- Nothing.
 
 ## Next
 

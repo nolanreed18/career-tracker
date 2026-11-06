@@ -67,7 +67,7 @@ repository; where each one is kept is in the mothership's
 | `app/fresh.py` | Reloads the app's code after Community Cloud pulls an update |
 | `schema.sql`, `apply_schema.py` | The tables |
 | `db.py` | Secrets and the database connection (plain, or HTTPS for cloud sessions) |
-| `leads.py` | The daily review's only way into the database |
+| `leads.py` | The daily review's only way into the database (and `projects-import` / `project-save`, a session loading a work-portfolio export into the project bank or rewriting projects there) |
 | `backup.py`, `.github/workflows/backup.yml` | The weekly backup |
 | `.github/workflows/` | Tests, backup, delete merged branches, docs check |
 | `.claude/` | Settings and the session-start hook for Claude Code sessions |

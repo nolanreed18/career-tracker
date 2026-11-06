@@ -242,3 +242,48 @@ def test_watch_reads_postings_up_to_the_cap_and_says_so_past_it(monkeypatch, cap
 def test_an_unknown_command_shows_how_to_use_it(capsys):
     assert leads.main(["dance"]) == 2
     assert "python3 leads.py add" in capsys.readouterr().err
+
+
+def test_projects_import_adds_a_portfolios_new_projects_at_the_newest_employer(tmp_path, capsys):
+    from test_logic import PORTFOLIO
+
+    portfolio = tmp_path / "portfolio.json"
+    portfolio.write_text(json.dumps(PORTFOLIO))
+    data.save_resume_master({"roles": [{"employer": "Acme", "start": "Mar 2024"}]}, data.today())
+    data.add_project(data.today(), kind="personal", title="Idea", summary="Mine, edited.")
+    assert leads.main(["projects-import", str(portfolio), "--check"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "employer": "Acme", "would_add": ["Freight rates"], "already_in_bank": ["Idea"]}
+    assert len(data.projects()) == 1                                  # --check adds nothing
+    assert leads.main(["projects-import", str(portfolio)]) == 0
+    assert json.loads(capsys.readouterr().out)["added"] == ["Freight rates"]
+    bank = data.projects().set_index("title")
+    assert bank.loc["Freight rates", "employer"] == "Acme"
+    assert bank.loc["Idea", "summary"] == "Mine, edited."                     # left as it was
+    portfolio.write_text("{}")
+    assert leads.main(["projects-import", str(portfolio)]) == 1
+
+
+def test_project_save_changes_only_the_fields_given(tmp_path, capsys):
+    kept = data.add_project(data.today(), kind="work", title="Rates", employer="Acme",
+                            situation="Old.", action="Built it.")
+    edits = tmp_path / "edits.json"
+    edits.write_text(json.dumps([{"project_id": kept, "title": "Rate platform",
+                                  "situation": "Blended."}]))
+    assert leads.main(["project-save", str(edits)]) == 0
+    assert capsys.readouterr().out.startswith(f"saved {kept} (Rate platform): situation, title")
+    project = data.project(kept)
+    assert (project["title"], project["situation"], project["action"], project["employer"]) == (
+        "Rate platform", "Blended.", "Built it.", "Acme")                # the rest kept
+    for bad, says in (({"project_id": kept}, "must hold a JSON list"),
+                      ([{"title": "x"}], "whole-number project_id"),
+                      ([{"project_id": kept, "kind": "personal"}], "unknown project fields"),
+                      ([{"project_id": kept}], "nothing to change"),
+                      ([{"project_id": kept, "skills": ["SQL"]}], "every field is text"),
+                      ([{"project_id": kept, "title": " "}], "needs a title"),
+                      ([{"project_id": kept, "situation": "x"},
+                        {"project_id": kept + 99, "situation": "y"}], "no project")):
+        edits.write_text(json.dumps(bad))
+        assert leads.main(["project-save", str(edits)]) == 1
+        assert says in capsys.readouterr().err
+    assert data.project(kept)["situation"] == "Blended."               # nothing half-saved

@@ -1,5 +1,6 @@
 """The pure calculations: needs attention, stats, formatting, CSV import."""
 
+import json
 from datetime import date, time, timedelta
 
 import pandas as pd
@@ -735,3 +736,52 @@ def test_a_lead_table_row_says_it_all_in_a_line():
         "$135k–$160k", "$90k", "$126k+", "up to $80k", ""]
     assert list(logic.lead_table(leads.iloc[[]], TODAY).columns)[0] == "fit"
 
+
+
+PORTFOLIO = {
+    "format": "argus-work-portfolio", "version": 1,
+    "skills": [{"id": "sql", "label": "SQL"}, {"id": "excel", "label": "Excel"},
+               {"id": "python", "label": "Python"}],
+    "projects": [{"id": "rates", "name": "Freight rates"}, {"id": "idea", "name": "Idea"},
+                 {"id": "empty", "name": "No stories"}],
+    "stories": [
+        {"id": "rates-m", "projectId": "rates", "kind": "milestone", "title": "Faster refresh",
+         "date": "2026-10-02", "outcome": "delivered", "contribution": "documented",
+         "skills": ["excel"], "plannedSkills": [],
+         "star": {"situation": "s", "task": "t", "action": "Tested it.", "result": "76 seconds."}},
+        {"id": "rates-p", "projectId": "rates", "kind": "project", "title": "Rates in one place",
+         "date": None, "evidenceAsOf": "2026-10-08", "outcome": "delivered",
+         "contribution": "documented", "skills": ["sql", "excel"], "plannedSkills": ["python"],
+         "star": {"situation": "Rates came by email.", "task": "Collect them.",
+                  "action": "Built a database.", "result": "6 hours to 20 minutes."},
+         "limitations": "No savings measured."},
+        {"id": "idea-p", "projectId": "idea", "kind": "project", "title": "A plan",
+         "date": None, "evidenceAsOf": "2026-11-01", "outcome": "planned",
+         "contribution": "needs-confirmation", "skills": [], "plannedSkills": ["python"],
+         "star": {"situation": "Slow.", "task": "", "action": "Proposed a tool.", "result": ""}},
+    ],
+}
+
+
+def test_a_work_portfolio_export_becomes_project_bank_entries():
+    rates, idea = logic.portfolio_projects(json.dumps(PORTFOLIO), "Acme")   # none without a story
+    assert (rates["title"], rates["kind"], rates["employer"]) == ("Freight rates", "work", "Acme")
+    assert rates["summary"] == ("Rates in one place. Delivered (as of Oct 8, 2026). "
+                                "Not claimed: No savings measured.")
+    assert rates["situation"] == "Rates came by email." and rates["action"] == "Built a database."
+    assert rates["result"] == (
+        "6 hours to 20 minutes.\nMilestones (part of the same work, not extra results):\n"
+        "- Oct 2, 2026, Faster refresh: Tested it. 76 seconds.")
+    assert rates["skills"] == "SQL, Excel"                         # planned Python left out
+    assert idea["summary"] == ("A plan. Planned, not built yet (as of Nov 1, 2026). "
+                               "Your own part in it still needs confirming.")
+    assert idea["task"] is None and idea["result"] is None and idea["skills"] is None
+    assert logic.portfolio_projects(PORTFOLIO)[0]["kind"] == "personal"   # no employer known
+    for not_one in ("not json", b"[]", {"format": "other"}, None):
+        assert logic.portfolio_projects(not_one) is None
+    back = logic.parse_projects_text(logic.portfolio_text([rates, idea]))   # the upload's text
+    assert [b["title"] for b in back] == ["Freight rates", "Idea"]
+    assert back[0]["result"] == rates["result"] and back[0]["employer"] == "Acme"
+    master = {"roles": [{"employer": "Old Co", "start": "Jan 2020"},
+                        {"employer": "Acme", "start": "Mar 2024"}]}
+    assert logic.newest_employer(master) == "Acme" and logic.newest_employer(None) is None

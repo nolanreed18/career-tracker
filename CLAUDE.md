@@ -95,7 +95,14 @@ This repository is the memory; chats are replaceable. Read these first:
   asks questions and drafts bullets from the person's facts only, and with
   answers rewrites the four STAR fields (the old text kept in the review's
   `before` for undo). `logic.add_to_master` puts a chosen bullet in the
-  master's pool (source "project", unticked).
+  master's pool (source "project", unticked). A work-portfolio export (JSON, format
+  `argus-work-portfolio`) comes in through `logic.portfolio_projects`: one entry per
+  project at the master's newest employer, milestones folded into its result as the
+  same work, only demonstrated skills, the summary saying how far it got and what
+  isn't claimed; an upload stores it as projects text, `leads.py projects-import`
+  adds it straight to the bank. A title already in the bank is never overwritten.
+  When the owner asks a session to rewrite or merge projects, it uses `leads.py
+  project-save` (only the fields given change), never ad-hoc SQL.
 - **Never `current_date`, `now()` or the server timezone in SQL**: "today" is
   `data.today()` (America/Chicago), passed in. Dates are plain `date`s.
 - **All SQL lives in `app/data.py`** (`backup.py`'s copy aside); calculations

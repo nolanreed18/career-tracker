@@ -689,7 +689,8 @@ if section == "Resume Builder":
 # ---- build from files ---------------------------------------------------------
 
 KIND_LABELS = {"resume": "The master resume (Word)", "history": "Project history (Word)",
-               "projects": "Projects spreadsheet (CSV)", "other": "Something else to read"}
+               "projects": "Projects spreadsheet (CSV) or portfolio (JSON)",
+               "other": "Something else to read"}
 
 if section == "Build from files":
     if on_phone():
@@ -716,8 +717,9 @@ if section == "Build from files":
     st.markdown("**Files**")
     st.caption("Upload your master resume as a Word file (it also becomes the template the "
                "export is modelled on), plus anything with more detail: a project history, a "
-               "projects spreadsheet, old resumes. Claude reads them all and builds the master.")
-    uploaded = st.file_uploader("Add files", type=["docx", "csv", "txt", "md"],
+               "projects spreadsheet or work-portfolio export (JSON), old resumes. Claude reads "
+               "them all and builds the master.")
+    uploaded = st.file_uploader("Add files", type=["docx", "csv", "json", "txt", "md"],
                                 accept_multiple_files=True, key="resume_uploads")
     kind = st.selectbox("What is it?", list(KIND_LABELS), format_func=KIND_LABELS.get,
                         key="resume_kind")
@@ -726,8 +728,16 @@ if section == "Build from files":
         for upload in uploaded:
             raw = upload.getvalue()
             lower = upload.name.lower()
+            file_kind = kind
             try:
-                if lower.endswith(".docx"):
+                if lower.endswith(".json"):      # a work-portfolio export: its projects
+                    found = logic.portfolio_projects(raw, logic.newest_employer(
+                        (data.resume_master() or {}).get("content")))
+                    if not found:
+                        st.error(f"{upload.name} isn't a work-portfolio export with projects.")
+                        continue
+                    text, file_kind = logic.portfolio_text(found), "projects"
+                elif lower.endswith(".docx"):
                     text = docx_io.text(raw)
                 elif lower.endswith(".csv"):
                     text = logic.projects_text(pd.read_csv(io.BytesIO(raw)))
@@ -737,8 +747,8 @@ if section == "Build from files":
                 st.error(f"Couldn't read {upload.name}: {problem}")
                 continue
             source_id = data.add_resume_source(
-                upload.name, kind, text, raw if lower.endswith(".docx") else None, today)
-            if kind == "resume" and lower.endswith(".docx"):
+                upload.name, file_kind, text, raw if lower.endswith(".docx") else None, today)
+            if file_kind == "resume" and lower.endswith(".docx"):
                 data.set_resume_template(source_id, today)
             added += 1
         if added:
