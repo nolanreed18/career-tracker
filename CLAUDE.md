@@ -179,3 +179,6 @@ This repository is the memory; chats are replaceable. Read these first:
 - Page tests use `streamlit.testing.v1.AppTest` against that database with
   `data.today` patched; new pages get a draws-empty / draws-with-data case for free.
 - Work on a branch and open a pull request; `main` is what's live.
+
+# Compact instructions
+When this chat compacts, keep: every job in flight (what it is, its branch and pull request number, who runs it); the last deploy line; everything waiting on the owner and his answers so far; the owner's rules given in this chat that are not yet in CLAUDE.md or DECISIONS.md; the current batch's list of changes. Drop tool output, file contents and finished threads.
