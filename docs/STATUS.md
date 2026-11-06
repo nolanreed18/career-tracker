@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-05
+updated: 2026-11-06
 state: Live and in daily use; four pages, the morning review and weekly backups all running.
 ---
 
@@ -8,7 +8,7 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 ## Live
 
 - **The app** runs on Streamlit Community Cloud from `main`, as last
-  changed by pull request #65 (Nov 2, 2026). The app has no version
+  changed by pull request #70 (Nov 6, 2026). The app has no version
   numbers; the latest merged pull request is the version.
 - Four pages: Home, Job Leads, Applications, Resume and Projects. Sign-in by
   Google or password.
@@ -24,7 +24,9 @@ state: Live and in daily use; four pages, the morning review and weekly backups 
 
 ## In progress
 
-- Nothing. The docs were brought up to the studio's standard on Nov 4 (#66).
+- Loading Nolan's work-portfolio export (19 projects) into the project bank
+  (#70). Five may be the same work as projects already there; Nolan decides
+  whether each is added or merged.
 
 ## Next
 

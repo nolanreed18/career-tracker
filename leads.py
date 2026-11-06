@@ -13,6 +13,9 @@
     python3 leads.py add leads.json   add scored leads; prints how many were new
     python3 leads.py digest run.json  the digest email for today's leads, as JSON
                                      {"subject", "html", "text"}
+    python3 leads.py projects-import portfolio.json [--check]
+                                     add a work-portfolio export's projects to the
+                                     project bank (--check: show, add nothing)
 
 leads.json is a list of objects with source, title and company (required),
 and any of location, work_mode, salary (text like "$120k-$140k") or
@@ -38,6 +41,12 @@ changes.json is an object of profile fields and their new values (the
 fields `profile` prints, e.g. {"watch_companies": "bp https://...\nSuncor
 https://..."}); a list field is given whole. A Claude session uses it when
 the owner asks for a change, instead of the owner typing it into the app.
+
+portfolio.json is a work-portfolio export (format argus-work-portfolio).
+Each project becomes one project-bank entry at the master resume's newest
+employer (logic.portfolio_projects); a project whose title is already in
+the bank is left as it is, so the owner's edits and reviews stay. It prints
+{"employer", "added" (with --check, "would_add"), "already_in_bank"}.
 
 run.json gives the digest what the database doesn't know: app_url (the
 app's address; required), and optionally emails_read, sources ({"LinkedIn":
@@ -148,6 +157,23 @@ def main(argv: list[str]) -> int:
         waiting = data.strong_leads_waiting(today).to_dict("records")
         print(json.dumps(digest.render(today, leads, attention, notes["app_url"], notes,
                                        waiting), indent=2))
+        return 0
+    if command == "projects-import" and len(argv) in (2, 3) and argv[2:] in ([], ["--check"]):
+        employer = logic.newest_employer((data.resume_master() or {}).get("content"))
+        found = logic.portfolio_projects(Path(argv[1]).read_text(encoding="utf-8"), employer)
+        if not found:
+            print("not a work-portfolio export with projects", file=sys.stderr)
+            return 1
+        bank = data.projects()
+        known = set() if bank.empty else {str(t).strip().lower() for t in bank["title"]}
+        new = [fields for fields in found if fields["title"].lower() not in known]
+        checking = argv[2:] == ["--check"]
+        for fields in [] if checking else new:
+            data.add_project(data.today(), **fields)
+        print(json.dumps({"employer": employer,
+                          "would_add" if checking else "added": [f["title"] for f in new],
+                          "already_in_bank": [f["title"] for f in found if f not in new]},
+                         indent=2))
         return 0
     print(__doc__, file=sys.stderr)
     return 2

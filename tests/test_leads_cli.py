@@ -242,3 +242,23 @@ def test_watch_reads_postings_up_to_the_cap_and_says_so_past_it(monkeypatch, cap
 def test_an_unknown_command_shows_how_to_use_it(capsys):
     assert leads.main(["dance"]) == 2
     assert "python3 leads.py add" in capsys.readouterr().err
+
+
+def test_projects_import_adds_a_portfolios_new_projects_at_the_newest_employer(tmp_path, capsys):
+    from test_logic import PORTFOLIO
+
+    portfolio = tmp_path / "portfolio.json"
+    portfolio.write_text(json.dumps(PORTFOLIO))
+    data.save_resume_master({"roles": [{"employer": "Acme", "start": "Mar 2024"}]}, data.today())
+    data.add_project(data.today(), kind="personal", title="Idea", summary="Mine, edited.")
+    assert leads.main(["projects-import", str(portfolio), "--check"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "employer": "Acme", "would_add": ["Freight rates"], "already_in_bank": ["Idea"]}
+    assert len(data.projects()) == 1                                  # --check adds nothing
+    assert leads.main(["projects-import", str(portfolio)]) == 0
+    assert json.loads(capsys.readouterr().out)["added"] == ["Freight rates"]
+    bank = data.projects().set_index("title")
+    assert bank.loc["Freight rates", "employer"] == "Acme"
+    assert bank.loc["Idea", "summary"] == "Mine, edited."                     # left as it was
+    portfolio.write_text("{}")
+    assert leads.main(["projects-import", str(portfolio)]) == 1

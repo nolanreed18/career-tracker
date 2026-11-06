@@ -139,6 +139,21 @@ including failed calls. Nothing calls Claude on its own.
 - 2026-10-20: a cut-off or malformed answer is a plain error with its cost (#27).
 - 2026-10-29: Claude's spark on every Claude button (#48).
 
+## Work-portfolio exports come in as they were written
+
+**Now:** A work-portfolio export (JSON) becomes one project-bank entry per
+project, at the master's newest employer. Dated milestones go into that
+project's result, marked as part of the same work; only demonstrated skills
+are kept (planned ones aren't); the summary says how far the project got
+(delivered, in progress, prototype, planned), whether Nolan's own part still
+needs confirming, and what the export says isn't claimed. A project whose
+title is already in the bank is left alone.
+**Why:** The export keeps careful limits (no double-counted results, no
+claims beyond the evidence); Claude's review and the bullets it drafts should
+see them. Nothing Nolan has edited or reviewed is overwritten.
+**History:**
+- 2026-11-06: added (#70).
+
 ## Resumes in Nolan's own layout, one page
 
 **Now:** Word files are written by copying paragraphs from Nolan's own

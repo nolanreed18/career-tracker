@@ -72,7 +72,8 @@ database, hosted free on Streamlit Community Cloud.
   only when at least one of its bullets is ticked **On master**.
   **Projects** is where your work and personal projects live in full
   (situation, task, action, result, skills, and the resume bullet you chose),
-  imported in one free click from your projects spreadsheet. Each gets a free
+  imported in one free click from your projects spreadsheet or a work-portfolio export
+  (JSON: each project's STAR, its dated milestones, and what isn't claimed). Each gets a free
   detail score out of 100 that lists what it's missing, weakest first. Claude
   reviews one at a time (about 10 cents): it rates how it reads, asks the few
   questions that would strengthen it, works your answers into the details

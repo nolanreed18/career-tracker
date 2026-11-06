@@ -19,7 +19,8 @@
       "Bash(python3 leads.py known)",
       "Bash(python3 leads.py watch)",
       "Bash(python3 leads.py add *)",
-      "Bash(python3 leads.py digest *)"
+      "Bash(python3 leads.py digest *)",
+      "Bash(python3 leads.py projects-import *)"
     ]
   }
 }
